@@ -11,7 +11,8 @@ const toNumber = (value) => {
 const normalizeText = (value) => String(value ?? '').replaceAll(' ', '').trim()
 
 const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate())
-const isDistributed = (row) => String(row?.drawing_date ?? '').trim().length > 0
+const isDistributed = (row) =>
+  String(row?.drawing_date ?? '').trim().length > 0 || Boolean(row?.virtual_drawing_distributed)
 const isAllProcessDone = (row) =>
   String(row?.marking_weld_a_status ?? '').trim() === '작업완료' &&
   String(row?.marking_weld_b_status ?? '').trim() === '작업완료' &&
@@ -42,7 +43,7 @@ const countWeekdays = (from, to) => {
   return count
 }
 
-export function useSchedulePlan({ session, selectedTuesday }) {
+export function useSchedulePlan({ session, selectedTuesday, planRows }) {
   const headTimeSec = ref(80)
   const holeTimeSec = ref(80)
   const summaryRows = ref([])
@@ -83,12 +84,19 @@ export function useSchedulePlan({ session, selectedTuesday }) {
     }
 
     const targetDate = formatKoreanDate(new Date(selectedTuesday.value))
-    const { data, error } = await supabase
-      .from('product_list')
-      .select(
-        'work_type,hole,head,drawing_date,delay_time,marking_weld_a_status,marking_weld_b_status,marking_laser_1_status,marking_laser_2_status,nasa_status,beveling_status,main_status',
-      )
-      .eq('test_date', targetDate)
+    const baseColumns =
+      'work_type,hole,head,drawing_date,delay_time,marking_weld_a_status,marking_weld_b_status,marking_laser_1_status,marking_laser_2_status,nasa_status,beveling_status,main_status'
+    const withVirtualColumns = `${baseColumns},virtual_drawing_distributed`
+    const runQuery = (columns) =>
+      supabase
+        .from('product_list')
+        .select(columns)
+        .eq('test_date', targetDate)
+
+    let { data, error } = await runQuery(withVirtualColumns)
+    if (error && String(error.message ?? '').includes('virtual_drawing_distributed')) {
+      ;({ data, error } = await runQuery(baseColumns))
+    }
 
     if (error) {
       summaryRows.value = []
@@ -106,6 +114,16 @@ export function useSchedulePlan({ session, selectedTuesday }) {
     { immediate: true },
   )
 
+  watch(
+    () =>
+      (planRows?.value ?? [])
+        .map((row) => `${row.id}:${row.drawing_date ?? ''}:${row.virtual_drawing_distributed ? 1 : 0}`)
+        .join('|'),
+    async () => {
+      await fetchSummaryRows()
+    },
+  )
+
   const summary = computed(() => {
     const isHoleBased = (row) => {
       const workType = normalizeText(row?.work_type)
@@ -117,6 +135,8 @@ export function useSchedulePlan({ session, selectedTuesday }) {
     // 일정/야근 계산은 도면 배포 완료 건만 대상으로 한다.
     const sourceRows = summaryRows.value
     const distributedRows = sourceRows.filter(isDistributed)
+    const totalDrawingCount = sourceRows.length
+    const distributedDrawingCount = distributedRows.length
     const plannedTotalHead = sourceRows.reduce((sum, row) => sum + rowPlanQty(row), 0)
     let totalHead = 0
     let completedHead = 0
@@ -172,6 +192,8 @@ export function useSchedulePlan({ session, selectedTuesday }) {
       totalHead,
       remainingHead,
       plannedTotalHead,
+      totalDrawingCount,
+      distributedDrawingCount,
       todayOvertimeText: formatHourMinute(todayOvertimeSec),
       weeklyOvertimeText: formatHourMinute(weekdayOvertimeSec),
       saturdayWork: saturdayWork ? '출근' : '휴무',

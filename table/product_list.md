@@ -57,6 +57,7 @@
 | paper | boolean (boolean) | N | false | 서류 유무 |
 | drawing | boolean (boolean) | N | false | 도면 유무(도면 칸 표시와 연계) |
 | drawing_date | string (text) | N |  | 도면배포일자 |
+| virtual_drawing_distributed | boolean (boolean) | N | false | 가상도면배포 여부(시뮬레이션) |
 | shipment_date | string (text) | N |  | 출하일자 |
 | sales_date | string (text) | N |  | 매출일자 |
 | not_test | boolean (boolean) | N | false | 검사 제외 여부 |

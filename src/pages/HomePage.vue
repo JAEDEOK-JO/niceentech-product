@@ -39,7 +39,7 @@ const {
   updateRowMenu,
   fetchDrawingFiles,
 } = useProductionPlan(session)
-const { scheduleSummary } = useSchedulePlan({ session, selectedTuesday })
+const { scheduleSummary } = useSchedulePlan({ session, selectedTuesday, planRows })
 
 const goMyPage = () => {
   router.push('/mypage')
@@ -68,12 +68,20 @@ const handleReorderRows = async ({ sourceRowId, targetRowId, onResult }) => {
   onResult?.(result)
 }
 
-const handleSaveRowMenu = async ({ rowId, delayText, delayTime, callType, onResult }) => {
+const handleSaveRowMenu = async ({
+  rowId,
+  delayText,
+  delayTime,
+  callType,
+  virtualDrawingDistributed,
+  onResult,
+}) => {
   const result = await updateRowMenu({
     rowId,
     delayText,
     delayTime,
     callType,
+    virtualDrawingDistributed,
     requester: {
       id: profile.value?.id ?? session.value?.user?.id ?? null,
       name: profile.value?.name ?? '',

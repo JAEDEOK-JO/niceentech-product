@@ -64,19 +64,24 @@ const normalizeStatus = (value) => {
   return '작업전'
 }
 
-const isDistributedRow = (row) => String(row?.drawing_date ?? '').trim().length > 0
+const isActualDistributedRow = (row) => String(row?.drawing_date ?? '').trim().length > 0
+const isVirtualDistributedRow = (row) =>
+  !isActualDistributedRow(row) && Boolean(row?.virtual_drawing_distributed)
+const isDistributedRow = (row) => isActualDistributedRow(row) || isVirtualDistributedRow(row)
 const isCompletedRow = (row) =>
   statusFieldsForCompletion.every((field) => normalizeStatus(row?.[field]) === '작업완료')
 
 const sortRowsByPriority = (rows) => {
   return [...rows].sort((a, b) => {
     const rank = (row) => {
-      const distributed = isDistributedRow(row)
+      const distributed = isActualDistributedRow(row)
+      const virtualDistributed = isVirtualDistributedRow(row)
       const completed = isCompletedRow(row)
-      // 0: 배포 도면(진행중), 1: 완료 도면, 2: 미배포 도면
+      // 0: 실배포 도면, 1: 가상배포 도면, 2: 완료 도면, 3: 미배포 도면
       if (distributed && !completed) return 0
-      if (distributed && completed) return 1
-      return 2
+      if (virtualDistributed && !completed) return 1
+      if (completed) return 2
+      return 3
     }
 
     const aRank = rank(a)
@@ -172,17 +177,21 @@ export function useProductionPlan(session) {
     if (!silent) planLoading.value = true
     planError.value = ''
 
-    let query = supabase
-      .from('product_list')
-      .select(
-        'id,no,initial,company,place,area,memo,full_text,work_type,hole,head,groove,weight,name,test_date,drawing_date,delay_time,delay_text,complete,marking_weld_a_status,marking_weld_b_status,marking_laser_1_status,marking_laser_2_status,cutting_status,beveling_status,main_status,nasa_status',
-      )
-
-    if (!searchAllDates.value) {
-      query = query.eq('test_date', filterDate.value)
+    const baseColumns =
+      'id,no,initial,company,place,area,memo,full_text,work_type,hole,head,groove,weight,name,test_date,drawing_date,delay_time,delay_text,complete,marking_weld_a_status,marking_weld_b_status,marking_laser_1_status,marking_laser_2_status,cutting_status,beveling_status,main_status,nasa_status'
+    const withVirtualColumns = `${baseColumns},virtual_drawing_distributed`
+    const runQuery = (columns) => {
+      let query = supabase.from('product_list').select(columns)
+      if (!searchAllDates.value) {
+        query = query.eq('test_date', filterDate.value)
+      }
+      return query.order('no', { ascending: true })
     }
 
-    const { data, error } = await query.order('no', { ascending: true })
+    let { data, error } = await runQuery(withVirtualColumns)
+    if (error && String(error.message ?? '').includes('virtual_drawing_distributed')) {
+      ;({ data, error } = await runQuery(baseColumns))
+    }
 
     if (!silent) planLoading.value = false
 
@@ -440,20 +449,48 @@ export function useProductionPlan(session) {
     return { ok: true, requestId: insertedRequest.id }
   }
 
-  const updateRowMenu = async ({ rowId, delayText, delayTime, callType, requester }) => {
-    const safeDelayText = String(delayText ?? '').trim()
-    const safeDelayMinutes = Math.max(0, Number(delayTime) || 0)
-    const safeDelayTimeSec = Math.floor(safeDelayMinutes * 60)
+  const updateRowMenu = async ({
+    rowId,
+    delayText,
+    delayTime,
+    callType,
+    requester,
+    virtualDrawingDistributed = false,
+  }) => {
+    const updatePayload = {}
+    let safeDelayText = ''
+
+    if (delayText !== undefined) {
+      safeDelayText = String(delayText ?? '').trim()
+      updatePayload.delay_text = safeDelayText
+    }
+
+    if (delayTime !== undefined) {
+      const safeDelayMinutes = Math.max(0, Number(delayTime) || 0)
+      updatePayload.delay_time = Math.floor(safeDelayMinutes * 60)
+    }
+
+    if (typeof virtualDrawingDistributed === 'boolean') {
+      updatePayload.virtual_drawing_distributed = virtualDrawingDistributed
+    }
+
+    if (Object.keys(updatePayload).length === 0) {
+      return { ok: true }
+    }
 
     const { error } = await supabase
       .from('product_list')
-      .update({
-        delay_text: safeDelayText,
-        delay_time: safeDelayTimeSec,
-      })
+      .update(updatePayload)
       .eq('id', rowId)
 
     if (error) {
+      if (
+        typeof virtualDrawingDistributed === 'boolean' &&
+        String(error.message ?? '').includes('virtual_drawing_distributed')
+      ) {
+        planError.value = '가상도면배포 컬럼이 없습니다. DB 컬럼 추가가 필요합니다.'
+        return { ok: false, reason: 'virtual_column_missing' }
+      }
       planError.value = `메뉴 저장 실패: ${error.message}`
       return { ok: false, reason: 'db_error' }
     }
@@ -464,8 +501,11 @@ export function useProductionPlan(session) {
       const nextRows = [...planRows.value]
       nextRows[idx] = {
         ...nextRows[idx],
-        delay_text: safeDelayText,
-        delay_time: safeDelayTimeSec,
+        ...(delayText !== undefined ? { delay_text: updatePayload.delay_text } : {}),
+        ...(delayTime !== undefined ? { delay_time: updatePayload.delay_time } : {}),
+        ...(typeof virtualDrawingDistributed === 'boolean'
+          ? { virtual_drawing_distributed: virtualDrawingDistributed }
+          : {}),
       }
       targetRow = nextRows[idx]
       planRows.value = nextRows
@@ -475,7 +515,10 @@ export function useProductionPlan(session) {
       const issueResult = await createIssueRequestFromMenu({
         row: targetRow,
         callType,
-        delayText: safeDelayText,
+        delayText:
+          delayText !== undefined
+            ? safeDelayText
+            : String(targetRow?.delay_text ?? '').trim(),
         requester,
       })
       if (!issueResult.ok) return issueResult

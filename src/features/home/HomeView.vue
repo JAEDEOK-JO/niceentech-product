@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import Button from '@/components/ui/button/Button.vue'
 import { productTableColumns, tableTotalWidth } from '@/features/home/productTableConfig'
 
@@ -70,7 +70,11 @@ const workManToStageKey = {
 }
 const snackMessage = ref('')
 let snackTimer = null
+const LONG_PRESS_REQUIRED_MS = 700
 const pressStartedAt = ref({})
+const longPressTimers = new Map()
+const longPressTriggered = new Set()
+const ignoreNextClick = new Set()
 const draggedRowId = ref(null)
 const isCallDialogOpen = ref(false)
 const selectedCallType = ref('')
@@ -105,8 +109,8 @@ const emitSearchChange = () => {
 }
 
 const getDrawingDistributionRate = () => {
-  const distributed = Number(props.scheduleSummary?.totalHead ?? 0)
-  const planned = Number(props.scheduleSummary?.plannedTotalHead ?? 0)
+  const distributed = Number(props.scheduleSummary?.distributedDrawingCount ?? 0)
+  const planned = Number(props.scheduleSummary?.totalDrawingCount ?? 0)
   if (!Number.isFinite(distributed) || !Number.isFinite(planned) || planned <= 0) return 0
   const ratio = (distributed / planned) * 100
   return Math.min(100, Math.max(0, Math.round(ratio)))
@@ -126,11 +130,26 @@ const getCellText = (row, key) => {
 }
 
 const normalizeWorkMan = (value) => String(value ?? '').replaceAll(' ', '').trim()
+const normalizeWorkType = (value) => String(value ?? '').replaceAll(' ', '').trim()
 const isAdminWorkMan = (value) => {
   const normalized = normalizeWorkMan(value)
   return normalized.includes(normalizeWorkMan('관리자')) || normalized.includes(normalizeWorkMan('전체'))
 }
 const canReorderRows = computed(() => isAdminWorkMan(props.currentWorkMan))
+const isHoleBasedRow = (row) => {
+  const workType = normalizeWorkType(row?.work_type)
+  return workType.includes('전실/입상') || workType.includes('전실입상')
+}
+const mobileStageRows = [
+  ['marking_weld_a', 'marking_weld_b', 'marking_laser_1', 'marking_laser_2'],
+  ['beveling', 'main_work', 'nasa'],
+]
+const getPlanUnitLabel = (row) => (isHoleBasedRow(row) ? '홀' : '헤드')
+const getPlanQty = (row) => {
+  const key = isHoleBasedRow(row) ? 'hole' : 'head'
+  const qty = Number(row?.[key] ?? 0)
+  return Number.isFinite(qty) ? qty : 0
+}
 const formatKoreanDateText = (value) => {
   const raw = String(value ?? '').trim()
   if (!raw) return '-'
@@ -168,15 +187,15 @@ const showSnack = (message) => {
   }, 1800)
 }
 
-const isRowDisabled = (row) => {
-  const drawingDate = String(row?.drawing_date ?? '').trim()
-  return drawingDate.length === 0
-}
+const isActualDistributedRow = (row) => String(row?.drawing_date ?? '').trim().length > 0
+const isVirtualDistributedRow = (row) =>
+  !isActualDistributedRow(row) && Boolean(row?.virtual_drawing_distributed)
+const isRowDisabled = (row) => !isActualDistributedRow(row) && !isVirtualDistributedRow(row)
 
 const isRowCompleted = (row) =>
   Object.values(stageMeta).every((meta) => String(row?.[meta.field] ?? '').trim() === '작업완료')
 
-const isDistributedRow = (row) => !isRowDisabled(row)
+const isDistributedRow = (row) => isActualDistributedRow(row) || isVirtualDistributedRow(row)
 
 const isStageColumn = (key) => Object.hasOwn(stageMeta, key)
 const isCallColumn = (key) => key === 'call_action'
@@ -187,37 +206,31 @@ const statusClass = (status) => {
   return 'bg-white text-slate-700'
 }
 
-const handlePressStart = (rowId) => {
-  pressStartedAt.value[rowId] = Date.now()
-}
-
-const resolvePressMs = (rowId) => {
-  const started = pressStartedAt.value[rowId]
+const getPressKey = (rowId, stageKey = 'row') => `${rowId}:${stageKey}`
+const resolvePressMs = (pressKey) => {
+  const started = pressStartedAt.value[pressKey]
   if (!started) return 0
   return Date.now() - started
 }
-
-const handleRowClick = (row, currentWorkMan) => {
-  if (isRowDisabled(row)) {
-    showSnack('도면 배포전 입니다')
-    return
+const clearPressState = (pressKey) => {
+  const timer = longPressTimers.get(pressKey)
+  if (timer) {
+    clearTimeout(timer)
+    longPressTimers.delete(pressKey)
   }
-
-  const stageKey = resolveStageKeyFromWorkMan(currentWorkMan)
-  if (!stageKey) {
-    showSnack('권한이 없습니다.')
-    return
-  }
-  if (stageKey === 'all') {
-    showSnack('관리자는 변경할 공정 칸을 눌러주세요')
-    return
-  }
-
-  const pressMs = resolvePressMs(row.id)
+  delete pressStartedAt.value[pressKey]
+  longPressTriggered.delete(pressKey)
+}
+const consumeIgnoredClick = (pressKey) => {
+  if (!ignoreNextClick.has(pressKey)) return false
+  ignoreNextClick.delete(pressKey)
+  return true
+}
+const emitToggleWorkStatus = (row, stageKey, longPressMs) => {
   emit('toggle-work-status', {
     rowId: row.id,
     stageKey,
-    longPressMs: pressMs,
+    longPressMs,
     onResult: (result) => {
       if (!result?.ok && result?.reason === 'long_press_required') {
         showSnack('작업완료에서 작업전 변경은 롱클릭이 필요합니다')
@@ -228,6 +241,64 @@ const handleRowClick = (row, currentWorkMan) => {
       }
     },
   })
+}
+const resolveRowStageKey = (currentWorkMan, { withSnack = true } = {}) => {
+  const stageKey = resolveStageKeyFromWorkMan(currentWorkMan)
+  if (!stageKey) {
+    if (withSnack) showSnack('권한이 없습니다.')
+    return null
+  }
+  if (stageKey === 'all') {
+    if (withSnack) showSnack('관리자는 변경할 공정 칸을 눌러주세요')
+    return null
+  }
+  return stageKey
+}
+const startLongPress = ({ row, stageKey, currentWorkMan }) => {
+  if (isRowDisabled(row)) return
+  const pressKey = getPressKey(row.id, stageKey)
+  pressStartedAt.value[pressKey] = Date.now()
+  clearPressState(pressKey)
+  pressStartedAt.value[pressKey] = Date.now()
+  const timer = setTimeout(() => {
+    longPressTriggered.add(pressKey)
+    ignoreNextClick.add(pressKey)
+    if (stageKey === 'row') {
+      const resolvedStageKey = resolveRowStageKey(currentWorkMan, { withSnack: false })
+      if (!resolvedStageKey) return
+      emitToggleWorkStatus(row, resolvedStageKey, LONG_PRESS_REQUIRED_MS)
+      return
+    }
+    if (!canControlStageByWorkMan(currentWorkMan, stageKey)) return
+    emitToggleWorkStatus(row, stageKey, LONG_PRESS_REQUIRED_MS)
+  }, LONG_PRESS_REQUIRED_MS)
+  longPressTimers.set(pressKey, timer)
+}
+const endLongPress = (rowId, stageKey = 'row') => {
+  const pressKey = getPressKey(rowId, stageKey)
+  clearPressState(pressKey)
+}
+const handleRowPressStart = (row, currentWorkMan) => {
+  startLongPress({ row, stageKey: 'row', currentWorkMan })
+}
+const handleStagePressStart = (row, stageKey, currentWorkMan) => {
+  startLongPress({ row, stageKey, currentWorkMan })
+}
+
+const handleRowClick = (row, currentWorkMan) => {
+  if (isRowDisabled(row)) {
+    showSnack('도면 배포전 입니다')
+    return
+  }
+
+  const stageKey = resolveRowStageKey(currentWorkMan)
+  if (!stageKey) return
+
+  const pressKey = getPressKey(row.id, 'row')
+  if (consumeIgnoredClick(pressKey)) return
+  const pressMs = resolvePressMs(pressKey)
+  clearPressState(pressKey)
+  emitToggleWorkStatus(row, stageKey, pressMs)
 }
 
 const handleStageClick = (row, stageKey, currentWorkMan) => {
@@ -241,21 +312,11 @@ const handleStageClick = (row, stageKey, currentWorkMan) => {
     return
   }
 
-  const pressMs = resolvePressMs(row.id)
-  emit('toggle-work-status', {
-    rowId: row.id,
-    stageKey,
-    longPressMs: pressMs,
-    onResult: (result) => {
-      if (!result?.ok && result?.reason === 'long_press_required') {
-        showSnack('작업완료에서 작업전 변경은 롱클릭이 필요합니다')
-        return
-      }
-      if (!result?.ok && result?.reason === 'unauthorized') {
-        showSnack('권한이 없습니다.')
-      }
-    },
-  })
+  const pressKey = getPressKey(row.id, stageKey)
+  if (consumeIgnoredClick(pressKey)) return
+  const pressMs = resolvePressMs(pressKey)
+  clearPressState(pressKey)
+  emitToggleWorkStatus(row, stageKey, pressMs)
 }
 
 const handleDragStart = (event, rowId) => {
@@ -360,11 +421,37 @@ const confirmCallDialog = () => {
           showSnack('행의 담당자 정보와 일치하는 프로필이 없습니다')
           return
         }
+        if (result?.reason === 'virtual_column_missing') {
+          showSnack('DB에 가상도면배포 컬럼이 없습니다')
+          return
+        }
         showSnack('메뉴 저장 실패')
         return
       }
       const selectedText = selectedCallType.value ? ` (${selectedCallType.value})` : ''
       showSnack(`메뉴 저장 완료${selectedText}`)
+      closeCallDialog()
+    },
+  })
+}
+
+const setVirtualDrawingDistribution = (enabled) => {
+  const rowId = activeCallRow.value?.id
+  if (!rowId) return
+
+  emit('save-row-menu', {
+    rowId,
+    virtualDrawingDistributed: enabled,
+    onResult: (result) => {
+      if (!result?.ok) {
+        if (result?.reason === 'virtual_column_missing') {
+          showSnack('DB에 가상도면배포 컬럼이 없습니다')
+          return
+        }
+        showSnack(enabled ? '가상도면 배포 실패' : '가상도면 배포 취소 실패')
+        return
+      }
+      showSnack(enabled ? '가상도면 배포 적용' : '가상도면 배포 취소')
       closeCallDialog()
     },
   })
@@ -412,12 +499,19 @@ const parseAlertLines = (message) =>
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean)
+
+onBeforeUnmount(() => {
+  for (const timer of longPressTimers.values()) {
+    clearTimeout(timer)
+  }
+  longPressTimers.clear()
+})
 </script>
 
 <template>
   <section class="min-h-screen w-full">
     <header class="sticky top-0 z-10 border-b border-slate-200 bg-white">
-      <div class="flex flex-wrap items-center justify-between gap-2 px-6 py-2.5">
+      <div class="flex flex-wrap items-center justify-between gap-2 px-2 py-2 md:px-6 md:py-2.5">
         <div class="flex items-center gap-3">
           <h1 class="text-lg font-bold text-slate-900">{{ pageTitle }}</h1>
           <span
@@ -463,11 +557,46 @@ const parseAlertLines = (message) =>
       </div>
     </header>
 
-    <div class="px-6 py-4">
+    <div class="px-1.5 py-2.5 md:px-6 md:py-4">
       <div v-if="planLoading" class="p-8 text-center text-sm text-slate-500">데이터 로딩 중...</div>
       <div v-else-if="planError" class="p-8 text-center text-sm text-red-600">{{ planError }}</div>
       <div v-else>
-        <div class="mb-6 overflow-auto rounded-xl border border-indigo-200 bg-white shadow-sm">
+        <div class="mb-4 grid grid-cols-4 gap-1.5 md:hidden">
+          <div class="rounded-lg border border-indigo-200 bg-white p-2 shadow-sm">
+            <p class="text-[10px] font-bold text-indigo-700">일일목표</p>
+            <p class="mt-1 text-sm font-extrabold text-slate-900">{{ scheduleSummary.dailyTargetHead }}</p>
+          </div>
+          <div class="rounded-lg border border-emerald-200 bg-white p-2 shadow-sm">
+            <p class="text-[10px] font-bold text-emerald-700">완료</p>
+            <p class="mt-1 text-sm font-extrabold text-slate-900">{{ scheduleSummary.completedHead }}</p>
+          </div>
+          <div class="rounded-lg border border-blue-200 bg-white p-2 shadow-sm">
+            <p class="text-[10px] font-bold text-blue-700">총수량</p>
+            <p class="mt-1 text-sm font-extrabold text-slate-900">{{ scheduleSummary.totalHead }}</p>
+          </div>
+          <div class="rounded-lg border border-amber-200 bg-white p-2 shadow-sm">
+            <p class="text-[10px] font-bold text-amber-700">잔여</p>
+            <p class="mt-1 text-sm font-extrabold text-slate-900">{{ scheduleSummary.remainingHead }}</p>
+          </div>
+          <div class="rounded-lg border border-fuchsia-200 bg-white p-2 shadow-sm">
+            <p class="text-[10px] font-bold text-fuchsia-700">오늘야근</p>
+            <p class="mt-1 text-[11px] font-extrabold text-slate-900">{{ scheduleSummary.todayOvertimeText }}</p>
+          </div>
+          <div class="rounded-lg border border-cyan-200 bg-white p-2 shadow-sm">
+            <p class="text-[10px] font-bold text-cyan-700">주간야근</p>
+            <p class="mt-1 text-[11px] font-extrabold text-slate-900">{{ scheduleSummary.weeklyOvertimeText }}</p>
+          </div>
+          <div class="rounded-lg border border-purple-200 bg-white p-2 shadow-sm">
+            <p class="text-[10px] font-bold text-purple-700">토요일</p>
+            <p class="mt-1 text-[11px] font-extrabold text-slate-900">{{ scheduleSummary.saturdayWork }}</p>
+          </div>
+          <div class="rounded-lg border border-rose-200 bg-white p-2 shadow-sm">
+            <p class="text-[10px] font-bold text-rose-700">일요일</p>
+            <p class="mt-1 text-[11px] font-extrabold text-slate-900">{{ scheduleSummary.sundayWork }}</p>
+          </div>
+        </div>
+
+        <div class="mb-6 hidden overflow-auto rounded-xl border border-indigo-200 bg-white shadow-sm md:block">
           <table class="w-full border-collapse" style="table-layout: fixed; min-width: 980px">
             <thead class="bg-indigo-50">
               <tr>
@@ -523,14 +652,14 @@ const parseAlertLines = (message) =>
               전체헤드수 {{ scheduleSummary.plannedTotalHead }}헤드
             </span>
             <span class="rounded-full bg-violet-100 px-3 py-1 text-sm font-bold text-violet-800">
-              도면배포율 {{ getDrawingDistributionRate() }}%
+              도면배포율 {{ getDrawingDistributionRate() }}% ({{ scheduleSummary.distributedDrawingCount ?? 0 }} / {{ scheduleSummary.totalDrawingCount ?? 0 }})
             </span>
           </div>
-          <div class="ml-auto flex items-center gap-3">
+          <div class="ml-auto flex w-full flex-col gap-2 md:w-auto md:flex-row md:items-center md:gap-3">
             <input
               v-model="localSearchText"
               type="text"
-              class="h-9 w-64 rounded-md border border-slate-300 px-3 text-sm"
+              class="h-9 w-full rounded-md border border-slate-300 px-3 text-sm md:w-64"
               placeholder="검색어 입력"
               @keydown.enter.prevent="emitSearchChange"
             />
@@ -557,7 +686,103 @@ const parseAlertLines = (message) =>
         <div class="space-y-6">
           <div v-for="groupData in groupedRows" :key="groupData.group">
             <h2 class="mb-2 text-base font-bold text-slate-900">{{ groupData.group }}</h2>
-            <div class="overflow-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div class="space-y-3 md:hidden">
+              <div v-if="groupData.rows.length === 0" class="rounded-xl border border-slate-200 bg-white px-3 py-4 text-center text-sm text-slate-500 shadow-sm">
+                데이터 없음
+              </div>
+              <article
+                v-for="row in groupData.rows"
+                :key="`mobile-${groupData.group}-${row.id}`"
+                class="rounded-xl border bg-white p-2 shadow-sm select-none"
+                :class="
+                  isRowCompleted(row)
+                    ? 'border-orange-200 bg-orange-50/60'
+                    : isVirtualDistributedRow(row)
+                      ? 'border-sky-200 bg-sky-50/70 text-slate-700'
+                      : isRowDisabled(row)
+                        ? 'border-slate-200 bg-slate-50 text-slate-400'
+                      : 'border-slate-200'
+                "
+              >
+                <div class="flex items-start justify-between gap-2">
+                  <div class="min-w-0">
+                    <p class="text-xs font-bold text-slate-500">No. {{ row.no ?? '-' }} · {{ row.initial || '-' }}</p>
+                    <p class="mt-1 text-sm font-bold text-slate-900">{{ row.company || '-' }}</p>
+                    <p class="text-xs text-slate-600">{{ row.place || '-' }}</p>
+                    <p class="text-xs text-slate-600">{{ row.area || '-' }}</p>
+                  </div>
+                  <div class="flex shrink-0 flex-col items-end gap-1">
+                    <button
+                      type="button"
+                      class="inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-300 bg-white text-sm font-extrabold text-slate-700"
+                      @click.stop="openCallDialog(row)"
+                    >
+                      ⋯
+                    </button>
+                    <span
+                      class="rounded-full px-2 py-1 text-[10px] font-extrabold"
+                      :class="
+                        isVirtualDistributedRow(row)
+                          ? 'bg-sky-100 text-sky-700'
+                          : isRowDisabled(row)
+                            ? 'bg-slate-200 text-slate-600'
+                            : 'bg-emerald-100 text-emerald-700'
+                      "
+                    >
+                      {{ isVirtualDistributedRow(row) ? '가상배포' : isRowDisabled(row) ? '배포전' : '배포완료' }}
+                    </span>
+                  </div>
+                </div>
+
+                <div class="mt-3 grid grid-cols-3 gap-2 text-center">
+                  <div class="rounded-lg bg-slate-100 px-2 py-1.5">
+                    <p class="text-[10px] font-bold text-slate-500">작업유형</p>
+                    <p class="mt-0.5 text-xs font-bold text-slate-800">{{ row.work_type || '-' }}</p>
+                  </div>
+                  <div class="rounded-lg bg-slate-100 px-2 py-1.5">
+                    <p class="text-[10px] font-bold text-slate-500">계획수량</p>
+                    <p class="mt-0.5 text-xs font-bold text-slate-800">{{ getPlanUnitLabel(row) }} {{ getPlanQty(row) }}</p>
+                  </div>
+                  <div class="rounded-lg bg-slate-100 px-2 py-1.5">
+                    <p class="text-[10px] font-bold text-slate-500">검수일</p>
+                    <p class="mt-0.5 text-xs font-bold text-slate-800">{{ formatKoreanDateText(row.test_date) }}</p>
+                  </div>
+                </div>
+
+                <div class="mt-3 space-y-2">
+                  <div
+                    v-for="(stageRow, rowIdx) in mobileStageRows"
+                    :key="`${row.id}-stage-row-${rowIdx}`"
+                    class="grid gap-2"
+                    :class="stageRow.length === 4 ? 'grid-cols-4' : 'grid-cols-3'"
+                  >
+                    <button
+                      v-for="stageKey in stageRow"
+                      :key="`${row.id}-${stageKey}`"
+                      type="button"
+                      class="inline-flex items-center justify-center rounded-lg border px-1.5 py-2 text-[11px] font-semibold"
+                      :class="[statusClass(getCellText(row, stageKey)), isRowDisabled(row) ? 'opacity-40' : '']"
+                      @mousedown.stop="handleStagePressStart(row, stageKey, props.currentWorkMan)"
+                      @mouseup.stop="endLongPress(row.id, stageKey)"
+                      @mouseleave.stop="endLongPress(row.id, stageKey)"
+                      @touchstart.stop="handleStagePressStart(row, stageKey, props.currentWorkMan)"
+                      @touchend.stop="endLongPress(row.id, stageKey)"
+                      @touchcancel.stop="endLongPress(row.id, stageKey)"
+                      @click.stop="handleStageClick(row, stageKey, props.currentWorkMan)"
+                    >
+                      <span>{{ stageMeta[stageKey].workMan }}</span>
+                    </button>
+                  </div>
+                </div>
+
+      
+              </article>
+              <div class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 shadow-sm">
+                합계 - 홀 {{ groupData.totals.hole }} / 헤드 {{ groupData.totals.head }} / 그루브 {{ groupData.totals.groove }} / 중량 {{ groupData.totals.weight.toFixed(2) }}
+              </div>
+            </div>
+
+            <div class="hidden overflow-auto rounded-xl border border-slate-200 bg-white shadow-sm md:block">
               <table class="w-full border-collapse" :style="{ minWidth: `${tableTotalWidth}px`, tableLayout: 'fixed' }">
                 <thead class="bg-blue-50">
                   <tr>
@@ -584,8 +809,10 @@ const parseAlertLines = (message) =>
                     :class="
                       isRowCompleted(row)
                         ? 'bg-orange-50 text-slate-700 hover:bg-orange-50'
-                        : isRowDisabled(row)
-                          ? 'bg-slate-50 text-slate-400'
+                        : isVirtualDistributedRow(row)
+                          ? 'bg-sky-50 text-slate-700 hover:bg-sky-50'
+                          : isRowDisabled(row)
+                            ? 'bg-slate-50 text-slate-400'
                           : isDistributedRow(row)
                             ? 'font-semibold hover:bg-slate-50/70'
                             : 'hover:bg-slate-50/70'
@@ -593,8 +820,12 @@ const parseAlertLines = (message) =>
                     role="button"
                     tabindex="0"
                     :draggable="canReorderRows"
-                    @mousedown="handlePressStart(row.id)"
-                    @touchstart="handlePressStart(row.id)"
+                    @mousedown="handleRowPressStart(row, props.currentWorkMan)"
+                    @mouseup="endLongPress(row.id, 'row')"
+                    @mouseleave="endLongPress(row.id, 'row')"
+                    @touchstart="handleRowPressStart(row, props.currentWorkMan)"
+                    @touchend="endLongPress(row.id, 'row')"
+                    @touchcancel="endLongPress(row.id, 'row')"
                     @dragstart="handleDragStart($event, row.id)"
                     @dragover="handleDragOver"
                     @drop.prevent="handleDrop(row.id)"
@@ -616,6 +847,8 @@ const parseAlertLines = (message) =>
                         v-if="isCallColumn(col.key)"
                         type="button"
                         class="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                        @mousedown.stop
+                        @touchstart.stop
                         @click.stop="openCallDialog(row)"
                       >
                         메뉴
@@ -628,6 +861,12 @@ const parseAlertLines = (message) =>
                           statusClass(getCellText(row, col.key)),
                           isRowDisabled(row) ? 'opacity-40' : '',
                         ]"
+                        @mousedown.stop="handleStagePressStart(row, col.key, props.currentWorkMan)"
+                        @mouseup.stop="endLongPress(row.id, col.key)"
+                        @mouseleave.stop="endLongPress(row.id, col.key)"
+                        @touchstart.stop="handleStagePressStart(row, col.key, props.currentWorkMan)"
+                        @touchend.stop="endLongPress(row.id, col.key)"
+                        @touchcancel.stop="endLongPress(row.id, col.key)"
                         @click.stop="handleStageClick(row, col.key, props.currentWorkMan)"
                       >
                         {{ getCellText(row, col.key) }}
@@ -796,6 +1035,22 @@ const parseAlertLines = (message) =>
         >
           🖼️ 도면보기
         </button>
+        <button
+          v-if="activeCallRow && !isActualDistributedRow(activeCallRow)"
+          type="button"
+          class="mt-2 w-full rounded-xl border px-4 py-2.5 text-sm font-extrabold transition"
+          :class="
+            activeCallRow?.virtual_drawing_distributed
+              ? 'border-slate-400 bg-slate-50 text-slate-700 hover:bg-slate-100'
+              : 'border-sky-500 bg-sky-50 text-sky-700 hover:bg-sky-100'
+          "
+          @click="setVirtualDrawingDistribution(!activeCallRow?.virtual_drawing_distributed)"
+        >
+          {{ activeCallRow?.virtual_drawing_distributed ? '가상도면 배포 취소' : '가상도면 배포' }}
+        </button>
+        <p v-if="activeCallRow?.virtual_drawing_distributed" class="mt-1 text-center text-[11px] font-semibold text-sky-700">
+          현재 가상도면 배포 적용됨
+        </p>
         <div class="mt-4 flex justify-end gap-2">
           <Button class="h-9 px-3 text-xs" variant="outline" @click="closeCallDialog">닫기</Button>
           <Button class="h-9 px-3 text-xs" @click="confirmCallDialog">확인</Button>
