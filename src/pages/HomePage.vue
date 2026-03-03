@@ -39,7 +39,7 @@ const {
   updateRowMenu,
   fetchDrawingFiles,
 } = useProductionPlan(session)
-const { scheduleSummary } = useSchedulePlan({ session, planRows, selectedTuesday })
+const { scheduleSummary } = useSchedulePlan({ session, selectedTuesday })
 
 const goMyPage = () => {
   router.push('/mypage')
@@ -60,7 +60,11 @@ const handleToggleWorkStatus = async ({ rowId, stageKey, longPressMs, onResult }
 }
 
 const handleReorderRows = async ({ sourceRowId, targetRowId, onResult }) => {
-  const result = await reorderByNo({ sourceRowId, targetRowId })
+  const result = await reorderByNo({
+    sourceRowId,
+    targetRowId,
+    workMan: profile.value?.work_man ?? '',
+  })
   onResult?.(result)
 }
 

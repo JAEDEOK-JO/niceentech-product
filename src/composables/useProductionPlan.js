@@ -90,6 +90,10 @@ const sortRowsByPriority = (rows) => {
 }
 
 const normalizeWorkMan = (value) => String(value ?? '').replaceAll(' ', '').trim()
+const isAdminWorkMan = (workMan) => {
+  const normalized = normalizeWorkMan(workMan)
+  return normalized.includes(normalizeWorkMan('관리자')) || normalized.includes(normalizeWorkMan('전체'))
+}
 const normalizeCallType = (value) => String(value ?? '').replaceAll(' ', '').trim()
 const resolveIssueRequestType = (callType) => {
   const normalized = normalizeCallType(callType)
@@ -291,9 +295,10 @@ export function useProductionPlan(session) {
     return { ok: true }
   }
 
-  const reorderByNo = async ({ sourceRowId, targetRowId }) => {
+  const reorderByNo = async ({ sourceRowId, targetRowId, workMan }) => {
     if (!session.value) return { ok: false, reason: 'no_session' }
     if (sourceRowId === targetRowId) return { ok: false, reason: 'same_row' }
+    if (!isAdminWorkMan(workMan)) return { ok: false, reason: 'unauthorized' }
 
     const source = planRows.value.find((r) => r.id === sourceRowId)
     const target = planRows.value.find((r) => r.id === targetRowId)

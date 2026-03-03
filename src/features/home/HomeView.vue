@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import Button from '@/components/ui/button/Button.vue'
 import { productTableColumns, tableTotalWidth } from '@/features/home/productTableConfig'
 
@@ -126,6 +126,11 @@ const getCellText = (row, key) => {
 }
 
 const normalizeWorkMan = (value) => String(value ?? '').replaceAll(' ', '').trim()
+const isAdminWorkMan = (value) => {
+  const normalized = normalizeWorkMan(value)
+  return normalized.includes(normalizeWorkMan('관리자')) || normalized.includes(normalizeWorkMan('전체'))
+}
+const canReorderRows = computed(() => isAdminWorkMan(props.currentWorkMan))
 const formatKoreanDateText = (value) => {
   const raw = String(value ?? '').trim()
   if (!raw) return '-'
@@ -253,11 +258,25 @@ const handleStageClick = (row, stageKey, currentWorkMan) => {
   })
 }
 
-const handleDragStart = (rowId) => {
+const handleDragStart = (event, rowId) => {
+  if (!canReorderRows.value) {
+    event.preventDefault()
+    return
+  }
   draggedRowId.value = rowId
 }
 
+const handleDragOver = (event) => {
+  if (!canReorderRows.value) return
+  event.preventDefault()
+}
+
 const handleDrop = (targetRowId) => {
+  if (!canReorderRows.value) {
+    draggedRowId.value = null
+    showSnack('관리자만 행 순서를 변경할 수 있습니다')
+    return
+  }
   if (!draggedRowId.value || draggedRowId.value === targetRowId) return
   emit('reorder-rows', {
     sourceRowId: draggedRowId.value,
@@ -265,6 +284,10 @@ const handleDrop = (targetRowId) => {
     onResult: (result) => {
       if (!result?.ok && result?.reason === 'cross_group_not_allowed') {
         showSnack('같은 작업유형 내에서만 순서를 변경할 수 있습니다')
+        return
+      }
+      if (!result?.ok && result?.reason === 'unauthorized') {
+        showSnack('관리자만 행 순서를 변경할 수 있습니다')
       }
     },
   })
@@ -569,14 +592,15 @@ const parseAlertLines = (message) =>
                     "
                     role="button"
                     tabindex="0"
-                    draggable="true"
+                    :draggable="canReorderRows"
                     @mousedown="handlePressStart(row.id)"
                     @touchstart="handlePressStart(row.id)"
-                    @dragstart="handleDragStart(row.id)"
-                    @dragover.prevent
+                    @dragstart="handleDragStart($event, row.id)"
+                    @dragover="handleDragOver"
                     @drop.prevent="handleDrop(row.id)"
                     @click="handleRowClick(row, props.currentWorkMan)"
                     @keyup.enter="handleRowClick(row, props.currentWorkMan)"
+                    class="select-none"
                   >
                     <td
                       v-for="col in productTableColumns"

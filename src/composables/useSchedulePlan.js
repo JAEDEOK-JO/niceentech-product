@@ -42,9 +42,17 @@ const countWeekdays = (from, to) => {
   return count
 }
 
-export function useSchedulePlan({ session, planRows, selectedTuesday }) {
+export function useSchedulePlan({ session, selectedTuesday }) {
   const headTimeSec = ref(80)
   const holeTimeSec = ref(80)
+  const summaryRows = ref([])
+
+  const formatKoreanDate = (date) => {
+    const y = String(date.getFullYear()).padStart(4, '0')
+    const m = String(date.getMonth() + 1).padStart(2, '0')
+    const d = String(date.getDate()).padStart(2, '0')
+    return `${y}년 ${m}월 ${d}일`
+  }
 
   const fetchHeadTimeSetting = async () => {
     if (!session.value) return
@@ -68,6 +76,36 @@ export function useSchedulePlan({ session, planRows, selectedTuesday }) {
     { immediate: true },
   )
 
+  const fetchSummaryRows = async () => {
+    if (!session.value) {
+      summaryRows.value = []
+      return
+    }
+
+    const targetDate = formatKoreanDate(new Date(selectedTuesday.value))
+    const { data, error } = await supabase
+      .from('product_list')
+      .select(
+        'work_type,hole,head,drawing_date,delay_time,marking_weld_a_status,marking_weld_b_status,marking_laser_1_status,marking_laser_2_status,nasa_status,beveling_status,main_status',
+      )
+      .eq('test_date', targetDate)
+
+    if (error) {
+      summaryRows.value = []
+      return
+    }
+
+    summaryRows.value = data ?? []
+  }
+
+  watch(
+    [session, selectedTuesday],
+    async () => {
+      await fetchSummaryRows()
+    },
+    { immediate: true },
+  )
+
   const summary = computed(() => {
     const isHoleBased = (row) => {
       const workType = normalizeText(row?.work_type)
@@ -77,8 +115,9 @@ export function useSchedulePlan({ session, planRows, selectedTuesday }) {
     const rowProcessSec = (row) => (isHoleBased(row) ? holeTimeSec.value : headTimeSec.value)
 
     // 일정/야근 계산은 도면 배포 완료 건만 대상으로 한다.
-    const distributedRows = planRows.value.filter(isDistributed)
-    const plannedTotalHead = planRows.value.reduce((sum, row) => sum + rowPlanQty(row), 0)
+    const sourceRows = summaryRows.value
+    const distributedRows = sourceRows.filter(isDistributed)
+    const plannedTotalHead = sourceRows.reduce((sum, row) => sum + rowPlanQty(row), 0)
     let totalHead = 0
     let completedHead = 0
     let weightedProcessSecSum = 0
