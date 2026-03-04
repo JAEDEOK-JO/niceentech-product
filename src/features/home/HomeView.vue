@@ -706,7 +706,13 @@ onBeforeUnmount(() => {
               >
                 <div class="flex items-start justify-between gap-2">
                   <div class="min-w-0">
-                    <p class="text-xs font-bold text-slate-500">No. {{ row.no ?? '-' }} · {{ row.initial || '-' }}</p>
+                    <div class="flex items-center gap-1.5 text-xs font-bold text-slate-500">
+                      <span class="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-extrabold text-indigo-700">
+                        {{ row.work_type || '-' }}
+                      </span>
+                      <span>No. {{ row.no ?? '-' }}</span>
+                      <span>{{ row.initial || '-' }}</span>
+                    </div>
                     <p class="mt-1 text-sm font-bold text-slate-900">{{ row.company || '-' }}</p>
                     <p class="text-xs text-slate-600">{{ row.place || '-' }}</p>
                     <p class="text-xs text-slate-600">{{ row.area || '-' }}</p>
@@ -731,21 +737,9 @@ onBeforeUnmount(() => {
                     >
                       {{ isVirtualDistributedRow(row) ? '가상배포' : isRowDisabled(row) ? '배포전' : '배포완료' }}
                     </span>
-                  </div>
-                </div>
-
-                <div class="mt-3 grid grid-cols-3 gap-2 text-center">
-                  <div class="rounded-lg bg-slate-100 px-2 py-1.5">
-                    <p class="text-[10px] font-bold text-slate-500">작업유형</p>
-                    <p class="mt-0.5 text-xs font-bold text-slate-800">{{ row.work_type || '-' }}</p>
-                  </div>
-                  <div class="rounded-lg bg-slate-100 px-2 py-1.5">
-                    <p class="text-[10px] font-bold text-slate-500">계획수량</p>
-                    <p class="mt-0.5 text-xs font-bold text-slate-800">{{ getPlanUnitLabel(row) }} {{ getPlanQty(row) }}</p>
-                  </div>
-                  <div class="rounded-lg bg-slate-100 px-2 py-1.5">
-                    <p class="text-[10px] font-bold text-slate-500">검수일</p>
-                    <p class="mt-0.5 text-xs font-bold text-slate-800">{{ formatKoreanDateText(row.test_date) }}</p>
+                    <span class="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-extrabold text-slate-700">
+                      {{ getPlanUnitLabel(row) }} {{ getPlanQty(row) }}
+                    </span>
                   </div>
                 </div>
 
@@ -819,14 +813,12 @@ onBeforeUnmount(() => {
                     "
                     role="button"
                     tabindex="0"
-                    :draggable="canReorderRows"
                     @mousedown="handleRowPressStart(row, props.currentWorkMan)"
                     @mouseup="endLongPress(row.id, 'row')"
                     @mouseleave="endLongPress(row.id, 'row')"
                     @touchstart="handleRowPressStart(row, props.currentWorkMan)"
                     @touchend="endLongPress(row.id, 'row')"
                     @touchcancel="endLongPress(row.id, 'row')"
-                    @dragstart="handleDragStart($event, row.id)"
                     @dragover="handleDragOver"
                     @drop.prevent="handleDrop(row.id)"
                     @click="handleRowClick(row, props.currentWorkMan)"
@@ -843,8 +835,22 @@ onBeforeUnmount(() => {
                       ]"
                       :style="{ width: `${col.width}px` }"
                     >
+                      <span
+                        v-if="col.key === 'no'"
+                        class="inline-flex items-center justify-center gap-1"
+                      >
+                        <span
+                          class="inline-flex cursor-grab items-center rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-600 active:cursor-grabbing"
+                          :draggable="canReorderRows"
+                          @mousedown.stop
+                          @touchstart.stop
+                          @dragstart.stop="handleDragStart($event, row.id)"
+                        >
+                          {{ getCellText(row, col.key) }}
+                        </span>
+                      </span>
                       <button
-                        v-if="isCallColumn(col.key)"
+                        v-else-if="isCallColumn(col.key)"
                         type="button"
                         class="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                         @mousedown.stop

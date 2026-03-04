@@ -1,4 +1,4 @@
-import { computed, ref, watch } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { supabase } from '@/lib/supabase'
 
 const REGULAR_WORK_SECONDS = 9 * 60 * 60 // 08:00-17:00
@@ -47,6 +47,7 @@ export function useSchedulePlan({ session, selectedTuesday, planRows }) {
   const headTimeSec = ref(80)
   const holeTimeSec = ref(80)
   const summaryRows = ref([])
+  let summaryChannel = null
 
   const formatKoreanDate = (date) => {
     const y = String(date.getFullYear()).padStart(4, '0')
@@ -85,7 +86,7 @@ export function useSchedulePlan({ session, selectedTuesday, planRows }) {
 
     const targetDate = formatKoreanDate(new Date(selectedTuesday.value))
     const baseColumns =
-      'work_type,hole,head,drawing_date,delay_time,marking_weld_a_status,marking_weld_b_status,marking_laser_1_status,marking_laser_2_status,nasa_status,beveling_status,main_status'
+      'id,work_type,hole,head,drawing_date,delay_time,marking_weld_a_status,marking_weld_b_status,marking_laser_1_status,marking_laser_2_status,nasa_status,beveling_status,main_status'
     const withVirtualColumns = `${baseColumns},virtual_drawing_distributed`
     const runQuery = (columns) =>
       supabase
@@ -106,10 +107,32 @@ export function useSchedulePlan({ session, selectedTuesday, planRows }) {
     summaryRows.value = data ?? []
   }
 
+  const stopSummaryRealtime = () => {
+    summaryChannel?.unsubscribe()
+    summaryChannel = null
+  }
+
+  const setupSummaryRealtime = () => {
+    stopSummaryRealtime()
+    if (!session.value) return
+
+    summaryChannel = supabase
+      .channel('schedule-summary-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'product_list' },
+        async () => {
+          await fetchSummaryRows()
+        },
+      )
+      .subscribe()
+  }
+
   watch(
     [session, selectedTuesday],
     async () => {
       await fetchSummaryRows()
+      setupSummaryRealtime()
     },
     { immediate: true },
   )
@@ -117,12 +140,33 @@ export function useSchedulePlan({ session, selectedTuesday, planRows }) {
   watch(
     () =>
       (planRows?.value ?? [])
-        .map((row) => `${row.id}:${row.drawing_date ?? ''}:${row.virtual_drawing_distributed ? 1 : 0}`)
+        .map(
+          (row) =>
+            [
+              row.id,
+              row.drawing_date ?? '',
+              row.virtual_drawing_distributed ? 1 : 0,
+              row.delay_time ?? 0,
+              row.head ?? 0,
+              row.hole ?? 0,
+              row.marking_weld_a_status ?? '',
+              row.marking_weld_b_status ?? '',
+              row.marking_laser_1_status ?? '',
+              row.marking_laser_2_status ?? '',
+              row.nasa_status ?? '',
+              row.beveling_status ?? '',
+              row.main_status ?? '',
+            ].join(':'),
+        )
         .join('|'),
     async () => {
       await fetchSummaryRows()
     },
   )
+
+  onUnmounted(() => {
+    stopSummaryRealtime()
+  })
 
   const summary = computed(() => {
     const isHoleBased = (row) => {
