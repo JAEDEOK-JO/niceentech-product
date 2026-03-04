@@ -28,6 +28,7 @@ const workManRoleToStages = {
   전체: ['*'],
 }
 const statusCycle = {
+  없음: '작업중',
   작업전: '작업중',
   작업중: '작업완료',
   작업완료: '작업전',
@@ -60,7 +61,7 @@ const normalizeWorkType = (value) => {
 
 const normalizeStatus = (value) => {
   const text = String(value ?? '').trim()
-  if (text === '작업중' || text === '작업완료') return text
+  if (text === '작업중' || text === '작업완료' || text === '없음') return text
   return '작업전'
 }
 
@@ -69,7 +70,10 @@ const isVirtualDistributedRow = (row) =>
   !isActualDistributedRow(row) && Boolean(row?.virtual_drawing_distributed)
 const isDistributedRow = (row) => isActualDistributedRow(row) || isVirtualDistributedRow(row)
 const isCompletedRow = (row) =>
-  statusFieldsForCompletion.every((field) => normalizeStatus(row?.[field]) === '작업완료')
+  statusFieldsForCompletion.every((field) => {
+    const status = normalizeStatus(row?.[field])
+    return status === '작업완료' || status === '없음'
+  })
 
 const sortRowsByPriority = (rows) => {
   return [...rows].sort((a, b) => {

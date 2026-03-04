@@ -91,6 +91,7 @@ const drawingListCollapsed = ref(false)
 const localSearchText = ref('')
 const localSearchAllDates = ref(false)
 const requestReplyDrafts = ref({})
+const mobileEditModeByRow = ref({})
 
 watch(
   () => [props.searchText, props.searchAllDates],
@@ -120,8 +121,8 @@ const getCellText = (row, key) => {
   const stage = stageMeta[key]
   if (stage) {
     const raw = String(row?.[stage.field] ?? '').trim()
-    if (raw === '작업중' || raw === '작업완료') return raw
-    return '작업전'
+    if (raw === '작업중' || raw === '작업완료' || raw === '없음') return raw
+    return '없음'
   }
   if ((key === 'head' || key === 'hole') && Number(row?.[key] ?? 0) === 0) {
     return ''
@@ -187,13 +188,35 @@ const showSnack = (message) => {
   }, 1800)
 }
 
+const isMobileRowEditing = (rowId) => Boolean(mobileEditModeByRow.value[rowId])
+const toggleMobileRowEdit = (rowId) => {
+  if (!canReorderRows.value) {
+    showSnack('관리자만 수정할 수 있습니다')
+    return
+  }
+  mobileEditModeByRow.value[rowId] = !isMobileRowEditing(rowId)
+}
+const ensureMobileRowEditable = (rowId) => {
+  if (!canReorderRows.value) {
+    showSnack('관리자만 수정할 수 있습니다')
+    return false
+  }
+  if (!isMobileRowEditing(rowId)) {
+    return false
+  }
+  return true
+}
+
 const isActualDistributedRow = (row) => String(row?.drawing_date ?? '').trim().length > 0
 const isVirtualDistributedRow = (row) =>
   !isActualDistributedRow(row) && Boolean(row?.virtual_drawing_distributed)
 const isRowDisabled = (row) => !isActualDistributedRow(row) && !isVirtualDistributedRow(row)
 
 const isRowCompleted = (row) =>
-  Object.values(stageMeta).every((meta) => String(row?.[meta.field] ?? '').trim() === '작업완료')
+  Object.values(stageMeta).every((meta) => {
+    const status = String(row?.[meta.field] ?? '').trim()
+    return status === '작업완료' || status === '없음'
+  })
 
 const isDistributedRow = (row) => isActualDistributedRow(row) || isVirtualDistributedRow(row)
 
@@ -203,6 +226,7 @@ const isCallColumn = (key) => key === 'call_action'
 const statusClass = (status) => {
   if (status === '작업중') return 'bg-green-100 text-green-800'
   if (status === '작업완료') return 'bg-red-100 text-red-800'
+  if (status === '없음') return 'bg-transparent text-slate-500'
   return 'bg-white text-slate-700'
 }
 
@@ -283,6 +307,14 @@ const handleRowPressStart = (row, currentWorkMan) => {
 }
 const handleStagePressStart = (row, stageKey, currentWorkMan) => {
   startLongPress({ row, stageKey, currentWorkMan })
+}
+const handleMobileStagePressStart = (row, stageKey, currentWorkMan) => {
+  if (!ensureMobileRowEditable(row.id)) return
+  handleStagePressStart(row, stageKey, currentWorkMan)
+}
+const handleMobileStageClick = (row, stageKey, currentWorkMan) => {
+  if (!ensureMobileRowEditable(row.id)) return
+  handleStageClick(row, stageKey, currentWorkMan)
 }
 
 const handleRowClick = (row, currentWorkMan) => {
@@ -511,9 +543,9 @@ onBeforeUnmount(() => {
 <template>
   <section class="min-h-screen w-full">
     <header class="sticky top-0 z-10 border-b border-slate-200 bg-white">
-      <div class="flex flex-wrap items-center justify-between gap-2 px-2 py-2 md:px-6 md:py-2.5">
-        <div class="flex items-center gap-3">
-          <h1 class="text-lg font-bold text-slate-900">{{ pageTitle }}</h1>
+      <div class="flex flex-col gap-2 px-2 py-2 md:flex-row md:flex-wrap md:items-center md:justify-between md:px-6 md:py-2.5">
+        <div class="flex items-center justify-between gap-2">
+          <h1 class="text-sm font-bold text-slate-900 md:text-lg">{{ pageTitle }}</h1>
           <span
             class="rounded-full px-2 py-0.5 text-[11px] font-semibold"
             :class="realtimeConnected ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'"
@@ -521,15 +553,15 @@ onBeforeUnmount(() => {
             {{ realtimeConnected ? '실시간 연결됨' : '실시간 재연결 중' }}
           </span>
         </div>
-        <div class="flex items-center gap-2">
-          <Button class="h-9 px-3 text-xs" variant="outline" @click="emit('move-week', -1)">지난주</Button>
-          <Button class="h-9 px-3 text-xs" variant="outline" :disabled="weekOffset === 0" @click="emit('reset-week')">
+        <div class="grid grid-cols-[1fr_1fr_1fr_auto_auto] items-center gap-1 md:flex md:items-center md:gap-2">
+          <Button class="h-8 px-2 text-[11px] md:h-9 md:px-3 md:text-xs" variant="outline" @click="emit('move-week', -1)">지난주</Button>
+          <Button class="h-8 px-2 text-[11px] md:h-9 md:px-3 md:text-xs" variant="outline" :disabled="weekOffset === 0" @click="emit('reset-week')">
             이번주
           </Button>
-          <Button class="h-9 px-3 text-xs" variant="outline" @click="emit('move-week', 1)">다음주</Button>
+          <Button class="h-8 px-2 text-[11px] md:h-9 md:px-3 md:text-xs" variant="outline" @click="emit('move-week', 1)">다음주</Button>
           <button
             type="button"
-            class="relative flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+            class="relative flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 md:h-9 md:w-9"
             @click="emit('go-notifications')"
           >
             <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2">
@@ -545,11 +577,11 @@ onBeforeUnmount(() => {
           </button>
           <button
             type="button"
-            class="ml-2 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-left hover:bg-slate-50"
+            class="rounded-xl border border-slate-200 bg-white px-2 py-1 text-left hover:bg-slate-50 md:ml-2 md:px-3 md:py-1.5"
             @click="emit('go-my-page')"
           >
-            <p class="text-xs font-bold text-slate-900">{{ profile?.name || '사용자' }}</p>
-            <p class="text-[11px] text-slate-600">
+            <p class="text-[11px] font-bold text-slate-900 md:text-xs">{{ profile?.name || '사용자' }}</p>
+            <p class="hidden text-[11px] text-slate-600 md:block">
               {{ [profile?.position, profile?.department].filter(Boolean).join(' · ') || '프로필' }}
             </p>
           </button>
@@ -642,10 +674,7 @@ onBeforeUnmount(() => {
         </div>
         <div class="mb-6 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
           <div class="flex flex-wrap items-center gap-2">
-            <span class="rounded-full bg-indigo-100 px-3 py-1 text-sm font-bold text-indigo-800">
-              일정/야근 계산 기준
-            </span>
-            <span class="rounded-full bg-emerald-100 px-3 py-1 text-sm font-bold text-emerald-800">
+            <span class="rounded-full bg-emerald-100 px-3 py-1 text-[11px] font-bold text-emerald-800 md:text-sm">
               도면 배포 {{ scheduleSummary.totalHead }}헤드
             </span>
             <span class="rounded-full bg-amber-100 px-3 py-1 text-sm font-bold text-amber-800">
@@ -693,15 +722,19 @@ onBeforeUnmount(() => {
               <article
                 v-for="row in groupData.rows"
                 :key="`mobile-${groupData.group}-${row.id}`"
-                class="rounded-xl border bg-white p-2 shadow-sm select-none"
+                class="rounded-xl border p-2 shadow-sm select-none"
+                :draggable="canReorderRows"
+                @dragstart="handleDragStart($event, row.id)"
+                @dragover="handleDragOver"
+                @drop.prevent="handleDrop(row.id)"
                 :class="
                   isRowCompleted(row)
                     ? 'border-orange-200 bg-orange-50/60'
                     : isVirtualDistributedRow(row)
                       ? 'border-sky-200 bg-sky-50/70 text-slate-700'
                       : isRowDisabled(row)
-                        ? 'border-slate-200 bg-slate-50 text-slate-400'
-                      : 'border-slate-200'
+                        ? 'border-slate-300 bg-slate-100 text-slate-700'
+                      : 'border-slate-200 bg-white'
                 "
               >
                 <div class="flex items-start justify-between gap-2">
@@ -718,20 +751,40 @@ onBeforeUnmount(() => {
                     <p class="text-xs text-slate-600">{{ row.area || '-' }}</p>
                   </div>
                   <div class="flex shrink-0 flex-col items-end gap-1">
-                    <button
-                      type="button"
-                      class="inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-300 bg-white text-sm font-extrabold text-slate-700"
-                      @click.stop="openCallDialog(row)"
-                    >
-                      ⋯
-                    </button>
+                    <div class="flex items-center gap-1">
+                      <button
+                        type="button"
+                        class="inline-flex h-7 w-7 items-center justify-center rounded-full border text-sm font-extrabold"
+                        :class="
+                          isRowDisabled(row)
+                            ? 'border-slate-300 bg-slate-100 text-slate-600'
+                            : 'border-slate-300 bg-white text-slate-700'
+                        "
+                        @click.stop="openCallDialog(row)"
+                      >
+                        ⋯
+                      </button>
+                      <button
+                        v-if="canReorderRows"
+                        type="button"
+                        class="rounded-full px-2 py-1 text-[10px] font-bold"
+                        :class="
+                          isMobileRowEditing(row.id)
+                            ? 'border border-emerald-600 bg-emerald-600 text-white'
+                            : 'border border-slate-300 bg-white text-slate-700'
+                        "
+                        @click.stop="toggleMobileRowEdit(row.id)"
+                      >
+                        {{ isMobileRowEditing(row.id) ? '완료' : '수정' }}
+                      </button>
+                    </div>
                     <span
                       class="rounded-full px-2 py-1 text-[10px] font-extrabold"
                       :class="
                         isVirtualDistributedRow(row)
                           ? 'bg-sky-100 text-sky-700'
                           : isRowDisabled(row)
-                            ? 'bg-slate-200 text-slate-600'
+                          ? 'bg-slate-300 text-slate-700'
                             : 'bg-emerald-100 text-emerald-700'
                       "
                     >
@@ -755,14 +808,18 @@ onBeforeUnmount(() => {
                       :key="`${row.id}-${stageKey}`"
                       type="button"
                       class="inline-flex items-center justify-center rounded-lg border px-1.5 py-2 text-[11px] font-semibold"
-                      :class="[statusClass(getCellText(row, stageKey)), isRowDisabled(row) ? 'opacity-40' : '']"
-                      @mousedown.stop="handleStagePressStart(row, stageKey, props.currentWorkMan)"
+                      :class="[
+                        statusClass(getCellText(row, stageKey)),
+                        getCellText(row, stageKey) === '없음' ? 'border-slate-200 bg-transparent' : '',
+                        !isMobileRowEditing(row.id) ? 'cursor-not-allowed' : '',
+                      ]"
+                      @mousedown.stop="handleMobileStagePressStart(row, stageKey, props.currentWorkMan)"
                       @mouseup.stop="endLongPress(row.id, stageKey)"
                       @mouseleave.stop="endLongPress(row.id, stageKey)"
-                      @touchstart.stop="handleStagePressStart(row, stageKey, props.currentWorkMan)"
+                      @touchstart.stop="handleMobileStagePressStart(row, stageKey, props.currentWorkMan)"
                       @touchend.stop="endLongPress(row.id, stageKey)"
                       @touchcancel.stop="endLongPress(row.id, stageKey)"
-                      @click.stop="handleStageClick(row, stageKey, props.currentWorkMan)"
+                      @click.stop="handleMobileStageClick(row, stageKey, props.currentWorkMan)"
                     >
                       <span>{{ stageMeta[stageKey].workMan }}</span>
                     </button>
@@ -865,7 +922,7 @@ onBeforeUnmount(() => {
                         class="inline-flex min-w-[64px] items-center justify-center rounded-md px-2 py-1 text-xs font-semibold"
                         :class="[
                           statusClass(getCellText(row, col.key)),
-                          isRowDisabled(row) ? 'opacity-40' : '',
+                          getCellText(row, col.key) === '없음' ? 'border border-transparent shadow-none' : '',
                         ]"
                         @mousedown.stop="handleStagePressStart(row, col.key, props.currentWorkMan)"
                         @mouseup.stop="endLongPress(row.id, col.key)"

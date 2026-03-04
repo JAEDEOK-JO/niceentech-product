@@ -9,18 +9,22 @@ const toNumber = (value) => {
   return Number.isFinite(num) ? num : 0
 }
 const normalizeText = (value) => String(value ?? '').replaceAll(' ', '').trim()
+const isDoneStatus = (value) => {
+  const text = String(value ?? '').trim()
+  return text === '작업완료' || text === '없음'
+}
 
 const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate())
 const isDistributed = (row) =>
   String(row?.drawing_date ?? '').trim().length > 0 || Boolean(row?.virtual_drawing_distributed)
 const isAllProcessDone = (row) =>
-  String(row?.marking_weld_a_status ?? '').trim() === '작업완료' &&
-  String(row?.marking_weld_b_status ?? '').trim() === '작업완료' &&
-  String(row?.marking_laser_1_status ?? '').trim() === '작업완료' &&
-  String(row?.marking_laser_2_status ?? '').trim() === '작업완료' &&
-  String(row?.nasa_status ?? '').trim() === '작업완료' &&
-  String(row?.beveling_status ?? '').trim() === '작업완료' &&
-  String(row?.main_status ?? '').trim() === '작업완료'
+  isDoneStatus(row?.marking_weld_a_status) &&
+  isDoneStatus(row?.marking_weld_b_status) &&
+  isDoneStatus(row?.marking_laser_1_status) &&
+  isDoneStatus(row?.marking_laser_2_status) &&
+  isDoneStatus(row?.nasa_status) &&
+  isDoneStatus(row?.beveling_status) &&
+  isDoneStatus(row?.main_status)
 
 const formatHourMinute = (seconds) => {
   const safe = Math.max(0, Math.floor(seconds))
