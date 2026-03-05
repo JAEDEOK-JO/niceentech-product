@@ -4,6 +4,7 @@ import LoginPage from '@/pages/LoginPage.vue'
 import HomePage from '@/pages/HomePage.vue'
 import MyPage from '@/pages/MyPage.vue'
 import NotificationsPage from '@/pages/NotificationsPage.vue'
+import StatsPage from '@/pages/StatsPage.vue'
 
 const routes = [
   {
@@ -32,6 +33,12 @@ const routes = [
     path: '/notifications',
     name: 'notifications',
     component: NotificationsPage,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/stats',
+    name: 'stats',
+    component: StatsPage,
     meta: { requiresAuth: true },
   },
   {

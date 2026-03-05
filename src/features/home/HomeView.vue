@@ -27,6 +27,7 @@ const emit = defineEmits([
   'reset-week',
   'go-my-page',
   'go-notifications',
+  'go-stats',
   'toggle-work-status',
   'reorder-rows',
   'save-row-menu',
@@ -43,7 +44,7 @@ const stageMeta = {
   marking_laser_1: { field: 'marking_laser_1_status', workMan: '레이저1' },
   marking_laser_2: { field: 'marking_laser_2_status', workMan: '레이저2' },
   nasa: { field: 'nasa_status', workMan: '무용접' },
-  beveling: { field: 'beveling_status', workMan: '생산' },
+  beveling: { field: 'beveling_status', workMan: '티&면치' },
   main_work: { field: 'main_status', workMan: '메인' },
 }
 const workManToStageKey = {
@@ -59,11 +60,6 @@ const workManToStageKey = {
   무용접반: 'nasa',
   나사: 'nasa',
   '티&면치': 'beveling',
-  티면치: 'beveling',
-  생산: 'beveling',
-  티뽑기: 'beveling',
-  티뽑기및면치: 'beveling',
-  면치: 'beveling',
   메인: 'main_work',
   관리자: 'all',
   전체: 'all',
@@ -117,12 +113,18 @@ const getDrawingDistributionRate = () => {
   return Math.min(100, Math.max(0, Math.round(ratio)))
 }
 
+const normalizeStageStatus = (value) => {
+  const raw = String(value ?? '').trim()
+  if (raw.includes('작업중')) return '작업중'
+  if (raw.includes('작업완료')) return '작업완료'
+  if (!raw || raw === '없음' || raw === '작업전') return '없음'
+  return '없음'
+}
+
 const getCellText = (row, key) => {
   const stage = stageMeta[key]
   if (stage) {
-    const raw = String(row?.[stage.field] ?? '').trim()
-    if (raw === '작업중' || raw === '작업완료' || raw === '없음') return raw
-    return '없음'
+    return normalizeStageStatus(row?.[stage.field])
   }
   if ((key === 'head' || key === 'hole') && Number(row?.[key] ?? 0) === 0) {
     return ''
@@ -211,14 +213,14 @@ const isActualDistributedRow = (row) => String(row?.drawing_date ?? '').trim().l
 const isVirtualDistributedRow = (row) =>
   !isActualDistributedRow(row) && Boolean(row?.virtual_drawing_distributed)
 const isRowDisabled = (row) => !isActualDistributedRow(row) && !isVirtualDistributedRow(row)
+const isDistributedRow = (row) => isActualDistributedRow(row) || isVirtualDistributedRow(row)
 
 const isRowCompleted = (row) =>
+  isDistributedRow(row) &&
   Object.values(stageMeta).every((meta) => {
-    const status = String(row?.[meta.field] ?? '').trim()
-    return status === '작업완료' || status === '없음'
+    const raw = String(row?.[meta.field] ?? '').trim()
+    return raw === '없음' || raw.includes('작업완료')
   })
-
-const isDistributedRow = (row) => isActualDistributedRow(row) || isVirtualDistributedRow(row)
 
 const isStageColumn = (key) => Object.hasOwn(stageMeta, key)
 const isCallColumn = (key) => key === 'call_action'
@@ -553,7 +555,7 @@ onBeforeUnmount(() => {
             {{ realtimeConnected ? '실시간 연결됨' : '실시간 재연결 중' }}
           </span>
         </div>
-        <div class="grid grid-cols-[1fr_1fr_1fr_auto_auto] items-center gap-1 md:flex md:items-center md:gap-2">
+        <div class="grid grid-cols-[1fr_1fr_1fr_auto_auto_auto] items-center gap-1 md:flex md:items-center md:gap-2">
           <Button class="h-8 px-2 text-[11px] md:h-9 md:px-3 md:text-xs" variant="outline" @click="emit('move-week', -1)">지난주</Button>
           <Button class="h-8 px-2 text-[11px] md:h-9 md:px-3 md:text-xs" variant="outline" :disabled="weekOffset === 0" @click="emit('reset-week')">
             이번주
@@ -574,6 +576,19 @@ onBeforeUnmount(() => {
             >
               {{ unreadNotificationCount > 99 ? '99+' : unreadNotificationCount }}
             </span>
+          </button>
+          <button
+            v-if="canReorderRows"
+            type="button"
+            class="relative flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 md:h-9 md:w-9"
+            @click="emit('go-stats')"
+          >
+            <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M4 19h16" />
+              <path d="M7 15v-4" />
+              <path d="M12 15V9" />
+              <path d="M17 15V6" />
+            </svg>
           </button>
           <button
             type="button"
@@ -1052,6 +1067,7 @@ onBeforeUnmount(() => {
           <p class="font-semibold text-slate-800">회사명: {{ activeCallRow?.company || '-' }}</p>
           <p class="mt-1 font-semibold text-slate-800">현장명: {{ activeCallRow?.place || '-' }}</p>
           <p class="mt-1 font-semibold text-slate-800">구역명: {{ activeCallRow?.area || '-' }}</p>
+          <p class="mt-1 font-semibold text-slate-800">비고: {{ activeCallRow?.memo || '-' }}</p>
           <p class="mt-2 rounded-md bg-amber-100 px-2 py-1 text-sm font-extrabold text-amber-900">
             검수날짜: {{ formatKoreanDateText(activeCallRow?.test_date) }}
           </p>

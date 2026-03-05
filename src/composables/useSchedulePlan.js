@@ -9,9 +9,16 @@ const toNumber = (value) => {
   return Number.isFinite(num) ? num : 0
 }
 const normalizeText = (value) => String(value ?? '').replaceAll(' ', '').trim()
-const isDoneStatus = (value) => {
+const normalizeProcessStatus = (value) => {
   const text = String(value ?? '').trim()
-  return text === '작업완료' || text === '없음'
+  if (text.includes('작업중')) return '작업중'
+  if (text.includes('작업완료')) return '작업완료'
+  if (!text || text === '없음') return '없음'
+  return text
+}
+const isDoneStatus = (value) => {
+  const status = normalizeProcessStatus(value)
+  return status === '작업완료' || status === '없음'
 }
 
 const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate())

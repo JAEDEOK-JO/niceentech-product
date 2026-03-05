@@ -49,6 +49,10 @@ const goNotifications = () => {
   router.push('/notifications')
 }
 
+const goStats = () => {
+  router.push('/stats')
+}
+
 const handleToggleWorkStatus = async ({ rowId, stageKey, longPressMs, onResult }) => {
   const result = await toggleWorkStatus({
     rowId,
@@ -153,6 +157,7 @@ const handleRequestAlertCompleted = async ({ requestId, message, onResult }) => 
     @reset-week="resetWeek"
     @go-my-page="goMyPage"
     @go-notifications="goNotifications"
+    @go-stats="goStats"
     @toggle-work-status="handleToggleWorkStatus"
     @reorder-rows="handleReorderRows"
     @save-row-menu="handleSaveRowMenu"

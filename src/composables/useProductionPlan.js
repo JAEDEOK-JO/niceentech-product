@@ -11,6 +11,15 @@ const stageToField = {
   beveling: 'beveling_status',
   main_work: 'main_status',
 }
+const workerTStageFields = [
+  'marking_weld_a_status',
+  'marking_weld_b_status',
+  'marking_laser_1_status',
+  'marking_laser_2_status',
+  'beveling_status',
+  'nasa_status',
+]
+const mainStageField = 'main_status'
 const workManRoleToStages = {
   마킹1: ['marking_weld_a'],
   마킹2: ['marking_weld_b'],
@@ -18,11 +27,6 @@ const workManRoleToStages = {
   레이저2: ['marking_laser_2'],
   무용접: ['nasa'],
   '티&면치': ['beveling'],
-  티면치: ['beveling'],
-  생산: ['beveling'],
-  티뽑기: ['beveling'],
-  티뽑기및면치: ['beveling'],
-  면치: ['beveling'],
   메인: ['main_work'],
   관리자: ['*'],
   전체: ['*'],
@@ -31,7 +35,7 @@ const statusCycle = {
   없음: '작업중',
   작업전: '작업중',
   작업중: '작업완료',
-  작업완료: '작업전',
+  작업완료: '없음',
 }
 const LONG_PRESS_REQUIRED_MS = 700
 const statusFieldsForCompletion = Object.values(stageToField)
@@ -39,6 +43,11 @@ const statusFieldsForCompletion = Object.values(stageToField)
 const toNumber = (value) => {
   const num = Number(value)
   return Number.isFinite(num) ? num : 0
+}
+const formatMonthDay = (date = new Date()) => {
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${month}.${day}`
 }
 
 const getRowsTotals = (rows) =>
@@ -61,8 +70,28 @@ const normalizeWorkType = (value) => {
 
 const normalizeStatus = (value) => {
   const text = String(value ?? '').trim()
-  if (text === '작업중' || text === '작업완료' || text === '없음') return text
+  if (text.includes('작업중')) return '작업중'
+  if (text.includes('작업완료')) return '작업완료'
+  if (!text || text === '없음' || text === '작업전') return '없음'
   return '작업전'
+}
+const normalizeProgressState = (value) => {
+  const text = String(value ?? '').trim()
+  if (text.includes('작업중')) return '작업중'
+  if (text.includes('작업완료')) return '작업완료'
+  return '작업전'
+}
+const resolveWorkerTStatus = (row) => {
+  const statuses = workerTStageFields.map((field) => normalizeProgressState(row?.[field]))
+  if (statuses.some((status) => status === '작업중')) return '작업중'
+  if (statuses.every((status) => status === '작업완료')) return '작업완료'
+  return '없음'
+}
+const resolveWorkerMainStatus = (row) => {
+  const status = normalizeProgressState(row?.[mainStageField])
+  if (status === '작업중') return '작업중'
+  if (status === '작업완료') return '작업완료'
+  return '없음'
 }
 
 const isActualDistributedRow = (row) => String(row?.drawing_date ?? '').trim().length > 0
@@ -70,9 +99,10 @@ const isVirtualDistributedRow = (row) =>
   !isActualDistributedRow(row) && Boolean(row?.virtual_drawing_distributed)
 const isDistributedRow = (row) => isActualDistributedRow(row) || isVirtualDistributedRow(row)
 const isCompletedRow = (row) =>
+  isDistributedRow(row) &&
   statusFieldsForCompletion.every((field) => {
-    const status = normalizeStatus(row?.[field])
-    return status === '작업완료' || status === '없음'
+    const raw = String(row?.[field] ?? '').trim()
+    return raw === '없음' || raw.includes('작업완료')
   })
 
 const sortRowsByPriority = (rows) => {
@@ -182,12 +212,15 @@ export function useProductionPlan(session) {
     planError.value = ''
 
     const baseColumns =
-      'id,no,initial,company,place,area,memo,full_text,work_type,hole,head,groove,weight,name,test_date,drawing_date,delay_time,delay_text,complete,marking_weld_a_status,marking_weld_b_status,marking_laser_1_status,marking_laser_2_status,cutting_status,beveling_status,main_status,nasa_status'
+      'id,no,initial,company,place,area,memo,full_text,work_type,hole,head,groove,weight,name,test_date,drawing_date,delay_time,delay_text,complete,worker_t,worker_t_time,worker_main,worker_main_time,marking_weld_a_status,marking_weld_b_status,marking_laser_1_status,marking_laser_2_status,cutting_status,beveling_status,main_status,nasa_status'
     const withVirtualColumns = `${baseColumns},virtual_drawing_distributed`
     const runQuery = (columns) => {
       let query = supabase.from('product_list').select(columns)
       if (!searchAllDates.value) {
         query = query.eq('test_date', filterDate.value)
+      }
+      for (const term of normalizedSearchTerms.value) {
+        query = query.ilike('full_text', `%${term}%`)
       }
       return query.order('no', { ascending: true })
     }
@@ -205,17 +238,7 @@ export function useProductionPlan(session) {
       return
     }
 
-    const fetchedRows = data ?? []
-    if (normalizedSearchTerms.value.length === 0) {
-      planRows.value = fetchedRows
-      return
-    }
-
-    const loweredTerms = normalizedSearchTerms.value.map((term) => term.toLowerCase())
-    planRows.value = fetchedRows.filter((row) => {
-      const text = String(row?.full_text ?? '').toLowerCase()
-      return loweredTerms.every((term) => text.includes(term))
-    })
+    planRows.value = data ?? []
   }
 
   const fetchAssigneeUsers = async () => {
@@ -292,9 +315,27 @@ export function useProductionPlan(session) {
     }
     const next = statusCycle[current]
 
+    const nextRow = { ...row, [field]: next }
+    const worker_t = resolveWorkerTStatus(nextRow)
+    const worker_main = resolveWorkerMainStatus(nextRow)
+    const updatePayload = { [field]: next, worker_t, worker_main }
+    const todayText = formatMonthDay(new Date())
+    if (worker_t === '작업완료' && row.worker_t !== '작업완료') {
+      updatePayload.worker_t_time = todayText
+    }
+    if (worker_t !== '작업완료' && row.worker_t === '작업완료') {
+      updatePayload.worker_t_time = ''
+    }
+    if (worker_main === '작업완료' && row.worker_main !== '작업완료') {
+      updatePayload.worker_main_time = todayText
+    }
+    if (worker_main !== '작업완료' && row.worker_main === '작업완료') {
+      updatePayload.worker_main_time = ''
+    }
+
     const { error } = await supabase
       .from('product_list')
-      .update({ [field]: next })
+      .update(updatePayload)
       .eq('id', rowId)
 
     if (error) {
@@ -303,7 +344,7 @@ export function useProductionPlan(session) {
     }
 
     const updated = [...planRows.value]
-    updated[idx] = { ...row, [field]: next }
+    updated[idx] = { ...row, ...updatePayload }
     planRows.value = updated
     return { ok: true }
   }
