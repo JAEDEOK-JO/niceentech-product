@@ -1,7 +1,7 @@
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { supabase } from '@/lib/supabase'
 
-const PRODUCT_LIST_TABLE = 'product_list_test'
+const PRODUCT_LIST_TABLE = 'product_list'
 const REGULAR_WORK_SECONDS = 9 * 60 * 60
 const MAX_OVERTIME_SECONDS_WEEKDAY = 5 * 60 * 60
 

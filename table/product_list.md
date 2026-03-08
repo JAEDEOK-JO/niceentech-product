@@ -96,3 +96,17 @@
 | beveling_status | string (text) | Y | `'작업전'::text` | 생산 상태(작업전/작업중/작업완료) |
 | main_status | string (text) | Y | `'작업전'::text` | 메인 상태(작업전/작업중/작업완료) |
 | nasa_status | string (text) | Y | `'작업전'::text` | 무용접 상태(작업전/작업중/작업완료) |
+| marking_weld_a_started_on | string (date) | N |  | 마킹1 작업 시작일 |
+| marking_weld_a_completed_on | string (date) | N |  | 마킹1 작업 완료일 |
+| marking_weld_b_started_on | string (date) | N |  | 마킹2 작업 시작일 |
+| marking_weld_b_completed_on | string (date) | N |  | 마킹2 작업 완료일 |
+| marking_laser_1_started_on | string (date) | N |  | 레이저1 작업 시작일 |
+| marking_laser_1_completed_on | string (date) | N |  | 레이저1 작업 완료일 |
+| marking_laser_2_started_on | string (date) | N |  | 레이저2 작업 시작일 |
+| marking_laser_2_completed_on | string (date) | N |  | 레이저2 작업 완료일 |
+| beveling_started_on | string (date) | N |  | 티&면치 작업 시작일 |
+| beveling_completed_on | string (date) | N |  | 티&면치 작업 완료일 |
+| main_started_on | string (date) | N |  | 메인 작업 시작일 |
+| main_completed_on | string (date) | N |  | 메인 작업 완료일 |
+| nasa_started_on | string (date) | N |  | 무용접 작업 시작일 |
+| nasa_completed_on | string (date) | N |  | 무용접 작업 완료일 |

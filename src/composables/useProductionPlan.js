@@ -1,7 +1,7 @@
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { supabase } from '@/lib/supabase'
 
-const PRODUCT_LIST_TABLE = 'product_list_test'
+const PRODUCT_LIST_TABLE = 'product_list'
 const workTypeGroups = ['용접/무용접', '전실/입상', '나사', '기타']
 const stageToField = {
   marking_weld_a: 'marking_weld_a_status',

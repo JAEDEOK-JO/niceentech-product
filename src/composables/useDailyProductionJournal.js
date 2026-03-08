@@ -1,7 +1,7 @@
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { supabase } from '@/lib/supabase'
 
-const PRODUCT_LIST_TABLE = 'product_list_test'
+const PRODUCT_LIST_TABLE = 'product_list'
 const toNumber = (value) => {
   const n = Number(value)
   return Number.isFinite(n) ? n : 0
