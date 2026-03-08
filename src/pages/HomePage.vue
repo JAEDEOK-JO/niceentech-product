@@ -4,7 +4,7 @@ import HomeView from '@/features/home/HomeView.vue'
 import { useAuth } from '@/composables/useAuth'
 import { useProfile } from '@/composables/useProfile'
 import { useProductionPlan } from '@/composables/useProductionPlan'
-import { useSchedulePlan } from '@/composables/useSchedulePlan'
+import { useHomeScheduleCard } from '@/composables/useHomeScheduleCard'
 import { useIssueNotifications } from '@/composables/useIssueNotifications'
 
 const router = useRouter()
@@ -39,7 +39,7 @@ const {
   updateRowMenu,
   fetchDrawingFiles,
 } = useProductionPlan(session)
-const { scheduleSummary } = useSchedulePlan({ session, selectedTuesday, planRows })
+const { scheduleCard } = useHomeScheduleCard({ session, selectedTuesday })
 
 const goMyPage = () => {
   router.push('/mypage')
@@ -48,7 +48,6 @@ const goMyPage = () => {
 const goNotifications = () => {
   router.push('/notifications')
 }
-
 const goStats = () => {
   router.push('/stats')
 }
@@ -77,6 +76,7 @@ const handleSaveRowMenu = async ({
   delayText,
   delayTime,
   callType,
+  complete,
   virtualDrawingDistributed,
   onResult,
 }) => {
@@ -85,6 +85,7 @@ const handleSaveRowMenu = async ({
     delayText,
     delayTime,
     callType,
+    complete,
     virtualDrawingDistributed,
     requester: {
       id: profile.value?.id ?? session.value?.user?.id ?? null,
@@ -150,7 +151,7 @@ const handleRequestAlertCompleted = async ({ requestId, message, onResult }) => 
     :can-reply-request-alert="canReplyRequestAlert"
     :grouped-rows="groupedRows"
     :totals="totals"
-    :schedule-summary="scheduleSummary"
+    :schedule-card="scheduleCard"
     :profile="profile"
     :current-work-man="profile?.work_man || ''"
     @move-week="moveWeek"

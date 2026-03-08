@@ -17,7 +17,7 @@ const props = defineProps({
   canReplyRequestAlert: { type: Function, default: () => false },
   groupedRows: { type: Array, default: () => [] },
   totals: { type: Object, required: true },
-  scheduleSummary: { type: Object, required: true },
+  scheduleCard: { type: Object, required: true },
   profile: { type: Object, default: null },
   currentWorkMan: { type: String, default: '' },
 })
@@ -103,14 +103,6 @@ const emitSearchChange = () => {
     text: localSearchText.value,
     allDates: localSearchAllDates.value,
   })
-}
-
-const getDrawingDistributionRate = () => {
-  const distributed = Number(props.scheduleSummary?.distributedDrawingCount ?? 0)
-  const planned = Number(props.scheduleSummary?.totalDrawingCount ?? 0)
-  if (!Number.isFinite(distributed) || !Number.isFinite(planned) || planned <= 0) return 0
-  const ratio = (distributed / planned) * 100
-  return Math.min(100, Math.max(0, Math.round(ratio)))
 }
 
 const normalizeStageStatus = (value) => {
@@ -215,12 +207,7 @@ const isVirtualDistributedRow = (row) =>
 const isRowDisabled = (row) => !isActualDistributedRow(row) && !isVirtualDistributedRow(row)
 const isDistributedRow = (row) => isActualDistributedRow(row) || isVirtualDistributedRow(row)
 
-const isRowCompleted = (row) =>
-  isDistributedRow(row) &&
-  Object.values(stageMeta).every((meta) => {
-    const raw = String(row?.[meta.field] ?? '').trim()
-    return raw === '없음' || raw.includes('작업완료')
-  })
+const isRowCompleted = (row) => Boolean(row?.complete)
 
 const isStageColumn = (key) => Object.hasOwn(stageMeta, key)
 const isCallColumn = (key) => key === 'call_action'
@@ -469,6 +456,23 @@ const confirmCallDialog = () => {
   })
 }
 
+const toggleRowCompleteFromMenu = (nextComplete) => {
+  const rowId = activeCallRow.value?.id
+  if (!rowId) return
+  emit('save-row-menu', {
+    rowId,
+    complete: nextComplete,
+    onResult: (result) => {
+      if (!result?.ok) {
+        showSnack(nextComplete ? '작업완료 처리 실패' : '작업완료 취소 실패')
+        return
+      }
+      showSnack(nextComplete ? '작업완료 처리됨' : '작업완료 취소됨')
+      closeCallDialog()
+    },
+  })
+}
+
 const setVirtualDrawingDistribution = (enabled) => {
   const rowId = activeCallRow.value?.id
   if (!rowId) return
@@ -608,96 +612,28 @@ onBeforeUnmount(() => {
       <div v-if="planLoading" class="p-8 text-center text-sm text-slate-500">데이터 로딩 중...</div>
       <div v-else-if="planError" class="p-8 text-center text-sm text-red-600">{{ planError }}</div>
       <div v-else>
-        <div class="mb-4 grid grid-cols-4 gap-1.5 md:hidden">
-          <div class="rounded-lg border border-indigo-200 bg-white p-2 shadow-sm">
-            <p class="text-[10px] font-bold text-indigo-700">일일목표</p>
-            <p class="mt-1 text-sm font-extrabold text-slate-900">{{ scheduleSummary.dailyTargetHead }}</p>
-          </div>
-          <div class="rounded-lg border border-emerald-200 bg-white p-2 shadow-sm">
-            <p class="text-[10px] font-bold text-emerald-700">완료</p>
-            <p class="mt-1 text-sm font-extrabold text-slate-900">{{ scheduleSummary.completedHead }}</p>
-          </div>
-          <div class="rounded-lg border border-blue-200 bg-white p-2 shadow-sm">
-            <p class="text-[10px] font-bold text-blue-700">총수량</p>
-            <p class="mt-1 text-sm font-extrabold text-slate-900">{{ scheduleSummary.totalHead }}</p>
-          </div>
-          <div class="rounded-lg border border-amber-200 bg-white p-2 shadow-sm">
-            <p class="text-[10px] font-bold text-amber-700">잔여</p>
-            <p class="mt-1 text-sm font-extrabold text-slate-900">{{ scheduleSummary.remainingHead }}</p>
-          </div>
-          <div class="rounded-lg border border-fuchsia-200 bg-white p-2 shadow-sm">
-            <p class="text-[10px] font-bold text-fuchsia-700">오늘야근</p>
-            <p class="mt-1 text-[11px] font-extrabold text-slate-900">{{ scheduleSummary.todayOvertimeText }}</p>
-          </div>
-          <div class="rounded-lg border border-cyan-200 bg-white p-2 shadow-sm">
-            <p class="text-[10px] font-bold text-cyan-700">주간야근</p>
-            <p class="mt-1 text-[11px] font-extrabold text-slate-900">{{ scheduleSummary.weeklyOvertimeText }}</p>
-          </div>
-          <div class="rounded-lg border border-purple-200 bg-white p-2 shadow-sm">
-            <p class="text-[10px] font-bold text-purple-700">토요일</p>
-            <p class="mt-1 text-[11px] font-extrabold text-slate-900">{{ scheduleSummary.saturdayWork }}</p>
-          </div>
-          <div class="rounded-lg border border-rose-200 bg-white p-2 shadow-sm">
-            <p class="text-[10px] font-bold text-rose-700">일요일</p>
-            <p class="mt-1 text-[11px] font-extrabold text-slate-900">{{ scheduleSummary.sundayWork }}</p>
-          </div>
-        </div>
-
-        <div class="mb-6 hidden overflow-auto rounded-xl border border-indigo-200 bg-white shadow-sm md:block">
-          <table class="w-full border-collapse" style="table-layout: fixed; min-width: 980px">
-            <thead class="bg-indigo-50">
-              <tr>
-                <th class="border border-indigo-200 px-2 py-2 text-center text-xs font-bold text-indigo-900">일일 생산 목표(헤드)</th>
-                <th class="border border-indigo-200 px-2 py-2 text-center text-xs font-bold text-indigo-900">완료 헤드</th>
-                <th class="border border-indigo-200 px-2 py-2 text-center text-xs font-bold text-indigo-900">총 헤드</th>
-                <th class="border border-indigo-200 px-2 py-2 text-center text-xs font-bold text-indigo-900">잔여 헤드</th>
-                <th class="border border-indigo-200 px-2 py-2 text-center text-xs font-bold text-indigo-900">오늘 야근</th>
-                <th class="border border-indigo-200 px-2 py-2 text-center text-xs font-bold text-indigo-900">주간 야근</th>
-                <th class="border border-indigo-200 px-2 py-2 text-center text-xs font-bold text-indigo-900">토요일</th>
-                <th class="border border-indigo-200 px-2 py-2 text-center text-xs font-bold text-indigo-900">일요일</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td class="border border-indigo-200 px-2 py-2 text-center text-sm font-semibold">
-                  {{ scheduleSummary.dailyTargetHead }}
-                </td>
-                <td class="border border-indigo-200 px-2 py-2 text-center text-sm font-semibold">
-                  {{ scheduleSummary.completedHead }}
-                </td>
-                <td class="border border-indigo-200 px-2 py-2 text-center text-sm font-semibold">
-                  {{ scheduleSummary.totalHead }}
-                </td>
-                <td class="border border-indigo-200 px-2 py-2 text-center text-sm font-semibold">
-                  {{ scheduleSummary.remainingHead }}
-                </td>
-                <td class="border border-indigo-200 px-2 py-2 text-center text-sm font-semibold">
-                  {{ scheduleSummary.todayOvertimeText }}
-                </td>
-                <td class="border border-indigo-200 px-2 py-2 text-center text-sm font-semibold">
-                  {{ scheduleSummary.weeklyOvertimeText }}
-                </td>
-                <td class="border border-indigo-200 px-2 py-2 text-center text-sm font-semibold">
-                  {{ scheduleSummary.saturdayWork }}
-                </td>
-                <td class="border border-indigo-200 px-2 py-2 text-center text-sm font-semibold">
-                  {{ scheduleSummary.sundayWork }}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
         <div class="mb-6 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-          <div class="flex flex-wrap items-center gap-2">
-            <span class="rounded-full bg-emerald-100 px-3 py-1 text-[11px] font-bold text-emerald-800 md:text-sm">
-              도면 배포 {{ scheduleSummary.totalHead }}헤드
-            </span>
-            <span class="rounded-full bg-amber-100 px-3 py-1 text-sm font-bold text-amber-800">
-              전체헤드수 {{ scheduleSummary.plannedTotalHead }}헤드
-            </span>
-            <span class="rounded-full bg-violet-100 px-3 py-1 text-sm font-bold text-violet-800">
-              도면배포율 {{ getDrawingDistributionRate() }}% ({{ scheduleSummary.distributedDrawingCount ?? 0 }} / {{ scheduleSummary.totalDrawingCount ?? 0 }})
-            </span>
+          <div class="grid w-full grid-cols-2 gap-2 md:w-auto md:grid-cols-4">
+            <div class="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2">
+              <p class="text-[11px] font-bold text-indigo-700 md:text-xs">오늘 목표 수량</p>
+              <p class="mt-1 text-sm font-extrabold text-slate-900 md:text-base">{{ scheduleCard.todayTargetQty }}</p>
+            </div>
+            <div class="rounded-lg border border-fuchsia-200 bg-fuchsia-50 px-3 py-2">
+              <p class="text-[11px] font-bold text-fuchsia-700 md:text-xs">오늘 야근</p>
+              <p class="mt-1 text-sm font-extrabold text-slate-900 md:text-base">{{ scheduleCard.todayOvertimeText }}</p>
+            </div>
+            <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+              <p class="text-[11px] font-bold text-emerald-700 md:text-xs">배포 합계 (헤드/홀)</p>
+              <p class="mt-1 text-sm font-extrabold text-slate-900 md:text-base">
+                {{ scheduleCard.distributedHeadSum }} / {{ scheduleCard.distributedHoleSum }}
+              </p>
+            </div>
+            <div class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+              <p class="text-[11px] font-bold text-amber-700 md:text-xs">전체 합계 (헤드/홀)</p>
+              <p class="mt-1 text-sm font-extrabold text-slate-900 md:text-base">
+                {{ scheduleCard.totalHeadSum }} / {{ scheduleCard.totalHoleSum }}
+              </p>
+            </div>
           </div>
           <div class="ml-auto flex w-full flex-col gap-2 md:w-auto md:flex-row md:items-center md:gap-3">
             <input
@@ -717,12 +653,15 @@ onBeforeUnmount(() => {
               전체
             </label>
           </div>
-          <div class="w-full">
-            <div class="h-2.5 w-full overflow-hidden rounded-full bg-slate-200">
-              <div
-                class="h-full rounded-full bg-gradient-to-r from-emerald-500 to-blue-500 transition-all duration-300"
-                :style="{ width: `${getDrawingDistributionRate()}%` }"
-              />
+          <div class="w-full grid grid-cols-1 gap-2 md:grid-cols-5">
+            <div
+              v-for="day in scheduleCard.dayStats || []"
+              :key="day.key"
+              class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
+            >
+              <p class="text-[11px] font-bold text-slate-600">{{ day.weekday }} ({{ day.key }})</p>
+              <p class="mt-1 text-sm font-extrabold text-slate-900">완료 {{ day.doneQty }}</p>
+              <p class="text-xs font-semibold text-fuchsia-700">야근 {{ day.overtimeText }}</p>
             </div>
           </div>
         </div>
@@ -1107,6 +1046,19 @@ onBeforeUnmount(() => {
             />
           </div>
         </div>
+        <button
+          v-if="canReorderRows"
+          type="button"
+          class="mt-2 w-full rounded-xl border px-4 py-2.5 text-sm font-extrabold transition"
+          :class="
+            activeCallRow?.complete
+              ? 'border-rose-400 bg-rose-50 text-rose-700 hover:bg-rose-100'
+              : 'border-emerald-500 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+          "
+          @click="toggleRowCompleteFromMenu(!activeCallRow?.complete)"
+        >
+          {{ activeCallRow?.complete ? '작업완료 취소' : '작업완료' }}
+        </button>
         <button
           type="button"
           class="mt-4 w-full rounded-xl border border-blue-600 bg-blue-600 px-4 py-3 text-base font-extrabold text-white shadow-md transition hover:bg-blue-700"

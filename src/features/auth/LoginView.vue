@@ -31,13 +31,12 @@ const submit = () => {
     <Card class="w-full p-8">
       <div class="mb-6 flex items-center justify-center gap-2">
         <UserRound class="h-5 w-5 text-blue-600" />
-        <h1 class="text-xl font-bold">NiceEnTech</h1>
+        <h1 class="text-xl font-bold">NICEENTECH</h1>
       </div>
 
       <div class="space-y-3">
         <label class="text-sm font-semibold">아이디</label>
         <Input v-model="id" placeholder="test01" />
-        <p class="mt-1 text-xs text-slate-500">@niceentech.kr 자동 적용</p>
       </div>
 
       <div class="mt-4 space-y-3">

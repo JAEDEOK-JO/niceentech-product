@@ -1,6 +1,7 @@
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { supabase } from '@/lib/supabase'
 
+const PRODUCT_LIST_TABLE = 'product_list_test'
 const workTypeGroups = ['용접/무용접', '전실/입상', '나사', '기타']
 const stageToField = {
   marking_weld_a: 'marking_weld_a_status',
@@ -10,6 +11,15 @@ const stageToField = {
   nasa: 'nasa_status',
   beveling: 'beveling_status',
   main_work: 'main_status',
+}
+const stageToDateFields = {
+  marking_weld_a: { started: 'marking_weld_a_started_on', completed: 'marking_weld_a_completed_on' },
+  marking_weld_b: { started: 'marking_weld_b_started_on', completed: 'marking_weld_b_completed_on' },
+  marking_laser_1: { started: 'marking_laser_1_started_on', completed: 'marking_laser_1_completed_on' },
+  marking_laser_2: { started: 'marking_laser_2_started_on', completed: 'marking_laser_2_completed_on' },
+  beveling: { started: 'beveling_started_on', completed: 'beveling_completed_on' },
+  main_work: { started: 'main_started_on', completed: 'main_completed_on' },
+  nasa: { started: 'nasa_started_on', completed: 'nasa_completed_on' },
 }
 const workerTStageFields = [
   'marking_weld_a_status',
@@ -38,7 +48,6 @@ const statusCycle = {
   작업완료: '없음',
 }
 const LONG_PRESS_REQUIRED_MS = 700
-const statusFieldsForCompletion = Object.values(stageToField)
 
 const toNumber = (value) => {
   const num = Number(value)
@@ -48,6 +57,12 @@ const formatMonthDay = (date = new Date()) => {
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
   return `${month}.${day}`
+}
+const formatIsoDate = (date = new Date()) => {
+  const y = String(date.getFullYear()).padStart(4, '0')
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
 }
 
 const getRowsTotals = (rows) =>
@@ -98,12 +113,7 @@ const isActualDistributedRow = (row) => String(row?.drawing_date ?? '').trim().l
 const isVirtualDistributedRow = (row) =>
   !isActualDistributedRow(row) && Boolean(row?.virtual_drawing_distributed)
 const isDistributedRow = (row) => isActualDistributedRow(row) || isVirtualDistributedRow(row)
-const isCompletedRow = (row) =>
-  isDistributedRow(row) &&
-  statusFieldsForCompletion.every((field) => {
-    const raw = String(row?.[field] ?? '').trim()
-    return raw === '없음' || raw.includes('작업완료')
-  })
+const isCompletedRow = (row) => Boolean(row?.complete)
 
 const sortRowsByPriority = (rows) => {
   return [...rows].sort((a, b) => {
@@ -212,10 +222,10 @@ export function useProductionPlan(session) {
     planError.value = ''
 
     const baseColumns =
-      'id,no,initial,company,place,area,memo,full_text,work_type,hole,head,groove,weight,name,test_date,drawing_date,delay_time,delay_text,complete,worker_t,worker_t_time,worker_main,worker_main_time,marking_weld_a_status,marking_weld_b_status,marking_laser_1_status,marking_laser_2_status,cutting_status,beveling_status,main_status,nasa_status'
+      'id,no,initial,company,place,area,memo,full_text,work_type,hole,head,groove,weight,name,test_date,drawing_date,delay_time,delay_text,complete,complete_date,worker_t,worker_t_time,worker_main,worker_main_time,marking_weld_a_status,marking_weld_a_started_on,marking_weld_a_completed_on,marking_weld_b_status,marking_weld_b_started_on,marking_weld_b_completed_on,marking_laser_1_status,marking_laser_1_started_on,marking_laser_1_completed_on,marking_laser_2_status,marking_laser_2_started_on,marking_laser_2_completed_on,cutting_status,beveling_status,beveling_started_on,beveling_completed_on,main_status,main_started_on,main_completed_on,nasa_status,nasa_started_on,nasa_completed_on'
     const withVirtualColumns = `${baseColumns},virtual_drawing_distributed`
     const runQuery = (columns) => {
-      let query = supabase.from('product_list').select(columns)
+      let query = supabase.from(PRODUCT_LIST_TABLE).select(columns)
       if (!searchAllDates.value) {
         query = query.eq('test_date', filterDate.value)
       }
@@ -301,6 +311,7 @@ export function useProductionPlan(session) {
 
   const toggleWorkStatus = async ({ rowId, stageKey, workMan, longPressMs = 0 }) => {
     const field = stageToField[stageKey]
+    const dateFields = stageToDateFields[stageKey]
     if (!field) return { ok: false, reason: 'invalid_stage' }
 
     if (!canControlStage(workMan, stageKey)) return { ok: false, reason: 'unauthorized' }
@@ -320,6 +331,19 @@ export function useProductionPlan(session) {
     const worker_main = resolveWorkerMainStatus(nextRow)
     const updatePayload = { [field]: next, worker_t, worker_main }
     const todayText = formatMonthDay(new Date())
+    const todayDate = formatIsoDate(new Date())
+    if (dateFields) {
+      if (next === '작업중') {
+        updatePayload[dateFields.started] = todayDate
+        updatePayload[dateFields.completed] = null
+      } else if (next === '작업완료') {
+        updatePayload[dateFields.started] = row?.[dateFields.started] || todayDate
+        updatePayload[dateFields.completed] = todayDate
+      } else if (next === '없음') {
+        updatePayload[dateFields.started] = null
+        updatePayload[dateFields.completed] = null
+      }
+    }
     if (worker_t === '작업완료' && row.worker_t !== '작업완료') {
       updatePayload.worker_t_time = todayText
     }
@@ -334,7 +358,7 @@ export function useProductionPlan(session) {
     }
 
     const { error } = await supabase
-      .from('product_list')
+      .from(PRODUCT_LIST_TABLE)
       .update(updatePayload)
       .eq('id', rowId)
 
@@ -380,7 +404,7 @@ export function useProductionPlan(session) {
       no: 1000 + index,
     }))
 
-    const { error } = await supabase.from('product_list').upsert(updates, { onConflict: 'id' })
+    const { error } = await supabase.from(PRODUCT_LIST_TABLE).upsert(updates, { onConflict: 'id' })
     if (error) {
       planError.value = `정렬 저장 실패: ${error.message}`
       return { ok: false, reason: 'db_error' }
@@ -500,7 +524,8 @@ export function useProductionPlan(session) {
     delayTime,
     callType,
     requester,
-    virtualDrawingDistributed = false,
+    complete,
+    virtualDrawingDistributed,
   }) => {
     const updatePayload = {}
     let safeDelayText = ''
@@ -518,13 +543,17 @@ export function useProductionPlan(session) {
     if (typeof virtualDrawingDistributed === 'boolean') {
       updatePayload.virtual_drawing_distributed = virtualDrawingDistributed
     }
+    if (typeof complete === 'boolean') {
+      updatePayload.complete = complete
+      updatePayload.complete_date = complete ? formatMonthDay(new Date()) : ''
+    }
 
     if (Object.keys(updatePayload).length === 0) {
       return { ok: true }
     }
 
     const { error } = await supabase
-      .from('product_list')
+      .from(PRODUCT_LIST_TABLE)
       .update(updatePayload)
       .eq('id', rowId)
 
@@ -551,6 +580,8 @@ export function useProductionPlan(session) {
         ...(typeof virtualDrawingDistributed === 'boolean'
           ? { virtual_drawing_distributed: virtualDrawingDistributed }
           : {}),
+        ...(typeof complete === 'boolean' ? { complete } : {}),
+        ...(typeof complete === 'boolean' ? { complete_date: updatePayload.complete_date } : {}),
       }
       targetRow = nextRows[idx]
       planRows.value = nextRows
@@ -608,7 +639,7 @@ export function useProductionPlan(session) {
       .channel('product-list-realtime')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'product_list' },
+        { event: '*', schema: 'public', table: PRODUCT_LIST_TABLE },
         async () => {
           await fetchPlanRows({ silent: true })
         },
