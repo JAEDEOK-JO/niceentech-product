@@ -51,6 +51,9 @@ const goNotifications = () => {
 const goStats = () => {
   router.push('/stats')
 }
+const goManagementGuide = () => {
+  router.push('/management-guide')
+}
 
 const handleToggleWorkStatus = async ({ rowId, stageKey, longPressMs, onResult }) => {
   const result = await toggleWorkStatus({
@@ -159,6 +162,7 @@ const handleRequestAlertCompleted = async ({ requestId, message, onResult }) => 
     @go-my-page="goMyPage"
     @go-notifications="goNotifications"
     @go-stats="goStats"
+    @go-management-guide="goManagementGuide"
     @toggle-work-status="handleToggleWorkStatus"
     @reorder-rows="handleReorderRows"
     @save-row-menu="handleSaveRowMenu"

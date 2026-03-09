@@ -97,9 +97,10 @@ const normalizeProgressState = (value) => {
   return '작업전'
 }
 const resolveWorkerTStatus = (row) => {
+  if (Boolean(row?.complete)) return '작업완료'
   const statuses = workerTStageFields.map((field) => normalizeProgressState(row?.[field]))
   if (statuses.some((status) => status === '작업중')) return '작업중'
-  if (statuses.every((status) => status === '작업완료')) return '작업완료'
+  if (statuses.some((status) => status === '작업완료')) return '작업중'
   return '없음'
 }
 const resolveWorkerMainStatus = (row) => {
@@ -529,6 +530,7 @@ export function useProductionPlan(session) {
   }) => {
     const updatePayload = {}
     let safeDelayText = ''
+    const row = planRows.value.find((item) => item.id === rowId) ?? null
 
     if (delayText !== undefined) {
       safeDelayText = String(delayText ?? '').trim()
@@ -546,6 +548,13 @@ export function useProductionPlan(session) {
     if (typeof complete === 'boolean') {
       updatePayload.complete = complete
       updatePayload.complete_date = complete ? formatMonthDay(new Date()) : ''
+      if (complete) {
+        updatePayload.worker_t = '작업완료'
+        updatePayload.worker_t_time = formatMonthDay(new Date())
+      } else {
+        updatePayload.worker_t = '작업중'
+        updatePayload.worker_t_time = ''
+      }
     }
 
     if (Object.keys(updatePayload).length === 0) {
@@ -582,6 +591,8 @@ export function useProductionPlan(session) {
           : {}),
         ...(typeof complete === 'boolean' ? { complete } : {}),
         ...(typeof complete === 'boolean' ? { complete_date: updatePayload.complete_date } : {}),
+        ...(typeof complete === 'boolean' ? { worker_t: updatePayload.worker_t } : {}),
+        ...(typeof complete === 'boolean' ? { worker_t_time: updatePayload.worker_t_time } : {}),
       }
       targetRow = nextRows[idx]
       planRows.value = nextRows
