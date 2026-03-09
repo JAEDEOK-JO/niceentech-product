@@ -33,7 +33,7 @@ const activeTab = ref('request')
 
 const baseTuesday = () => {
   const now = new Date()
-  const daysUntilTuesday = (2 - now.getDay() + 7) % 7
+  const daysUntilTuesday = ((2 - now.getDay() + 7) % 7) || 7
   const base = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   base.setDate(base.getDate() + daysUntilTuesday)
   return base

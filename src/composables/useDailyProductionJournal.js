@@ -54,7 +54,7 @@ const isSameIsoDay = (value, targetDate) => {
 }
 const nextTuesday = (fromDate) => {
   const d = startOfDay(fromDate)
-  const daysUntilTuesday = (2 - d.getDay() + 7) % 7
+  const daysUntilTuesday = ((2 - d.getDay() + 7) % 7) || 7
   d.setDate(d.getDate() + daysUntilTuesday)
   return d
 }
