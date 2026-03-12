@@ -1,148 +1,9 @@
 <script setup>
 import { computed, ref } from 'vue'
 import Button from '@/components/ui/button/Button.vue'
+import { departments } from '@/features/management-guide/managementGuideData'
 
 const emit = defineEmits(['go-home'])
-
-const departments = [
-  {
-    key: 'sales',
-    name: '영업부',
-    badge: '김두일 이사',
-    summary: '신규 영업, 현장 납기 및 AS, 월 물량 보고를 담당합니다.',
-    pageTasks: [
-      '신규영업 : 아파트 외 물류창고, 지식산업센터, 일반업무용 건물 60% 이상 확보',
-      '매출처 현장 납기 및 AS 관리',
-      '매월 잔여물량 및 신규 예상 물량 보고서 작성',
-      '동종업계 현황 조사 및 보고',
-    ],
-    standardRole: {
-      department: '영업부',
-      position: '이사',
-      owner: '김두일',
-      duties: [
-        '신규 영업 전략 수립 및 실행',
-        '물류창고, 지식산업센터 등 비아파트 영업 60% 이상 확보',
-        '현장 납기 및 AS 총괄',
-        '월별 잔여 및 신규 예상 물량 보고',
-      ],
-    },
-    raci: {
-      responsible: ['수주 및 신규영업', '출하 및 납기', 'AS 및 현장관리'],
-      consulted: ['물량산출 및 설계', '생산계획'],
-      informed: ['자재관리'],
-    },
-    kpi: '신규수주 확대',
-    kpiTarget: '비아파트 수주 60% 이상',
-    monthlyReport: '잔여 및 신규예상 물량',
-    towerItems: ['월 목표 매출', '현재 매출', '신규 수주', '비아파트 비중(%)', '납기 준수율(%)', 'AS 발생 건수'],
-    tone: 'indigo',
-  },
-  {
-    key: 'design',
-    name: '설계팀',
-    badge: '김호연 부장',
-    summary: '도면 입도 후 산출·견적·작도와 납기 일정 조율을 담당합니다.',
-    pageTasks: [
-      '도면 입도 후 1주일 내 물량산출, 견적 및 작도 완료',
-      '현장 여건에 따른 설계 조율',
-      '거래명세서, 자재산출 및 청구 재고현황 관리',
-      '영업부와 납기 일정 조율 및 월별 물량 보고',
-      '생산부와 생산 일정 조율',
-    ],
-    standardRole: {
-      department: '설계팀',
-      position: '부장',
-      owner: '김호연',
-      duties: [
-        '도면 입도 후 1주 내 물량산출 및 견적',
-        '작도 및 설계 검토',
-        '자재산출 및 재고 연계',
-        '영업·생산부 납기 일정 조율',
-      ],
-    },
-    raci: {
-      responsible: ['물량산출 및 설계'],
-      consulted: ['수주 및 신규영업', '자재관리', '생산계획', '출하 및 납기', 'AS 및 현장관리'],
-      informed: [],
-    },
-    kpi: '설계 리드타임',
-    kpiTarget: '도면입도 후 7일 내 산출 완료',
-    monthlyReport: '설계 진행현황',
-    towerItems: ['생산일정 계획', '납기 준수율(%)', '납기 위험', '발주 필요 항목'],
-    tone: 'emerald',
-  },
-  {
-    key: 'operations',
-    name: '공무부',
-    badge: '안상기 부장',
-    summary: '출하, 포장, 자재, 외주 가공품과 차량·시설 관리를 담당합니다.',
-    pageTasks: [
-      '출하업무 및 물량팀 생산 조율',
-      '포장, 누락 및 누수 관련 관리',
-      '당사 및 발주처 자재관리',
-      '월별 자재 재고조사 (외주업체 포함)',
-      '차량관리(지게차 제외)',
-      '자재 및 고철 관리',
-      '통신 및 CCTV 관리',
-      '쓰레기 처리 및 외주 가공품 관리',
-    ],
-    standardRole: {
-      department: '공무부',
-      position: '부장',
-      owner: '안상기',
-      duties: [
-        '출하 및 포장 관리',
-        '자재 및 외주 가공품 관리',
-        '재고 조사 및 발주처 자재관리',
-        '차량·통신·CCTV 및 시설 관리',
-      ],
-    },
-    raci: {
-      responsible: ['자재관리', '출하 및 납기'],
-      consulted: ['물량산출 및 설계', 'AS 및 현장관리'],
-      informed: ['수주 및 신규영업', '생산계획'],
-    },
-    kpi: '자재 및 출하 정확도',
-    kpiTarget: '재고오차 최소화 / 납기 누락 ZERO',
-    monthlyReport: '자재 및 재고현황',
-    towerItems: ['출하 완료', '납기 지연 건수', '주요 자재 재고', '외주 자재 포함 여부', '재고 오차율(%)', '발주 필요 항목'],
-    tone: 'amber',
-  },
-  {
-    key: 'production',
-    name: '생산부',
-    badge: '조재덕 차장',
-    summary: '도면 기준 제품 생산, 생산 인력 관리, 설비 및 장비 점검 업무를 담당합니다.',
-    pageTasks: [
-      '작도 도면 기준 메인관, 가지관, 나사, 그루브 생산',
-      '생산인력 인사관리',
-      '식당, 숙소, 휴게실 등 물건 및 부속건물 관리',
-      '지게차 및 공장 내 장비 재고 파악 및 정기 점검',
-    ],
-    standardRole: {
-      department: '생산부',
-      position: '차장',
-      owner: '조재덕',
-      duties: [
-        '도면 기준 제품 생산 총괄',
-        '생산 인력 관리',
-        '공장 설비 및 장비 점검',
-        '지게차 및 공장 운영 관리',
-      ],
-    },
-    raci: {
-      responsible: ['생산계획'],
-      consulted: ['물량산출 및 설계', '자재관리', '출하 및 납기'],
-      informed: ['수주 및 신규영업', 'AS 및 현장관리'],
-    },
-    kpi: '생산 효율',
-    kpiTarget: '계획대비 생산달성률 95% 이상',
-    monthlyReport: '생산실적 및 설비점검',
-    towerItems: ['생산계획', '생산실적', '생산 달성률(%)', '설비 이상 여부', '인력 부족 여부'],
-    tone: 'rose',
-  },
-]
 
 const activeTab = ref(departments[0].key)
 
@@ -280,11 +141,12 @@ const getTone = (tone) =>
               <p class="text-sm font-extrabold text-slate-900">대표이사 주요 보고 지표</p>
               <ul class="mt-4 grid flex-1 gap-2 text-sm leading-6 text-slate-700 md:grid-cols-2">
                 <li
-                  v-for="item in currentDepartment.towerItems"
-                  :key="item"
+                  v-for="item in currentDepartment.executiveMetrics"
+                  :key="item.label"
                   class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"
                 >
-                  {{ item }}
+                  <p class="text-sm font-bold text-slate-900">{{ item.label }}</p>
+                  <p class="mt-1 text-xs leading-5 text-slate-600">{{ item.description }}</p>
                 </li>
               </ul>
             </article>

@@ -9,7 +9,7 @@ const { session, logout } = useAuth()
 const { profile } = useProfile(session)
 
 const goHome = () => {
-  router.push('/home')
+  router.push('/main')
 }
 
 const handleLogout = async () => {

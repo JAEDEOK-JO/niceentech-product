@@ -12,7 +12,7 @@ export function useProfile(session) {
 
     const { data, error } = await supabase
       .from('profiles')
-      .select('id,name,position,department,work_man')
+      .select('id,name,position,department,role,work_man')
       .eq('id', session.value.user.id)
       .maybeSingle()
 
@@ -23,6 +23,7 @@ export function useProfile(session) {
 
     profile.value = {
       ...data,
+      role: data?.role || '',
       work_man: data?.work_man || '없음',
     }
   }

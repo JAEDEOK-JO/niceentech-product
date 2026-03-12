@@ -1,5 +1,6 @@
 import { onUnmounted, ref, watch } from 'vue'
 import { supabase } from '@/lib/supabase'
+import { isAdminRole, normalizeWorkMan } from '@/utils/adminAccess'
 
 export function useIssueNotifications(session) {
   const notifications = ref([])
@@ -8,6 +9,7 @@ export function useIssueNotifications(session) {
   const requests = ref([])
   const feedbackMap = ref({})
   const myWorkMan = ref('')
+  const myRole = ref('')
   const unreadCount = ref(0)
   const loading = ref(false)
   const error = ref('')
@@ -16,22 +18,17 @@ export function useIssueNotifications(session) {
   let feedbacksChannel = null
 
   const currentUserId = () => session.value?.user?.id ?? null
-  const normalizeWorkMan = (value) => String(value ?? '').replaceAll(' ', '').trim()
-  const isAdminWorkMan = (value) => {
-    const normalized = normalizeWorkMan(value)
-    if (!normalized) return false
-    return normalized.includes('관리자') || normalized.includes('관리')
-  }
-
   const fetchMyWorkMan = async () => {
     const userId = currentUserId()
     if (!userId) {
       myWorkMan.value = ''
+      myRole.value = ''
       return
     }
 
-    const { data } = await supabase.from('profiles').select('work_man').eq('id', userId).maybeSingle()
+    const { data } = await supabase.from('profiles').select('work_man,role').eq('id', userId).maybeSingle()
     myWorkMan.value = String(data?.work_man ?? '').trim()
+    myRole.value = String(data?.role ?? '').trim()
   }
 
   const fetchUnreadCount = async () => {
@@ -191,8 +188,10 @@ export function useIssueNotifications(session) {
     const userId = currentUserId()
     if (!userId || !request) return false
     const profileWorkMan = String(profile?.work_man ?? '').trim()
+    const profileRole = String(profile?.role ?? '').trim()
     const effectiveWorkMan = profileWorkMan || myWorkMan.value
-    if (isAdminWorkMan(effectiveWorkMan)) return true
+    const effectiveRole = profileRole || myRole.value
+    if (isAdminRole(effectiveRole)) return true
     if (request.assigned_user_id === userId) return true
 
     const normalizedMyWorkMan = normalizeWorkMan(effectiveWorkMan)
@@ -207,9 +206,9 @@ export function useIssueNotifications(session) {
   const canDeleteRequest = ({ request, profile }) => {
     const userId = currentUserId()
     if (!userId || !request) return false
-    const profileWorkMan = String(profile?.work_man ?? '').trim()
-    const effectiveWorkMan = profileWorkMan || myWorkMan.value
-    if (isAdminWorkMan(effectiveWorkMan)) return true
+    const profileRole = String(profile?.role ?? '').trim()
+    const effectiveRole = profileRole || myRole.value
+    if (isAdminRole(effectiveRole)) return true
     return request.requester_user_id === userId
   }
 
@@ -224,8 +223,8 @@ export function useIssueNotifications(session) {
 
     const authorName = String(profile?.name ?? '').trim() || '이름없음'
     const authorPosition = String(profile?.position ?? '').trim() || '-'
-    const effectiveWorkMan = String(profile?.work_man ?? '').trim() || myWorkMan.value
-    const isAdminReply = isAdminWorkMan(effectiveWorkMan)
+    const effectiveRole = String(profile?.role ?? '').trim() || myRole.value
+    const isAdminReply = isAdminRole(effectiveRole)
 
     const { data, error: insertError } = await supabase
       .from('process_issue_request_feedbacks')
@@ -347,10 +346,10 @@ export function useIssueNotifications(session) {
     // 관리자 계정은 모든 완료알림을 받을 수 있게 추가 전파
     const { data: adminProfiles } = await supabase
       .from('profiles')
-      .select('id,work_man,activate')
+      .select('id,role,work_man,activate')
       .eq('activate', true)
 
-    const admins = (adminProfiles ?? []).filter((row) => isAdminWorkMan(row?.work_man))
+    const admins = (adminProfiles ?? []).filter((row) => isAdminRole(row?.role))
     const adminTargets = admins
       .filter((a) => a?.id && a.id !== userId)
       .map((a) => ({

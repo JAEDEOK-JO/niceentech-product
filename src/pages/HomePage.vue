@@ -41,10 +41,6 @@ const {
 } = useProductionPlan(session)
 const { scheduleCard } = useHomeScheduleCard({ session, selectedTuesday })
 
-const goMyPage = () => {
-  router.push('/mypage')
-}
-
 const goNotifications = () => {
   router.push('/notifications')
 }
@@ -54,12 +50,16 @@ const goStats = () => {
 const goManagementGuide = () => {
   router.push('/management-guide')
 }
+const goAdminSalesDashboard = () => {
+  router.push('/admin/sales-dashboard')
+}
 
 const handleToggleWorkStatus = async ({ rowId, stageKey, longPressMs, onResult }) => {
   const result = await toggleWorkStatus({
     rowId,
     stageKey,
     workMan: profile.value?.work_man ?? '',
+    role: profile.value?.role ?? '',
     longPressMs,
   })
   onResult?.(result)
@@ -70,6 +70,7 @@ const handleReorderRows = async ({ sourceRowId, targetRowId, onResult }) => {
     sourceRowId,
     targetRowId,
     workMan: profile.value?.work_man ?? '',
+    role: profile.value?.role ?? '',
   })
   onResult?.(result)
 }
@@ -78,6 +79,7 @@ const handleSaveRowMenu = async ({
   rowId,
   delayText,
   delayTime,
+  salesAmount,
   callType,
   complete,
   virtualDrawingDistributed,
@@ -87,6 +89,7 @@ const handleSaveRowMenu = async ({
     rowId,
     delayText,
     delayTime,
+    salesAmount,
     callType,
     complete,
     virtualDrawingDistributed,
@@ -155,14 +158,14 @@ const handleRequestAlertCompleted = async ({ requestId, message, onResult }) => 
     :grouped-rows="groupedRows"
     :totals="totals"
     :schedule-card="scheduleCard"
-    :profile="profile"
     :current-work-man="profile?.work_man || ''"
+    :current-role="profile?.role || ''"
     @move-week="moveWeek"
     @reset-week="resetWeek"
-    @go-my-page="goMyPage"
     @go-notifications="goNotifications"
     @go-stats="goStats"
     @go-management-guide="goManagementGuide"
+    @go-admin-sales-dashboard="goAdminSalesDashboard"
     @toggle-work-status="handleToggleWorkStatus"
     @reorder-rows="handleReorderRows"
     @save-row-menu="handleSaveRowMenu"

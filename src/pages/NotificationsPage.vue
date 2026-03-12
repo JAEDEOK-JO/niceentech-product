@@ -62,7 +62,7 @@ const filteredRequests = computed(() => {
 })
 
 const goHome = () => {
-  router.push('/home')
+  router.push('/main')
 }
 
 const handleRefresh = async () => {

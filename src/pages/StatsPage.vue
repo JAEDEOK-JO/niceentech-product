@@ -4,6 +4,7 @@ import DailyProductionJournalView from '@/features/stats/DailyProductionJournalV
 import { useAuth } from '@/composables/useAuth'
 import { useProfile } from '@/composables/useProfile'
 import { useDailyProductionJournal } from '@/composables/useDailyProductionJournal'
+import { isAdminRole } from '@/utils/adminAccess'
 
 const router = useRouter()
 const { session } = useAuth()
@@ -24,14 +25,8 @@ const {
   resetToday,
 } = useDailyProductionJournal(session)
 
-const normalizeWorkMan = (value) => String(value ?? '').replaceAll(' ', '').trim()
-const isAdminWorkMan = (value) => {
-  const normalized = normalizeWorkMan(value)
-  return normalized.includes(normalizeWorkMan('관리자')) || normalized.includes(normalizeWorkMan('전체'))
-}
-
 const goHome = () => {
-  router.push('/home')
+  router.push('/main')
 }
 const handleUpdateActualOvertimeMin = (value) => {
   actualOvertimeInputMin.value = value
@@ -56,7 +51,7 @@ const handleSaveDailyActual = async () => {
     :process-stats="processStats"
     :actual-overtime-input-min="actualOvertimeInputMin"
     :actual-overtime-note="actualOvertimeNote"
-    :can-edit-actual-overtime="isAdminWorkMan(profile?.work_man)"
+    :can-edit-actual-overtime="isAdminRole(profile?.role)"
     @go-home="goHome"
     @refresh="refresh"
     @move-day="moveDay"

@@ -31,17 +31,29 @@ function createMainWindow() {
 
   if (isDev) {
     win.loadURL('http://localhost:5173')
-    return
+  } else {
+    const remoteUrl = resolveDesktopRemoteUrl()
+    if (remoteUrl && /^https?:\/\//i.test(remoteUrl)) {
+      win.loadURL(remoteUrl)
+    } else {
+      // Fallback for cases where remote URL is not configured.
+      win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'))
+    }
   }
 
-  const remoteUrl = resolveDesktopRemoteUrl()
-  if (remoteUrl && /^https?:\/\//i.test(remoteUrl)) {
-    win.loadURL(remoteUrl)
-    return
-  }
+  win.webContents.on('before-input-event', (event, input) => {
+    const isPrintShortcut =
+      input.type === 'keyDown' &&
+      input.key.toLowerCase() === 'p' &&
+      (input.control || input.meta)
 
-  // Fallback for cases where remote URL is not configured.
-  win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'))
+    if (!isPrintShortcut) return
+
+    event.preventDefault()
+    win.webContents.print({
+      printBackground: true,
+    })
+  })
 }
 
 app.whenReady().then(() => {

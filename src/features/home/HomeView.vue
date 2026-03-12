@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import Button from '@/components/ui/button/Button.vue'
 import { productTableColumns, tableTotalWidth } from '@/features/home/productTableConfig'
+import { isAdminRole, normalizeWorkMan } from '@/utils/adminAccess'
 
 const props = defineProps({
   pageTitle: { type: String, required: true },
@@ -18,17 +19,17 @@ const props = defineProps({
   groupedRows: { type: Array, default: () => [] },
   totals: { type: Object, required: true },
   scheduleCard: { type: Object, required: true },
-  profile: { type: Object, default: null },
   currentWorkMan: { type: String, default: '' },
+  currentRole: { type: String, default: '' },
 })
 
 const emit = defineEmits([
   'move-week',
   'reset-week',
-  'go-my-page',
   'go-notifications',
   'go-stats',
   'go-management-guide',
+  'go-admin-sales-dashboard',
   'toggle-work-status',
   'reorder-rows',
   'save-row-menu',
@@ -79,6 +80,7 @@ const callOptions = ['도면 없음', '증지 없음', '확인요망']
 const activeCallRow = ref(null)
 const delayTextInput = ref('')
 const delayTimeInput = ref(0)
+const salesAmountInput = ref('')
 const isDrawingDialogOpen = ref(false)
 const drawingFiles = ref([])
 const drawingLoading = ref(false)
@@ -125,13 +127,8 @@ const getCellText = (row, key) => {
   return row?.[key] ?? ''
 }
 
-const normalizeWorkMan = (value) => String(value ?? '').replaceAll(' ', '').trim()
 const normalizeWorkType = (value) => String(value ?? '').replaceAll(' ', '').trim()
-const isAdminWorkMan = (value) => {
-  const normalized = normalizeWorkMan(value)
-  return normalized.includes(normalizeWorkMan('관리자')) || normalized.includes(normalizeWorkMan('전체'))
-}
-const canReorderRows = computed(() => isAdminWorkMan(props.currentWorkMan))
+const canReorderRows = computed(() => isAdminRole(props.currentRole))
 const isHoleBasedRow = (row) => {
   const workType = normalizeWorkType(row?.work_type)
   return workType.includes('전실/입상') || workType.includes('전실입상')
@@ -158,6 +155,7 @@ const formatKoreanDateText = (value) => {
 }
 
 const resolveStageKeyFromWorkMan = (currentWorkMan) => {
+  if (isAdminRole(props.currentRole)) return 'all'
   const normalized = normalizeWorkMan(currentWorkMan)
   if (!normalized || normalized === '없음') return null
   for (const [workMan, stageKey] of Object.entries(workManToStageKey)) {
@@ -167,6 +165,7 @@ const resolveStageKeyFromWorkMan = (currentWorkMan) => {
 }
 
 const canControlStageByWorkMan = (currentWorkMan, stageKey) => {
+  if (isAdminRole(props.currentRole)) return true
   const resolved = resolveStageKeyFromWorkMan(currentWorkMan)
   if (!resolved) return false
   if (resolved === 'all') return true
@@ -383,6 +382,11 @@ const openCallDialog = (row) => {
   delayTextInput.value = String(row?.delay_text ?? '')
   const delaySec = Math.max(0, Number(row?.delay_time) || 0)
   delayTimeInput.value = Math.round(delaySec / 60)
+  const rawSalesAmount = row?.sales_amount
+  salesAmountInput.value =
+    rawSalesAmount === null || rawSalesAmount === undefined || rawSalesAmount === ''
+      ? ''
+      : formatSalesAmountInput(rawSalesAmount)
   isCallDialogOpen.value = true
 }
 
@@ -420,6 +424,7 @@ const closeCallDialog = () => {
   activeCallRow.value = null
   delayTextInput.value = ''
   delayTimeInput.value = 0
+  salesAmountInput.value = ''
 }
 
 const closeDrawingDialog = () => {
@@ -436,6 +441,7 @@ const confirmCallDialog = () => {
     rowId: activeCallRow.value?.id,
     delayText: delayTextInput.value,
     delayTime: delayTimeInput.value,
+    salesAmount: salesAmountInput.value,
     callType: selectedCallType.value,
     onResult: (result) => {
       if (!result?.ok) {
@@ -455,6 +461,21 @@ const confirmCallDialog = () => {
       closeCallDialog()
     },
   })
+}
+
+const formatSalesAmountText = (value) => {
+  if (value === null || value === undefined || value === '') return '-'
+  const num = Number(String(value).replaceAll(',', '').trim())
+  if (!Number.isFinite(num)) return String(value)
+  return `${Math.round(num).toLocaleString('ko-KR')}원`
+}
+const formatSalesAmountInput = (value) => {
+  const digits = String(value ?? '').replaceAll(',', '').replace(/\D/g, '')
+  if (!digits) return ''
+  return Number(digits).toLocaleString('ko-KR')
+}
+const handleSalesAmountInput = (event) => {
+  salesAmountInput.value = formatSalesAmountInput(event?.target?.value)
 }
 
 const toggleRowCompleteFromMenu = (nextComplete) => {
@@ -560,7 +581,7 @@ onBeforeUnmount(() => {
             {{ realtimeConnected ? '실시간 연결됨' : '실시간 재연결 중' }}
           </span>
         </div>
-        <div class="grid grid-cols-[1fr_1fr_1fr_auto_auto_auto_auto] items-center gap-1 md:flex md:items-center md:gap-2">
+        <div class="grid grid-cols-[1fr_1fr_1fr_auto_auto_auto_auto_auto] items-center gap-1 md:flex md:items-center md:gap-2">
           <Button class="h-8 px-2 text-[11px] md:h-9 md:px-3 md:text-xs" variant="outline" @click="emit('move-week', -1)">지난주</Button>
           <Button class="h-8 px-2 text-[11px] md:h-9 md:px-3 md:text-xs" variant="outline" :disabled="weekOffset === 0" @click="emit('reset-week')">
             이번주
@@ -568,6 +589,14 @@ onBeforeUnmount(() => {
           <Button class="h-8 px-2 text-[11px] md:h-9 md:px-3 md:text-xs" variant="outline" @click="emit('move-week', 1)">다음주</Button>
           <Button class="h-8 px-2 text-[11px] md:h-9 md:px-3 md:text-xs" variant="outline" @click="emit('go-management-guide')">
             가이드
+          </Button>
+          <Button
+            v-if="canReorderRows"
+            class="h-8 px-2 text-[11px] md:h-9 md:px-3 md:text-xs"
+            variant="outline"
+            @click="emit('go-admin-sales-dashboard')"
+          >
+            관리자
           </Button>
           <button
             type="button"
@@ -597,16 +626,6 @@ onBeforeUnmount(() => {
               <path d="M12 15V9" />
               <path d="M17 15V6" />
             </svg>
-          </button>
-          <button
-            type="button"
-            class="rounded-xl border border-slate-200 bg-white px-2 py-1 text-left hover:bg-slate-50 md:ml-2 md:px-3 md:py-1.5"
-            @click="emit('go-my-page')"
-          >
-            <p class="text-[11px] font-bold text-slate-900 md:text-xs">{{ profile?.name || '사용자' }}</p>
-            <p class="hidden text-[11px] text-slate-600 md:block">
-              {{ [profile?.position, profile?.department].filter(Boolean).join(' · ') || '프로필' }}
-            </p>
           </button>
         </div>
       </div>
@@ -656,17 +675,6 @@ onBeforeUnmount(() => {
               />
               전체
             </label>
-          </div>
-          <div class="w-full grid grid-cols-1 gap-2 md:grid-cols-5">
-            <div
-              v-for="day in scheduleCard.dayStats || []"
-              :key="day.key"
-              class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
-            >
-              <p class="text-[11px] font-bold text-slate-600">{{ day.weekday }} ({{ day.key }})</p>
-              <p class="mt-1 text-sm font-extrabold text-slate-900">완료 {{ day.doneQty }}</p>
-              <p class="text-xs font-semibold text-fuchsia-700">야근 {{ day.overtimeText }}</p>
-            </div>
           </div>
         </div>
 
@@ -1011,6 +1019,7 @@ onBeforeUnmount(() => {
           <p class="mt-1 font-semibold text-slate-800">현장명: {{ activeCallRow?.place || '-' }}</p>
           <p class="mt-1 font-semibold text-slate-800">구역명: {{ activeCallRow?.area || '-' }}</p>
           <p class="mt-1 font-semibold text-slate-800">비고: {{ activeCallRow?.memo || '-' }}</p>
+          <p class="mt-1 font-semibold text-slate-800">현재 매출: {{ formatSalesAmountText(activeCallRow?.sales_amount) }}</p>
           <p class="mt-2 rounded-md bg-amber-100 px-2 py-1 text-sm font-extrabold text-amber-900">
             검수날짜: {{ formatKoreanDateText(activeCallRow?.test_date) }}
           </p>
@@ -1049,6 +1058,18 @@ onBeforeUnmount(() => {
               placeholder="분"
             />
           </div>
+        </div>
+        <div class="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <p class="mb-2 text-sm font-bold text-slate-800">매출 입력</p>
+          <input
+            :value="salesAmountInput"
+            class="w-full rounded-md border border-slate-300 px-2 py-2 text-sm text-right"
+            type="text"
+            inputmode="numeric"
+            placeholder="매출 금액 입력"
+            @input="handleSalesAmountInput"
+          />
+          <p class="mt-1 text-[11px] font-semibold text-slate-500">행별 매출 금액을 직접 입력합니다. 예: `1500000`</p>
         </div>
         <button
           v-if="canReorderRows"

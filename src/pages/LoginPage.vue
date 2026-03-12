@@ -10,7 +10,7 @@ const { session, loading, message, login } = useAuth()
 const handleLogin = async ({ id, password }) => {
   const ok = await login({ id, password })
   if (ok) {
-    router.push('/home')
+    router.push('/main')
   }
 }
 
@@ -18,7 +18,7 @@ watch(
   session,
   (nextSession) => {
     if (nextSession) {
-      router.replace('/home')
+      router.replace('/main')
     }
   },
   { immediate: true },

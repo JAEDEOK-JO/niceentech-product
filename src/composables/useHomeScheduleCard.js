@@ -33,11 +33,6 @@ const formatHourMinute = (seconds) => {
   if (m === 0) return `${h}시간`
   return `${h}시간 ${m}분`
 }
-const formatMonthDay = (date) => {
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${month}.${day}`
-}
 const rowQty = (row) => {
   const group = resolveWorkTypeGroup(row?.work_type)
   if (group === 'hole') return toNumber(row?.hole)
@@ -188,38 +183,6 @@ export function useHomeScheduleCard({ session, selectedTuesday }) {
     const todayOvertimeSecRaw = Math.max(0, requiredTodaySec - REGULAR_WORK_SECONDS)
     const todayOvertimeSec = Math.min(todayOvertimeSecRaw, MAX_OVERTIME_SECONDS_WEEKDAY)
 
-    const dayStats = []
-    for (let i = 0; i < 5; i += 1) {
-      const date = new Date(monday)
-      date.setDate(monday.getDate() + i)
-      const key = formatMonthDay(date)
-      const weekday = ['월', '화', '수', '목', '금'][i]
-      const doneRows = distributedRows.filter(
-        (row) => Boolean(row?.complete) && String(row?.complete_date ?? '').trim() === key,
-      )
-      let doneQty = 0
-      let doneWorkSec = 0
-      for (const row of doneRows) {
-        const qty = rowQty(row)
-        if (qty <= 0) continue
-        doneQty += qty
-        doneWorkSec +=
-          qty *
-          rowProcessSec(row, {
-            weldingHeadTimeSec: weldingHeadTimeSec.value,
-            holeTimeSec: holeTimeSec.value,
-            nasaHeadTimeSec: nasaHeadTimeSec.value,
-          })
-      }
-      const overtimeSec = Math.max(0, doneWorkSec - REGULAR_WORK_SECONDS)
-      dayStats.push({
-        key,
-        weekday,
-        doneQty,
-        overtimeText: formatHourMinute(overtimeSec),
-      })
-    }
-
     return {
       todayTargetQty,
       todayOvertimeSec,
@@ -228,7 +191,6 @@ export function useHomeScheduleCard({ session, selectedTuesday }) {
       distributedHoleSum,
       totalHeadSum,
       totalHoleSum,
-      dayStats,
     }
   })
 

@@ -5,7 +5,7 @@ import ManagementGuideView from '@/features/management-guide/ManagementGuideView
 const router = useRouter()
 
 const goHome = () => {
-  router.push('/home')
+  router.push('/main')
 }
 </script>
 

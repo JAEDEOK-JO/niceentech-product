@@ -1,5 +1,6 @@
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { supabase } from '@/lib/supabase'
+import { isAdminRole, normalizeWorkMan } from '@/utils/adminAccess'
 
 const PRODUCT_LIST_TABLE = 'product_list'
 const workTypeGroups = ['용접/무용접', '전실/입상', '나사', '기타']
@@ -139,11 +140,6 @@ const sortRowsByPriority = (rows) => {
   })
 }
 
-const normalizeWorkMan = (value) => String(value ?? '').replaceAll(' ', '').trim()
-const isAdminWorkMan = (workMan) => {
-  const normalized = normalizeWorkMan(workMan)
-  return normalized.includes(normalizeWorkMan('관리자')) || normalized.includes(normalizeWorkMan('전체'))
-}
 const normalizeCallType = (value) => String(value ?? '').replaceAll(' ', '').trim()
 const resolveIssueRequestType = (callType) => {
   const normalized = normalizeCallType(callType)
@@ -166,7 +162,16 @@ const canControlStage = (workMan, stageKey) => {
 }
 
 export function useProductionPlan(session) {
-  const weekOffset = ref(0)
+  const baseTuesday = () => {
+    const now = new Date()
+    const daysUntilTuesday = ((2 - now.getDay() + 7) % 7) || 7
+    const base = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    base.setDate(base.getDate() + daysUntilTuesday)
+    base.setHours(0, 0, 0, 0)
+    return base
+  }
+
+  const selectedTuesday = ref(baseTuesday())
   const planRows = ref([])
   const assigneeUsers = ref([])
   const planLoading = ref(false)
@@ -176,19 +181,12 @@ export function useProductionPlan(session) {
   const realtimeConnected = ref(false)
   let productListChannel = null
 
-  const baseTuesday = () => {
-    const now = new Date()
-    const daysUntilTuesday = ((2 - now.getDay() + 7) % 7) || 7
-    const base = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-    base.setDate(base.getDate() + daysUntilTuesday)
-    return base
-  }
-
-  const selectedTuesday = computed(() => {
-    const tuesday = new Date(baseTuesday())
-    tuesday.setDate(tuesday.getDate() + weekOffset.value * 7)
-    return tuesday
+  const weekOffset = computed(() => {
+    const diffMs = selectedTuesday.value.getTime() - baseTuesday().getTime()
+    return Math.round(diffMs / (7 * 24 * 60 * 60 * 1000))
   })
+
+  const selectedTuesdayIso = computed(() => formatIsoDate(selectedTuesday.value))
 
   const formatKoreanDate = (date) => {
     const y = String(date.getFullYear()).padStart(4, '0')
@@ -209,11 +207,29 @@ export function useProductionPlan(session) {
   )
 
   const moveWeek = (delta) => {
-    weekOffset.value += delta
+    const next = new Date(selectedTuesday.value)
+    next.setDate(next.getDate() + delta * 7)
+    next.setHours(0, 0, 0, 0)
+    selectedTuesday.value = next
   }
 
   const resetWeek = () => {
-    weekOffset.value = 0
+    selectedTuesday.value = baseTuesday()
+  }
+
+  const setSelectedTuesday = (value) => {
+    const raw = String(value ?? '').trim()
+    const matched = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+    if (!matched) return { ok: false, reason: 'invalid_date' }
+
+    const [, y, m, d] = matched
+    const next = new Date(Number(y), Number(m) - 1, Number(d))
+    next.setHours(0, 0, 0, 0)
+    if (Number.isNaN(next.getTime())) return { ok: false, reason: 'invalid_date' }
+    if (next.getDay() !== 2) return { ok: false, reason: 'invalid_weekday' }
+
+    selectedTuesday.value = next
+    return { ok: true }
   }
 
   const fetchPlanRows = async ({ silent = false } = {}) => {
@@ -223,7 +239,7 @@ export function useProductionPlan(session) {
     planError.value = ''
 
     const baseColumns =
-      'id,no,initial,company,place,area,memo,full_text,work_type,hole,head,groove,weight,name,test_date,drawing_date,delay_time,delay_text,complete,complete_date,worker_t,worker_t_time,worker_main,worker_main_time,marking_weld_a_status,marking_weld_a_started_on,marking_weld_a_completed_on,marking_weld_b_status,marking_weld_b_started_on,marking_weld_b_completed_on,marking_laser_1_status,marking_laser_1_started_on,marking_laser_1_completed_on,marking_laser_2_status,marking_laser_2_started_on,marking_laser_2_completed_on,cutting_status,beveling_status,beveling_started_on,beveling_completed_on,main_status,main_started_on,main_completed_on,nasa_status,nasa_started_on,nasa_completed_on'
+      'id,no,initial,company,place,area,memo,full_text,work_type,hole,head,groove,weight,name,test_date,drawing,drawing_date,delay_time,delay_text,sales_amount,complete,complete_date,worker_t,worker_t_time,worker_main,worker_main_time,worker_nasa,worker_welding,marking_weld_a_status,marking_weld_a_started_on,marking_weld_a_completed_on,marking_weld_b_status,marking_weld_b_started_on,marking_weld_b_completed_on,marking_laser_1_status,marking_laser_1_started_on,marking_laser_1_completed_on,marking_laser_2_status,marking_laser_2_started_on,marking_laser_2_completed_on,cutting_status,beveling_status,beveling_started_on,beveling_completed_on,main_status,main_started_on,main_completed_on,nasa_status,nasa_started_on,nasa_completed_on'
     const withVirtualColumns = `${baseColumns},virtual_drawing_distributed`
     const runQuery = (columns) => {
       let query = supabase.from(PRODUCT_LIST_TABLE).select(columns)
@@ -260,7 +276,7 @@ export function useProductionPlan(session) {
 
     const { data, error } = await supabase
       .from('profiles')
-      .select('id,name,position,work_man,activate')
+      .select('id,name,position,role,work_man,activate')
       .eq('activate', true)
       .order('name', { ascending: true })
 
@@ -274,6 +290,7 @@ export function useProductionPlan(session) {
         id: user.id,
         name: String(user.name ?? '').trim() || '이름없음',
         position: String(user.position ?? '').trim() || '-',
+        role: String(user.role ?? '').trim(),
         workMan: String(user.work_man ?? '').trim() || '없음',
       }))
       .filter((user) => !!user.id)
@@ -310,12 +327,12 @@ export function useProductionPlan(session) {
 
   const totals = computed(() => getRowsTotals(planRows.value))
 
-  const toggleWorkStatus = async ({ rowId, stageKey, workMan, longPressMs = 0 }) => {
+  const toggleWorkStatus = async ({ rowId, stageKey, workMan, role, longPressMs = 0 }) => {
     const field = stageToField[stageKey]
     const dateFields = stageToDateFields[stageKey]
     if (!field) return { ok: false, reason: 'invalid_stage' }
 
-    if (!canControlStage(workMan, stageKey)) return { ok: false, reason: 'unauthorized' }
+    if (!isAdminRole(role) && !canControlStage(workMan, stageKey)) return { ok: false, reason: 'unauthorized' }
 
     const idx = planRows.value.findIndex((r) => r.id === rowId)
     if (idx < 0) return { ok: false, reason: 'not_found' }
@@ -374,10 +391,10 @@ export function useProductionPlan(session) {
     return { ok: true }
   }
 
-  const reorderByNo = async ({ sourceRowId, targetRowId, workMan }) => {
+  const reorderByNo = async ({ sourceRowId, targetRowId, role }) => {
     if (!session.value) return { ok: false, reason: 'no_session' }
     if (sourceRowId === targetRowId) return { ok: false, reason: 'same_row' }
-    if (!isAdminWorkMan(workMan)) return { ok: false, reason: 'unauthorized' }
+    if (!isAdminRole(role)) return { ok: false, reason: 'unauthorized' }
 
     const source = planRows.value.find((r) => r.id === sourceRowId)
     const target = planRows.value.find((r) => r.id === targetRowId)
@@ -491,9 +508,7 @@ export function useProductionPlan(session) {
       },
     ]
 
-    const adminRecipients = assigneeUsers.value.filter((user) =>
-      normalizeWorkMan(user.workMan).includes(normalizeWorkMan('관리자')),
-    )
+    const adminRecipients = assigneeUsers.value.filter((user) => isAdminRole(user.role))
     for (const admin of adminRecipients) {
       if (notifications.some((item) => item.recipient_user_id === admin.id)) continue
       notifications.push({
@@ -523,6 +538,7 @@ export function useProductionPlan(session) {
     rowId,
     delayText,
     delayTime,
+    salesAmount,
     callType,
     requester,
     complete,
@@ -540,6 +556,11 @@ export function useProductionPlan(session) {
     if (delayTime !== undefined) {
       const safeDelayMinutes = Math.max(0, Number(delayTime) || 0)
       updatePayload.delay_time = Math.floor(safeDelayMinutes * 60)
+    }
+
+    if (salesAmount !== undefined) {
+      const rawSalesAmount = String(salesAmount ?? '').replaceAll(',', '').trim()
+      updatePayload.sales_amount = rawSalesAmount === '' ? null : rawSalesAmount
     }
 
     if (typeof virtualDrawingDistributed === 'boolean') {
@@ -586,6 +607,7 @@ export function useProductionPlan(session) {
         ...nextRows[idx],
         ...(delayText !== undefined ? { delay_text: updatePayload.delay_text } : {}),
         ...(delayTime !== undefined ? { delay_time: updatePayload.delay_time } : {}),
+        ...(salesAmount !== undefined ? { sales_amount: updatePayload.sales_amount } : {}),
         ...(typeof virtualDrawingDistributed === 'boolean'
           ? { virtual_drawing_distributed: virtualDrawingDistributed }
           : {}),
@@ -683,6 +705,8 @@ export function useProductionPlan(session) {
 
   return {
     weekOffset,
+    selectedTuesday,
+    selectedTuesdayIso,
     planRows,
     assigneeUsers,
     planLoading,
@@ -695,6 +719,7 @@ export function useProductionPlan(session) {
     selectedTuesday,
     moveWeek,
     resetWeek,
+    setSelectedTuesday,
     groupedRows,
     totals,
     toggleWorkStatus,
