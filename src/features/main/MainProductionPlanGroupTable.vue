@@ -46,24 +46,49 @@ defineProps({
             <p>설계배포 {{ getCellText(row, 'design_distributed') }}</p>
           </div>
         </div>
-        <div class="mt-3 grid grid-cols-2 gap-2">
+        <div class="mt-3 grid grid-cols-4 gap-1.5">
           <div
             v-for="column in tableColumns.filter((column) => ['worker_t', 'worker_nasa', 'worker_main', 'worker_welding'].includes(column.key))"
             :key="`${row.id}-${column.key}`"
-            class="rounded-lg px-2 py-3 text-center text-[11px] font-semibold"
+            class="min-w-0 rounded-lg border border-slate-200 px-1.5 py-2 text-center text-[10px] font-semibold leading-tight sm:px-2 sm:py-3 sm:text-[11px]"
             :class="statusClass(getCellText(row, column.key))"
           >
-            <p>{{ column.label }}</p>
-            <p class="mt-1">{{ getCellText(row, column.key) }}</p>
+            <p class="whitespace-nowrap">{{ column.label }}</p>
+            <p class="mt-1 whitespace-nowrap">{{ getCellText(row, column.key) }}</p>
           </div>
         </div>
-        <div class="mt-3 grid grid-cols-2 gap-2 text-[11px] text-slate-600">
-          <p>헤드 {{ getCellText(row, 'head') || '' }}</p>
-          <p>홀 {{ getCellText(row, 'hole') || '' }}</p>
-          <p>그루브 {{ getCellText(row, 'groove') || '' }}</p>
-          <p>중량 {{ getCellText(row, 'weight') || '' }}</p>
-          <p class="col-span-2">비고 {{ row.memo || '-' }}</p>
-          <p>도면 {{ getCellText(row, 'drawing') }}</p>
+        <div class="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-slate-700">
+          <p class="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 font-semibold whitespace-nowrap">
+            헤드 {{ getCellText(row, 'head') || '' }}
+          </p>
+          <p class="inline-flex items-center rounded-full bg-sky-50 px-2.5 py-1 font-semibold text-sky-700 whitespace-nowrap">
+            홀 {{ getCellText(row, 'hole') || '' }}
+          </p>
+          <p class="inline-flex items-center rounded-full bg-violet-50 px-2.5 py-1 font-semibold text-violet-700 whitespace-nowrap">
+            그루브 {{ getCellText(row, 'groove') || '' }}
+          </p>
+          <p class="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 font-semibold text-emerald-700 whitespace-nowrap">
+            중량 {{ getCellText(row, 'weight') || '' }}
+          </p>
+          <p
+            class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap"
+            :class="row?.is_drawing ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'"
+          >
+            산출 {{ row?.is_drawing ? '완료' : '전' }}
+          </p>
+          <p class="w-full rounded-xl bg-slate-50 px-3 py-2 text-slate-600">비고 {{ row.memo || '-' }}</p>
+          <div class="flex w-full justify-end">
+            <p
+              class="inline-flex items-center rounded-full px-2.5 py-1 font-semibold whitespace-nowrap"
+              :class="
+                getCellText(row, 'drawing') === '있음'
+                  ? 'bg-orange-100 text-orange-700'
+                  : 'bg-slate-100 text-slate-400'
+              "
+            >
+              도면
+            </p>
+          </div>
         </div>
       </article>
     </div>
@@ -130,6 +155,7 @@ defineProps({
             <td class="border border-slate-200 px-2 py-[14px] text-center text-sm">{{ groupData.totals.hole }}</td>
             <td class="border border-slate-200 px-2 py-[14px] text-center text-sm">{{ groupData.totals.groove }}</td>
             <td class="border border-slate-200 px-2 py-[14px] text-center text-sm">{{ groupData.totals.weight.toFixed(1) }}</td>
+            <td class="border border-slate-200 px-2 py-[14px] text-center text-sm"></td>
             <td class="border border-slate-200 px-2 py-[14px] text-center text-sm"></td>
             <td class="border border-slate-200 px-2 py-[14px] text-center text-sm"></td>
           </tr>

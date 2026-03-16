@@ -22,6 +22,7 @@ const defaultRegistrationMonth = `${today.getFullYear()}-${String(today.getMonth
 const form = reactive({
   company: '',
   place: '',
+  totalHeadCount: '',
   directorName: '',
   directorPhone: '',
   siteAddress: '',
@@ -70,6 +71,10 @@ const formatMobilePhoneNumber = (value) => {
 const updateForm = (field, value) => {
   if (field === 'startDate' || field === 'endDate') {
     form[field] = String(value ?? '').replace(/\D/g, '')
+    return
+  }
+  if (field === 'totalHeadCount') {
+    form.totalHeadCount = digitsOnly(value)
     return
   }
   if (field === 'directorPhone') {
@@ -150,6 +155,7 @@ const submit = async () => {
     company,
     place,
     full_name: fullName,
+    total_head_count: form.totalHeadCount ? Number(form.totalHeadCount) : null,
     director_name: String(form.directorName ?? '').trim() || null,
     director_phone: digitsOnly(form.directorPhone) || null,
     site_address: String(form.siteAddress ?? '').trim() || null,

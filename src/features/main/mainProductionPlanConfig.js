@@ -17,8 +17,9 @@ export const tableColumns = [
   { label: '홀', key: 'hole', align: 'center', width: qtyColumnWidth },
   { label: '그루브', key: 'groove', align: 'center', width: qtyColumnWidth },
   { label: '중량', key: 'weight', align: 'center', width: qtyColumnWidth },
+  { label: '산출', key: 'estimate_status', align: 'center', width: 35 },
   { label: '비고', key: 'memo', align: 'center', width: 330 },
-  { label: '도면', key: 'drawing', align: 'center', width: 54 },
+  { label: '도면', key: 'drawing', align: 'center', width: 35 },
 ]
 
 const stageMeta = {
@@ -50,6 +51,9 @@ export const getCellText = (row, key) => {
     if (Boolean(row?.drawing)) return '있음'
     return '없음'
   }
+  if (key === 'estimate_status') {
+    return Boolean(row?.is_drawing) ? '완료' : '전'
+  }
   if ((key === 'head' || key === 'hole' || key === 'groove') && Number(row?.[key] ?? 0) === 0) return ''
   if (key === 'weight') {
     const value = Number(row?.weight ?? 0)
@@ -62,11 +66,12 @@ export const statusClass = (status) => {
   if (status === '작업완료') return 'bg-emerald-100 text-emerald-700'
   if (status === '작업중') return 'bg-amber-100 text-amber-700'
   if (status === '있음') return 'bg-sky-100 text-sky-700'
+  if (status === '완료') return 'bg-emerald-100 text-emerald-700'
   return 'bg-white text-slate-500'
 }
 
 export const isStatusCompactColumn = (key) => ['worker_t', 'worker_nasa', 'worker_main', 'worker_welding'].includes(key)
-export const isCompactTextColumn = (key) => ['drawing'].includes(key)
+export const isCompactTextColumn = (key) => ['drawing', 'estimate_status'].includes(key)
 
 const totalTableWidth = tableColumns.reduce((sum, column) => sum + column.width, 0)
 

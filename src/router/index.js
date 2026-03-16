@@ -9,6 +9,9 @@ import MyPage from '@/pages/MyPage.vue'
 import NotificationsPage from '@/pages/NotificationsPage.vue'
 import StatsPage from '@/pages/StatsPage.vue'
 import ManagementGuidePage from '@/pages/ManagementGuidePage.vue'
+import DesignExecutiveReportExamplePage from '@/pages/DesignExecutiveReportExamplePage.vue'
+import ElectronicApprovalPage from '@/pages/ElectronicApprovalPage.vue'
+import ElectronicApprovalRegisterPage from '@/pages/ElectronicApprovalRegisterPage.vue'
 import AdminSalesDashboardPage from '@/pages/AdminSalesDashboardPage.vue'
 import AdminDesignDashboardPage from '@/pages/AdminDesignDashboardPage.vue'
 import AdminOperationsDashboardPage from '@/pages/AdminOperationsDashboardPage.vue'
@@ -18,7 +21,7 @@ import { isAdminRole, isDesignDepartment } from '@/utils/adminAccess'
 const routes = [
   {
     path: '/',
-    redirect: '/main',
+    redirect: '/home',
   },
   {
     path: '/main',
@@ -75,6 +78,28 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
+    path: '/management-guide/design-executive-report-example',
+    name: 'design-executive-report-example',
+    component: DesignExecutiveReportExamplePage,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/approval',
+    name: 'electronic-approval',
+    component: ElectronicApprovalPage,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/approval/register',
+    name: 'electronic-approval-register',
+    component: ElectronicApprovalRegisterPage,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/reports',
+    redirect: '/approval',
+  },
+  {
     path: '/admin/sales-dashboard',
     name: 'admin-sales-dashboard',
     component: AdminSalesDashboardPage,
@@ -100,7 +125,7 @@ const routes = [
   },
   {
     path: '/:pathMatch(.*)*',
-    redirect: '/main',
+    redirect: '/home',
   },
 ]
 
@@ -118,7 +143,7 @@ router.beforeEach(async (to) => {
   }
 
   if (to.meta.guestOnly && isLoggedIn) {
-    return { name: 'main' }
+    return { name: 'home' }
   }
 
   if (to.meta.requiresAdmin || to.meta.requiresDesignDepartment) {
@@ -126,10 +151,10 @@ router.beforeEach(async (to) => {
     if (!userId) return { name: 'login' }
     const { data: profile } = await supabase.from('profiles').select('role,department').eq('id', userId).maybeSingle()
     if (to.meta.requiresAdmin && !isAdminRole(profile?.role)) {
-      return { name: 'main' }
+      return { name: 'home' }
     }
     if (to.meta.requiresDesignDepartment && !isAdminRole(profile?.role) && !isDesignDepartment(profile?.department)) {
-      return { name: 'main' }
+      return { name: 'home' }
     }
   }
 

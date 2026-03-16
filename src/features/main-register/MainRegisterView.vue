@@ -51,6 +51,16 @@ const emit = defineEmits([
           </div>
 
           <div class="md:col-span-2">
+            <p class="mb-2 text-sm font-bold text-slate-700">납기일</p>
+            <input
+              type="date"
+              class="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+              :value="form.deliveryDueDate"
+              @input="emit('update-form', 'deliveryDueDate', $event.target.value)"
+            />
+          </div>
+
+          <div class="md:col-span-2">
             <p class="mb-2 text-sm font-bold text-slate-700">회사명 검색</p>
             <div class="flex flex-col gap-2 sm:flex-row">
               <Input

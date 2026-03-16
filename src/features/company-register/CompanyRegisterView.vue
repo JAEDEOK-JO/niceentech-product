@@ -201,6 +201,17 @@ const dialogTitle = computed(() => {
           </div>
 
           <div>
+            <p class="mb-2 text-sm font-bold text-slate-700">총헤드수</p>
+            <Input
+              :model-value="form.totalHeadCount"
+              inputmode="numeric"
+              pattern="[0-9]*"
+              placeholder="숫자만 입력"
+              @update:model-value="emit('update-form', 'totalHeadCount', $event)"
+            />
+          </div>
+
+          <div>
             <p class="mb-2 text-sm font-bold text-slate-700">건물종류</p>
             <select
               class="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"

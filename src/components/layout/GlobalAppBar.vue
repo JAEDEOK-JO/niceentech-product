@@ -17,7 +17,10 @@ const profileSummary = computed(() => {
 })
 
 const navItems = computed(() => {
-  const items = [{ key: 'main', label: '생산계획표', to: { name: 'main' } }]
+  const items = [
+    { key: 'main', label: '생산계획표', to: { name: 'main' } },
+    { key: 'electronic-approval', label: '전자결재', to: { name: 'electronic-approval' } },
+  ]
   if (isAdminRole(profile.value?.role) || isDesignDepartment(profile.value?.department)) {
     items.push({ key: 'company-register', label: '회사등록', to: { name: 'company-register' } })
   }
@@ -26,6 +29,8 @@ const navItems = computed(() => {
 
 const activeSection = computed(() => {
   if (route.path.startsWith('/company')) return 'company-register'
+  if (route.path.startsWith('/approval')) return 'electronic-approval'
+  if (route.path.startsWith('/reports')) return 'electronic-approval'
   if (route.path.startsWith('/main')) return 'main'
   return ''
 })

@@ -56,6 +56,7 @@
 | drawing | boolean | N | `false` | 도면 유무 |
 | drawing_date | text | N |  | 도면배포일자 |
 | shipment_date | text | N |  | 출하일자 |
+| delivery_due_date | date | N |  | 현장 납기일 |
 | sales_date | text | N |  | 매출일자 |
 | sales_amount | numeric | N |  | 행별 매출 입력 금액 |
 | not_test | boolean | N | `false` | 검사 제외 여부 |
