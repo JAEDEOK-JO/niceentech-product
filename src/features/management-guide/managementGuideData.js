@@ -59,7 +59,7 @@ export const departments = [
   },
   {
     key: 'design',
-    name: '설계팀',
+    name: '설계부',
     badge: '김호연 부장',
     summary: '도면 입도 후 산출·견적·작도와 납기 일정 조율을 담당합니다.',
     pageTasks: [
@@ -70,7 +70,7 @@ export const departments = [
       '생산부와 생산 일정 조율',
     ],
     standardRole: {
-      department: '설계팀',
+      department: '설계부',
       position: '부장',
       owner: '김호연',
       duties: [
@@ -91,7 +91,7 @@ export const departments = [
     executiveMetrics: [
       {
         label: '도면 입도 건수',
-        description: '설계팀으로 유입되는 전체 업무량과 처리 부담을 보여주는 지표',
+        description: '설계부으로 유입되는 전체 업무량과 처리 부담을 보여주는 지표',
       },
       {
         label: '7일 내 산출 완료율',

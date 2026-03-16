@@ -51,10 +51,10 @@ const documents = [
     summary: '납기 대응을 위해 외주 인력 추가 투입 승인을 요청합니다.',
     date: '2026-03-12',
     author: '김설계',
-    department: '설계팀',
+    department: '설계부',
     visibility: 'approval',
     recipients: ['대표', '생산부장'],
-    departments: ['설계팀'],
+    departments: ['설계부'],
   },
   {
     id: 4,
@@ -111,10 +111,10 @@ const documents = [
     summary: '설계 변경본 기준으로 생산 일정 재조정 내용을 공유합니다.',
     date: '2026-03-08',
     author: '김설계',
-    department: '설계팀',
+    department: '설계부',
     visibility: 'department',
     recipients: [],
-    departments: ['설계팀'],
+    departments: ['설계부'],
   },
 ]
 

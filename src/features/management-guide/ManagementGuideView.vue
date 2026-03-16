@@ -3,7 +3,7 @@ import { computed, ref } from 'vue'
 import Button from '@/components/ui/button/Button.vue'
 import { departments } from '@/features/management-guide/managementGuideData'
 
-const emit = defineEmits(['go-home', 'go-design-example'])
+const emit = defineEmits(['go-home', 'go-design-example', 'go-sales-example', 'go-operations-example', 'go-production-example'])
 
 const activeTab = ref(departments[0].key)
 
@@ -140,6 +140,30 @@ const getTone = (tone) =>
             <article class="flex h-full flex-col rounded-3xl bg-white p-5 shadow-sm">
               <div class="flex items-center justify-between gap-3">
                 <p class="text-sm font-extrabold text-slate-900">대표이사 주요 보고 지표</p>
+                <Button
+                  v-if="currentDepartment.key === 'sales'"
+                  class="h-8 px-3 text-xs"
+                  variant="outline"
+                  @click="emit('go-sales-example')"
+                >
+                  예시페이지
+                </Button>
+                <Button
+                  v-if="currentDepartment.key === 'operations'"
+                  class="h-8 px-3 text-xs"
+                  variant="outline"
+                  @click="emit('go-operations-example')"
+                >
+                  예시페이지
+                </Button>
+                <Button
+                  v-if="currentDepartment.key === 'production'"
+                  class="h-8 px-3 text-xs"
+                  variant="outline"
+                  @click="emit('go-production-example')"
+                >
+                  예시페이지
+                </Button>
                 <Button
                   v-if="currentDepartment.key === 'design'"
                   class="h-8 px-3 text-xs"

@@ -10,6 +10,9 @@ import NotificationsPage from '@/pages/NotificationsPage.vue'
 import StatsPage from '@/pages/StatsPage.vue'
 import ManagementGuidePage from '@/pages/ManagementGuidePage.vue'
 import DesignExecutiveReportExamplePage from '@/pages/DesignExecutiveReportExamplePage.vue'
+import SalesExecutiveReportExamplePage from '@/pages/SalesExecutiveReportExamplePage.vue'
+import OperationsExecutiveReportExamplePage from '@/pages/OperationsExecutiveReportExamplePage.vue'
+import ProductionExecutiveReportExamplePage from '@/pages/ProductionExecutiveReportExamplePage.vue'
 import ElectronicApprovalPage from '@/pages/ElectronicApprovalPage.vue'
 import ElectronicApprovalRegisterPage from '@/pages/ElectronicApprovalRegisterPage.vue'
 import AdminSalesDashboardPage from '@/pages/AdminSalesDashboardPage.vue'
@@ -81,6 +84,24 @@ const routes = [
     path: '/management-guide/design-executive-report-example',
     name: 'design-executive-report-example',
     component: DesignExecutiveReportExamplePage,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/management-guide/sales-executive-report-example',
+    name: 'sales-executive-report-example',
+    component: SalesExecutiveReportExamplePage,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/management-guide/operations-executive-report-example',
+    name: 'operations-executive-report-example',
+    component: OperationsExecutiveReportExamplePage,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/management-guide/production-executive-report-example',
+    name: 'production-executive-report-example',
+    component: ProductionExecutiveReportExamplePage,
     meta: { requiresAuth: true },
   },
   {

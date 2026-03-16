@@ -217,7 +217,7 @@ const previewTitle = computed(() => String(form.title ?? '').trim() || `${curren
               <p class="mb-2 text-sm font-bold text-slate-700">참조</p>
               <Input
                 :model-value="form.reference"
-                placeholder="예: 설계팀, 관리팀"
+                placeholder="예: 설계부, 관리팀"
                 @update:model-value="form.reference = $event"
               />
             </div>
@@ -266,7 +266,7 @@ const previewTitle = computed(() => String(form.title ?? '').trim() || `${curren
               <p class="mb-2 text-sm font-bold text-slate-700">지정 공개 대상</p>
               <Input
                 :model-value="form.allowedReaders"
-                placeholder="예: 홍길동, 생산부장, 설계팀"
+                placeholder="예: 홍길동, 생산부장, 설계부"
                 @update:model-value="form.allowedReaders = $event"
               />
             </div>
