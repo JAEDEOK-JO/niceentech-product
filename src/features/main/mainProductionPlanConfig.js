@@ -126,7 +126,8 @@ export const statusClass = (status) => {
   if (status === '출하완료') return 'bg-red-500 text-white'
   if (status === '작업완료') return 'bg-indigo-100 text-indigo-800'
   if (status === '작업중') return 'bg-teal-100 text-teal-800'
-  if (status === '작업전' || status === '없음') return 'bg-black/10 text-slate-700'
+  if (status === '작업전') return 'bg-black/10 text-slate-700'
+  if (status === '없음') return 'bg-white text-slate-700'
   if (status === '있음') return 'bg-slate-200 text-slate-700'
   if (/^\d{2}\.\d{2}$/.test(String(status ?? '').trim())) return 'bg-indigo-100 text-indigo-800'
   if (/^\d{2}\.\d{1,2}\.\d{1,2}$/.test(String(status ?? '').trim())) return 'bg-red-500 text-white'
@@ -143,7 +144,7 @@ export const getColumnStyle = (column) => ({
 })
 
 export const getBodyCellClass = (row, column) => {
-  const classes = ['border', 'border-slate-200', 'h-[55px]', 'align-middle', 'text-sm', 'text-slate-700']
+  const classes = ['border', 'border-slate-200', 'h-[50px]', 'align-middle', 'text-[13px]', 'font-medium', 'text-slate-700']
   classes.push(column.align === 'center' ? 'text-center' : 'text-left')
 
   if (Boolean(row?.hold)) {

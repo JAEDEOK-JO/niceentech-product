@@ -46,6 +46,7 @@ const selectedIssueDetailRow = ref(null)
 const issueCompanySearchText = ref('')
 const issueCompanySearchLoading = ref(false)
 const issueCompanySearchResults = ref([])
+const totalBalanceSum = ref(0)
 
 const toNumber = (value) => {
   const number = Number(value)
@@ -184,13 +185,26 @@ const fetchInventoryEntriesByMonth = async (monthValue) => {
   return data ?? []
 }
 
+const fetchAllBalanceEntries = async () => {
+  const { data, error } = await supabase
+    .from(METRIC_ENTRIES_TABLE)
+    .select('numeric_value')
+    .eq('department_code', DEPARTMENT_CODE)
+    .eq('period_type', PERIOD_TYPE)
+    .eq('metric_key', METRIC_KEYS.balance)
+
+  if (error) throw new Error(error.message ?? '공무부 잔고 데이터를 불러오지 못했습니다.')
+  return data ?? []
+}
+
 const fetchReportData = async () => {
   loading.value = true
   errorMessage.value = ''
 
   try {
-    const rows = await fetchMetricEntries()
+    const [rows, balanceRows] = await Promise.all([fetchMetricEntries(), fetchAllBalanceEntries()])
     const entryMap = Object.fromEntries(rows.map((row) => [String(row.metric_key ?? '').trim(), row]))
+    totalBalanceSum.value = balanceRows.reduce((sum, row) => sum + toNumber(row?.numeric_value), 0)
 
     inventoryForm.value = {
       received: String(toNumber(entryMap[METRIC_KEYS.received]?.numeric_value)),
@@ -213,6 +227,7 @@ const fetchReportData = async () => {
     errorMessage.value = error?.message ?? '공무부 데이터를 불러오지 못했습니다.'
     inventoryForm.value = createDefaultInventoryForm()
     issueEntries.value = []
+    totalBalanceSum.value = 0
   } finally {
     loading.value = false
   }
@@ -250,8 +265,8 @@ const summaryCards = computed(() => [
   },
   {
     label: '총 잔고',
-    value: formatTon(inventoryValues.value.balance),
-    note: '현재 기준 전체 잔고',
+    value: formatTon(totalBalanceSum.value),
+    note: '전체 입력 월 잔고 합산',
     tone: 'bg-indigo-50 border-indigo-200 text-indigo-800',
   },
 ])

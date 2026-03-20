@@ -34,7 +34,7 @@ const emit = defineEmits(['open-row-menu', 'cell-click'])
     <div class="space-y-3 md:hidden">
       <div
         v-if="groupData.rows.length === 0"
-        class="rounded-xl border border-slate-200 bg-white px-3 py-4 text-center text-sm text-slate-500 shadow-sm"
+        class="rounded-xl border border-slate-200 bg-white px-3 py-4 text-center text-[13px] font-medium text-slate-500 shadow-sm"
       >
         데이터 없음
       </div>
@@ -46,7 +46,7 @@ const emit = defineEmits(['open-row-menu', 'cell-click'])
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0">
             <p class="text-xs font-bold text-slate-500">{{ row.initial || '-' }}</p>
-            <p class="mt-1 text-sm font-bold text-slate-900">{{ row.company || '-' }}</p>
+            <p class="mt-1 text-[13px] font-extrabold text-slate-900">{{ row.company || '-' }}</p>
             <p class="text-xs text-slate-600">{{ row.place || '-' }}</p>
             <p class="text-xs text-slate-600">{{ row.area || '-' }}</p>
           </div>
@@ -60,7 +60,7 @@ const emit = defineEmits(['open-row-menu', 'cell-click'])
           <div
             v-for="column in tableColumns.filter((column) => ['worker_t', 'worker_nasa', 'worker_main', 'worker_welding'].includes(column.key))"
             :key="`${row.id}-${column.key}`"
-            class="min-w-0 rounded-lg border border-slate-200 px-1.5 py-2 text-center text-[10px] font-semibold leading-tight sm:px-2 sm:py-3 sm:text-[11px]"
+            class="min-w-0 rounded-lg border border-slate-200 px-1.5 py-2 text-center text-[10px] font-bold leading-tight sm:px-2 sm:py-3 sm:text-[11px]"
             :class="statusClass(getStatusTone(row, column.key, getCellText(row, column.key)))"
           >
             <p class="whitespace-nowrap">{{ column.label }}</p>
@@ -85,7 +85,7 @@ const emit = defineEmits(['open-row-menu', 'cell-click'])
           </button>
           <div class="flex w-full justify-end">
             <p
-              class="inline-flex items-center rounded-full px-2.5 py-1 font-semibold whitespace-nowrap"
+              class="inline-flex items-center rounded-full px-2.5 py-1 font-bold whitespace-nowrap"
               :class="
                 getCellText(row, 'drawing') === '있음'
                   ? 'bg-orange-100 text-orange-700'
@@ -127,7 +127,7 @@ const emit = defineEmits(['open-row-menu', 'cell-click'])
             <th
               v-for="column in tableColumns"
               :key="`${groupData.group}-${column.key}`"
-              class="h-[55px] border border-slate-200 px-2 py-px align-middle text-sm font-bold text-slate-700"
+              class="h-[50px] border border-slate-200 px-2 py-px align-middle text-[13px] font-extrabold text-slate-700"
               :class="column.align === 'center' ? 'text-center' : 'text-left'"
               :style="[getColumnStyle(column), tableBorderStyle]"
             >
@@ -137,7 +137,7 @@ const emit = defineEmits(['open-row-menu', 'cell-click'])
         </thead>
         <tbody>
           <tr v-if="groupData.rows.length === 0">
-            <td :colspan="tableColumns.length" class="border border-slate-200 px-3 py-4 text-center text-sm text-slate-500" :style="tableBorderStyle">
+            <td :colspan="tableColumns.length" class="border border-slate-200 px-3 py-4 text-center text-[13px] font-medium text-slate-500" :style="tableBorderStyle">
               데이터 없음
             </td>
           </tr>
@@ -151,7 +151,7 @@ const emit = defineEmits(['open-row-menu', 'cell-click'])
               <button
                 v-if="column.key === 'memo'"
                 type="button"
-                class="flex h-full w-full items-center justify-center bg-transparent p-0 text-center text-sm font-normal text-slate-700"
+                class="flex h-full w-full items-center justify-center bg-transparent p-0 text-center text-[13px] font-medium text-slate-700"
                 @click="emit('open-row-menu', row)"
               >
                 <span class="cell-fixed-text">{{ getCellText(row, column.key) || '' }}</span>
@@ -164,21 +164,21 @@ const emit = defineEmits(['open-row-menu', 'cell-click'])
               >
                 <span class="cell-fixed-text block w-full">{{ getCellText(row, column.key) }}</span>
               </button>
-              <span v-else-if="isStatusCompactColumn(column.key) || isCompactTextColumn(column.key)" class="cell-fixed-text block text-center text-xs font-semibold">
+              <span v-else-if="isStatusCompactColumn(column.key) || isCompactTextColumn(column.key)" class="cell-fixed-text block text-center text-[11px] font-bold">
                 {{ getCellText(row, column.key) }}
               </span>
               <span v-else class="cell-fixed-text block">{{ getCellText(row, column.key) }}</span>
             </td>
           </tr>
           <tr class="font-extrabold text-slate-900" :class="groupData.group === '기타' ? 'bg-red-50' : 'bg-blue-50'">
-            <td colspan="10" class="h-[55px] border border-slate-200 px-2 py-px align-middle text-center text-sm" :style="tableBorderStyle"></td>
-            <td class="h-[55px] border border-slate-200 px-2 py-px align-middle text-center text-sm" :style="tableBorderStyle">합계</td>
-            <td class="h-[55px] border border-slate-200 px-2 py-px align-middle text-center text-sm" :style="tableBorderStyle">{{ groupData.totals.head }}</td>
-            <td class="h-[55px] border border-slate-200 px-2 py-px align-middle text-center text-sm" :style="tableBorderStyle">{{ groupData.totals.hole }}</td>
-            <td class="h-[55px] border border-slate-200 px-2 py-px align-middle text-center text-sm" :style="tableBorderStyle">{{ groupData.totals.groove }}</td>
-            <td class="h-[55px] border border-slate-200 px-2 py-px align-middle text-center text-sm" :style="tableBorderStyle">{{ groupData.totals.weight.toFixed(1) }}</td>
-            <td class="h-[55px] border border-slate-200 px-2 py-px align-middle text-center text-sm" :style="tableBorderStyle"></td>
-            <td class="h-[55px] border border-slate-200 px-2 py-px align-middle text-center text-sm" :style="tableBorderStyle"></td>
+            <td colspan="10" class="h-[50px] border border-slate-200 px-2 py-px align-middle text-center text-[13px]" :style="tableBorderStyle"></td>
+            <td class="h-[50px] border border-slate-200 px-2 py-px align-middle text-center text-[13px]" :style="tableBorderStyle">합계</td>
+            <td class="h-[50px] border border-slate-200 px-2 py-px align-middle text-center text-[13px]" :style="tableBorderStyle">{{ groupData.totals.head }}</td>
+            <td class="h-[50px] border border-slate-200 px-2 py-px align-middle text-center text-[13px]" :style="tableBorderStyle">{{ groupData.totals.hole }}</td>
+            <td class="h-[50px] border border-slate-200 px-2 py-px align-middle text-center text-[13px]" :style="tableBorderStyle">{{ groupData.totals.groove }}</td>
+            <td class="h-[50px] border border-slate-200 px-2 py-px align-middle text-center text-[13px]" :style="tableBorderStyle">{{ groupData.totals.weight.toFixed(1) }}</td>
+            <td class="h-[50px] border border-slate-200 px-2 py-px align-middle text-center text-[13px]" :style="tableBorderStyle"></td>
+            <td class="h-[50px] border border-slate-200 px-2 py-px align-middle text-center text-[13px]" :style="tableBorderStyle"></td>
           </tr>
         </tbody>
       </table>
