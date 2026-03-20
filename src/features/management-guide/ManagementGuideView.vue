@@ -2,8 +2,12 @@
 import { computed, ref } from 'vue'
 import Button from '@/components/ui/button/Button.vue'
 import { departments } from '@/features/management-guide/managementGuideData'
+import SalesExecutiveReportExampleView from '@/features/management-guide/SalesExecutiveReportExampleView.vue'
+import DesignExecutiveReportExampleView from '@/features/management-guide/DesignExecutiveReportExampleView.vue'
+import OperationsExecutiveReportExampleView from '@/features/management-guide/OperationsExecutiveReportExampleView.vue'
+import ProductionExecutiveReportExampleView from '@/features/management-guide/ProductionExecutiveReportExampleView.vue'
 
-const emit = defineEmits(['go-home', 'go-design-example', 'go-sales-example', 'go-operations-example', 'go-production-example'])
+const emit = defineEmits(['go-home'])
 
 const activeTab = ref(departments[0].key)
 
@@ -40,24 +44,20 @@ const getTone = (tone) =>
     panel: 'border-slate-200 bg-slate-50',
     badge: 'bg-slate-100 text-slate-700',
   }
+
+const currentView = computed(() => {
+  if (activeTab.value === 'sales') return SalesExecutiveReportExampleView
+  if (activeTab.value === 'design') return DesignExecutiveReportExampleView
+  if (activeTab.value === 'operations') return OperationsExecutiveReportExampleView
+  return ProductionExecutiveReportExampleView
+})
 </script>
 
 <template>
-  <section class="min-h-screen bg-slate-100">
-    <header class="sticky top-0 z-10 border-b border-slate-200 bg-white/95 backdrop-blur">
-      <div class="mx-auto flex max-w-7xl items-start justify-between gap-4 px-4 py-4 md:px-6">
-        <div class="min-w-0">
-          <p class="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Department Guide</p>
-          <h1 class="mt-1 text-xl font-extrabold text-slate-900 md:text-2xl">부서별 업무 · 권한 · 보고 항목</h1>
-          <p class="mt-2 text-sm text-slate-600">대표 보고용으로 부서별 담당 업무, 권한, KPI, 보고 항목을 바로 볼 수 있게 구성했습니다.</p>
-        </div>
-        <Button class="shrink-0" variant="outline" @click="emit('go-home')">홈으로</Button>
-      </div>
-    </header>
-
+  <section class="management-report-root min-h-screen bg-slate-100">
     <main class="mx-auto max-w-7xl space-y-5 px-4 py-5 md:px-6 md:py-8">
-      <section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-7">
-        <div class="flex flex-wrap gap-2">
+      <section class="management-report-shell rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-7">
+        <div class="management-report-tabs flex flex-wrap gap-2">
           <button
             v-for="department in departments"
             :key="department.key"
@@ -74,119 +74,38 @@ const getTone = (tone) =>
           </button>
         </div>
 
-        <div class="mt-5 rounded-3xl border p-5 md:p-6" :class="getTone(currentDepartment.tone).panel">
-          <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-            <div>
-              <h2 class="mt-1 text-2xl font-extrabold text-slate-900">{{ currentDepartment.name }}</h2>
-              <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-700">{{ currentDepartment.summary }}</p>
-            </div>
-            <span class="inline-flex rounded-full px-3 py-1 text-xs font-bold whitespace-nowrap" :class="getTone(currentDepartment.tone).badge">
-              {{ currentDepartment.badge }}
-            </span>
-          </div>
-
-          <div class="mt-5 grid gap-4 xl:grid-cols-2">
-            <article class="flex h-full flex-col rounded-3xl bg-white p-5 shadow-sm">
-              <div class="flex items-center justify-between gap-3">
-                <p class="text-sm font-extrabold text-slate-900">부서 업무</p>
-                <span class="text-xs font-semibold text-slate-500">{{ currentDepartment.standardRole.position }}</span>
-              </div>
-              <p class="mt-2 text-sm font-semibold text-slate-700">{{ currentDepartment.standardRole.owner }}</p>
-              <ul class="mt-4 space-y-2 text-sm leading-6 text-slate-700">
-                <li v-for="task in currentDepartment.pageTasks" :key="task">• {{ task }}</li>
-              </ul>
-            </article>
-
-            <article class="flex h-full flex-col rounded-3xl bg-white p-5 shadow-sm">
-              <p class="text-sm font-extrabold text-slate-900">업무분장 및 권한</p>
-              <div class="mt-4 grid flex-1 gap-3 md:grid-cols-3">
-                <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <p class="text-xs font-bold text-slate-500">실무 담당 (R)</p>
-                  <ul class="mt-2 space-y-2 text-sm leading-6 text-slate-700">
-                    <li v-for="item in currentDepartment.raci.responsible" :key="item">• {{ item }}</li>
-                  </ul>
-                </div>
-                <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <p class="text-xs font-bold text-slate-500">협의 대상 (C)</p>
-                  <ul class="mt-2 space-y-2 text-sm leading-6 text-slate-700">
-                    <li v-for="item in currentDepartment.raci.consulted" :key="item">• {{ item }}</li>
-                  </ul>
-                </div>
-                <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <p class="text-xs font-bold text-slate-500">공유 대상 (I)</p>
-                  <ul class="mt-2 space-y-2 text-sm leading-6 text-slate-700">
-                    <li v-if="currentDepartment.raci.informed.length === 0" class="text-slate-500">• 없음</li>
-                    <li v-for="item in currentDepartment.raci.informed" :key="item">• {{ item }}</li>
-                  </ul>
-                </div>
-              </div>
-            </article>
-
-            <article class="flex h-full flex-col rounded-3xl bg-white p-5 shadow-sm">
-              <p class="text-sm font-extrabold text-slate-900">KPI 및 월간 보고</p>
-              <div class="mt-4 grid flex-1 gap-3 md:grid-cols-2">
-                <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <p class="text-xs font-bold text-slate-500">KPI</p>
-                  <p class="mt-2 text-sm font-bold text-slate-900">{{ currentDepartment.kpi }}</p>
-                  <p class="mt-2 text-sm leading-6 text-slate-700">{{ currentDepartment.kpiTarget }}</p>
-                </div>
-                <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <p class="text-xs font-bold text-slate-500">월간 보고</p>
-                  <p class="mt-2 text-sm leading-6 text-slate-700">{{ currentDepartment.monthlyReport }}</p>
-                </div>
-              </div>
-            </article>
-
-            <article class="flex h-full flex-col rounded-3xl bg-white p-5 shadow-sm">
-              <div class="flex items-center justify-between gap-3">
-                <p class="text-sm font-extrabold text-slate-900">대표이사 주요 보고 지표</p>
-                <Button
-                  v-if="currentDepartment.key === 'sales'"
-                  class="h-8 px-3 text-xs"
-                  variant="outline"
-                  @click="emit('go-sales-example')"
-                >
-                  예시페이지
-                </Button>
-                <Button
-                  v-if="currentDepartment.key === 'operations'"
-                  class="h-8 px-3 text-xs"
-                  variant="outline"
-                  @click="emit('go-operations-example')"
-                >
-                  예시페이지
-                </Button>
-                <Button
-                  v-if="currentDepartment.key === 'production'"
-                  class="h-8 px-3 text-xs"
-                  variant="outline"
-                  @click="emit('go-production-example')"
-                >
-                  예시페이지
-                </Button>
-                <Button
-                  v-if="currentDepartment.key === 'design'"
-                  class="h-8 px-3 text-xs"
-                  variant="outline"
-                  @click="emit('go-design-example')"
-                >
-                  예시페이지
-                </Button>
-              </div>
-              <ul class="mt-4 grid flex-1 gap-2 text-sm leading-6 text-slate-700 md:grid-cols-2">
-                <li
-                  v-for="item in currentDepartment.executiveMetrics"
-                  :key="item.label"
-                  class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"
-                >
-                  <p class="text-sm font-bold text-slate-900">{{ item.label }}</p>
-                  <p class="mt-1 text-xs leading-5 text-slate-600">{{ item.description }}</p>
-                </li>
-              </ul>
-            </article>
-          </div>
+        <div class="management-report-panel mt-5 overflow-hidden rounded-3xl border" :class="getTone(currentDepartment.tone).panel">
+          <component :is="currentView" :show-back-button="false" />
         </div>
       </section>
     </main>
   </section>
 </template>
+
+<style scoped>
+@media print {
+  .management-report-root {
+    background: #fff !important;
+  }
+
+  .management-report-shell {
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+  }
+
+  .management-report-panel {
+    margin-top: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    overflow: visible !important;
+  }
+
+  .management-report-tabs {
+    display: none !important;
+  }
+}
+</style>

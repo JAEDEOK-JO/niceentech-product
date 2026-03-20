@@ -5,7 +5,7 @@ import ProductionExecutiveReportExampleView from '@/features/management-guide/Pr
 const router = useRouter()
 
 const goBack = () => {
-  router.push({ name: 'management-guide' })
+  router.push({ name: 'reports' })
 }
 </script>
 

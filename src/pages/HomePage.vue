@@ -47,12 +47,6 @@ const goNotifications = () => {
 const goStats = () => {
   router.push('/stats')
 }
-const goManagementGuide = () => {
-  router.push('/management-guide')
-}
-const goAdminSalesDashboard = () => {
-  router.push('/admin/sales-dashboard')
-}
 
 const handleToggleWorkStatus = async ({ rowId, stageKey, longPressMs, onResult }) => {
   const result = await toggleWorkStatus({
@@ -164,8 +158,6 @@ const handleRequestAlertCompleted = async ({ requestId, message, onResult }) => 
     @reset-week="resetWeek"
     @go-notifications="goNotifications"
     @go-stats="goStats"
-    @go-management-guide="goManagementGuide"
-    @go-admin-sales-dashboard="goAdminSalesDashboard"
     @toggle-work-status="handleToggleWorkStatus"
     @reorder-rows="handleReorderRows"
     @save-row-menu="handleSaveRowMenu"

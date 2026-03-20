@@ -5,6 +5,7 @@ import CompanyRegisterView from '@/features/company-register/CompanyRegisterView
 import { useAuth } from '@/composables/useAuth'
 import { useProfile } from '@/composables/useProfile'
 import { supabase } from '@/lib/supabase'
+import { normalizeCompanyType } from '@/constants/companyTypes'
 import { isAdminRole, isDesignDepartment } from '@/utils/adminAccess'
 
 const route = useRoute()
@@ -32,6 +33,8 @@ const form = reactive({
   startDate: '',
   endDate: '',
   managerId: '',
+  orderConfirmed: true,
+  siteCompleted: false,
 })
 
 const fullNamePreview = computed(() =>
@@ -46,6 +49,21 @@ const goBack = () => {
   if (route.query.returnTo === 'main-register') {
     router.push({
       name: 'main-register',
+      query: {
+        date: typeof route.query.date === 'string' ? route.query.date : undefined,
+        q: typeof route.query.q === 'string' ? route.query.q : undefined,
+        companySearch: typeof route.query.companySearch === 'string' ? route.query.companySearch : undefined,
+      },
+    })
+    return
+  }
+
+  if (route.query.returnTo === 'main-edit') {
+    router.push({
+      name: 'main-edit',
+      params: {
+        id: typeof route.query.id === 'string' ? route.query.id : undefined,
+      },
       query: {
         date: typeof route.query.date === 'string' ? route.query.date : undefined,
         q: typeof route.query.q === 'string' ? route.query.q : undefined,
@@ -83,6 +101,14 @@ const updateForm = (field, value) => {
   }
   if (field === 'businessRegistrationNumber') {
     form.businessRegistrationNumber = digitsOnly(value).slice(0, 11)
+    return
+  }
+  if (field === 'companyType') {
+    form.companyType = normalizeCompanyType(value)
+    return
+  }
+  if (field === 'orderConfirmed' || field === 'siteCompleted') {
+    form[field] = Boolean(value)
     return
   }
   form[field] = String(value ?? '')
@@ -159,12 +185,14 @@ const submit = async () => {
     director_name: String(form.directorName ?? '').trim() || null,
     director_phone: digitsOnly(form.directorPhone) || null,
     site_address: String(form.siteAddress ?? '').trim() || null,
-    company_type: String(form.companyType ?? '').trim() || null,
+    company_type: normalizeCompanyType(form.companyType) || null,
     business_registration_number: digitsOnly(form.businessRegistrationNumber) || null,
     registration_month: form.registrationMonth ? `${form.registrationMonth}-01` : null,
     start_date: form.startDate ? Number(form.startDate) : 0,
     end_date: form.endDate ? Number(form.endDate) : 0,
     manager_id: form.managerId || null,
+    order_confirmed: Boolean(form.orderConfirmed),
+    site_completed: Boolean(form.siteCompleted),
   })
 
   saving.value = false
@@ -177,6 +205,21 @@ const submit = async () => {
   if (route.query.returnTo === 'main-register') {
     router.push({
       name: 'main-register',
+      query: {
+        date: typeof route.query.date === 'string' ? route.query.date : undefined,
+        q: typeof route.query.q === 'string' ? route.query.q : undefined,
+        companySearch: fullName,
+      },
+    })
+    return
+  }
+
+  if (route.query.returnTo === 'main-edit') {
+    router.push({
+      name: 'main-edit',
+      params: {
+        id: typeof route.query.id === 'string' ? route.query.id : undefined,
+      },
       query: {
         date: typeof route.query.date === 'string' ? route.query.date : undefined,
         q: typeof route.query.q === 'string' ? route.query.q : undefined,

@@ -16,6 +16,10 @@ const companySearchText = ref('')
 const companySearchLoading = ref(false)
 const companyDialogOpen = ref(false)
 const companySearchResults = ref([])
+const managers = ref([])
+const loadingManagers = ref(false)
+const managerDialogOpen = ref(false)
+const selectedManagerId = ref('')
 const saving = ref(false)
 const saveError = ref('')
 const canRegisterCompany = computed(() => isAdminRole(profile.value?.role) || isDesignDepartment(profile.value?.department))
@@ -181,25 +185,62 @@ const searchCompanies = async () => {
 const selectCompany = (item) => {
   form.companyInfo = item.id
   form.uid = item.managerId || ''
-  form.name = item.managerName || '담당자 미지정'
+  form.name = item.managerName && item.managerName !== '담당자 미지정' ? item.managerName : ''
   form.company = item.company
   form.place = item.place
   companyDialogOpen.value = false
 }
 
-const submit = async () => {
-  saveError.value = ''
-  if (!form.companyInfo || !form.company || !form.place) {
-    saveError.value = '회사 검색 후 회사명/현장명을 선택해주세요.'
-    return
-  }
-  if (!String(form.area ?? '').trim()) {
-    saveError.value = '구역명을 입력해주세요.'
+const fetchManagers = async () => {
+  if (managers.value.length > 0) return
+
+  loadingManagers.value = true
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id,name,department')
+    .ilike('department', '%설계%')
+    .order('name', { ascending: true })
+
+  loadingManagers.value = false
+
+  if (error) {
+    saveError.value = `담당자 목록 조회 실패: ${error.message}`
     return
   }
 
-  saving.value = true
+  managers.value = (data ?? []).map((item) => ({
+    id: String(item.id ?? '').trim(),
+    name: String(item.name ?? '').trim() || '이름없음',
+    department: String(item.department ?? '').trim(),
+  }))
+}
 
+const syncCompanyManager = async ({ companyInfo, managerId, managerName }) => {
+  const { error: companyError } = await supabase
+    .from('company_list')
+    .update({ manager_id: managerId || null })
+    .eq('id', companyInfo)
+
+  if (companyError) {
+    return { ok: false, message: `회사 담당자 저장 실패: ${companyError.message}` }
+  }
+
+  const { error: productError } = await supabase
+    .from('product_list')
+    .update({
+      uid: managerId || null,
+      name: managerName || '',
+    })
+    .eq('company_info', companyInfo)
+
+  if (productError) {
+    return { ok: false, message: `생산계획 담당자 반영 실패: ${productError.message}` }
+  }
+
+  return { ok: true }
+}
+
+const performSubmit = async () => {
   const fullText = [
     form.name,
     form.company,
@@ -242,6 +283,61 @@ const submit = async () => {
   goBack()
 }
 
+const submit = async () => {
+  saveError.value = ''
+  if (!form.companyInfo || !form.company || !form.place) {
+    saveError.value = '회사 검색 후 회사명/현장명을 선택해주세요.'
+    return
+  }
+  if (!String(form.area ?? '').trim()) {
+    saveError.value = '구역명을 입력해주세요.'
+    return
+  }
+
+  if (!String(form.uid ?? '').trim()) {
+    selectedManagerId.value = ''
+    await fetchManagers()
+    if (managers.value.length === 0) {
+      saveError.value = '선택 가능한 설계부 담당자가 없습니다.'
+      return
+    }
+    managerDialogOpen.value = true
+    return
+  }
+
+  saving.value = true
+  await performSubmit()
+}
+
+const confirmManagerSelection = async () => {
+  const manager = managers.value.find((item) => item.id === selectedManagerId.value)
+  if (!manager) {
+    saveError.value = '담당자를 선택해주세요.'
+    return
+  }
+
+  saveError.value = ''
+  saving.value = true
+
+  const syncResult = await syncCompanyManager({
+    companyInfo: form.companyInfo,
+    managerId: manager.id,
+    managerName: manager.name,
+  })
+
+  if (!syncResult.ok) {
+    saving.value = false
+    saveError.value = syncResult.message
+    return
+  }
+
+  form.uid = manager.id
+  form.name = manager.name
+  managerDialogOpen.value = false
+
+  await performSubmit()
+}
+
 onMounted(async () => {
   const initialCompanySearch = typeof route.query.companySearch === 'string' ? route.query.companySearch.trim() : ''
   if (!initialCompanySearch) return
@@ -267,6 +363,10 @@ onMounted(async () => {
     :company-dialog-open="companyDialogOpen"
     :company-search-results="companySearchResults"
     :can-register-company="canRegisterCompany"
+    :manager-dialog-open="managerDialogOpen"
+    :manager-options="managers"
+    :loading-managers="loadingManagers"
+    :selected-manager-id="selectedManagerId"
     :form="form"
     :saving="saving"
     :save-error="saveError"
@@ -276,9 +376,12 @@ onMounted(async () => {
     @company-search-enter="searchCompanies"
     @select-company="selectCompany"
     @close-company-dialog="companyDialogOpen = false"
+    @close-manager-dialog="managerDialogOpen = false"
     @update-form="updateForm"
     @numeric-keydown="handleNumericKeydown"
     @weight-keydown="handleWeightKeydown"
+    @select-manager="selectedManagerId = $event"
+    @confirm-manager="confirmManagerSelection"
     @submit="submit"
   />
 </template>

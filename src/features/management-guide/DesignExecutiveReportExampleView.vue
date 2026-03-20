@@ -1,16 +1,20 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import { supabase } from '@/lib/supabase'
 import Button from '@/components/ui/button/Button.vue'
 
 const PRODUCT_LIST_TABLE = 'product_list'
 
 const emit = defineEmits(['go-back'])
+const props = defineProps({
+  showBackButton: { type: Boolean, default: true },
+})
 const currentPage = ref(1)
 const loading = ref(false)
 const errorMessage = ref('')
 const rows = ref([])
 const monthRows = ref([])
+const isPrinting = ref(false)
 
 const startOfDay = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate())
 const addDays = (date, days) => {
@@ -54,6 +58,11 @@ const getTuesdayOfCurrentWeek = (baseDate) => {
   const mondayOffset = day === 0 ? -6 : 1 - day
   const monday = addDays(safe, mondayOffset)
   return addDays(monday, 1)
+}
+const getUpcomingTuesday = (baseDate) => {
+  const safe = startOfDay(baseDate)
+  const currentWeekTuesday = getTuesdayOfCurrentWeek(safe)
+  return safe.getTime() > currentWeekTuesday.getTime() ? addDays(currentWeekTuesday, 7) : currentWeekTuesday
 }
 const getPreviousThursdayNoon = (testDate) => {
   const next = startOfDay(addDays(testDate, -5))
@@ -112,11 +121,29 @@ const isOnTimeShipment = (row) => {
   if (!shipmentDate || !dueDate) return null
   return startOfDay(shipmentDate).getTime() <= startOfDay(dueDate).getTime()
 }
+const getShipmentStatusMeta = (row) => {
+  const isOnTime = isOnTimeShipment(row)
+  if (isOnTime === true) {
+    return {
+      label: '정상',
+      className: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+    }
+  }
+  if (isOnTime === false) {
+    return {
+      label: '지연',
+      className: 'bg-rose-50 text-rose-700 border border-rose-200',
+    }
+  }
+  return {
+    label: '비교불가',
+    className: 'bg-slate-50 text-slate-600 border border-slate-200',
+  }
+}
 const getWeekTone = (index) =>
   index === 0 ? 'bg-slate-900 text-white' : 'bg-white text-slate-900 border border-slate-200'
 
-const thisWeekTuesday = computed(() => getTuesdayOfCurrentWeek(new Date()))
-const nextWeekTuesday = computed(() => addDays(thisWeekTuesday.value, 7))
+const thisWeekTuesday = computed(() => getUpcomingTuesday(new Date()))
 const monthRange = computed(() => {
   const base = thisWeekTuesday.value
   return {
@@ -125,10 +152,7 @@ const monthRange = computed(() => {
   }
 })
 const monthLabel = computed(() => `${thisWeekTuesday.value.getMonth() + 1}월`)
-const targetWeeks = computed(() => [
-  { key: 'this', index: 0, date: thisWeekTuesday.value },
-  { key: 'next', index: 1, date: nextWeekTuesday.value },
-])
+const targetWeeks = computed(() => [{ key: 'this', index: 0, date: thisWeekTuesday.value }])
 const weekRowsMap = computed(() =>
   Object.fromEntries(targetWeeks.value.map((week) => [week.key, rows.value.filter((row) => row.test_date === formatKoreanDate(week.date))])),
 )
@@ -136,25 +160,34 @@ const monthlyDeliveryStats = computed(() => {
   const shippedRows = monthRows.value.filter((row) => Boolean(row?.shipment) || Boolean(getShipmentAt(row)))
   const measurableRows = shippedRows.filter((row) => isOnTimeShipment(row) !== null)
   const onTimeCount = measurableRows.filter((row) => isOnTimeShipment(row) === true).length
-  const shouldUseMock = shippedRows.length > 0 && measurableRows.length === 0
-  const mockOnTimeCount = shouldUseMock ? Math.round(shippedRows.length * 0.92) : 0
-  const displayedOnTimeCount = shouldUseMock ? mockOnTimeCount : onTimeCount
-  const displayedMeasuredCount = shouldUseMock ? shippedRows.length : measurableRows.length
+  const displayedOnTimeCount = onTimeCount
+  const displayedMeasuredCount = measurableRows.length
   return {
     label: `${monthLabel.value} 누적 납기준수율`,
-    value: formatPercent(displayedOnTimeCount, displayedMeasuredCount),
+    value: displayedMeasuredCount ? formatPercent(displayedOnTimeCount, displayedMeasuredCount) : '-',
     note: shippedRows.length
-      ? shouldUseMock
-        ? `${monthLabel.value} 출하 ${shippedRows.length}건 · 납기일 미입력으로 예시값 적용`
-        : `${monthLabel.value} 출하 ${shippedRows.length}건 · 납기 비교 가능 ${measurableRows.length}건`
+      ? `${monthLabel.value} 출하 ${shippedRows.length}건 · 납기 비교 가능 ${measurableRows.length}건`
       : `${monthLabel.value} 출하 데이터 없음`,
     shippedCount: shippedRows.length,
     measurableCount: displayedMeasuredCount,
     onTimeCount: displayedOnTimeCount,
     delayedCount: Math.max(0, displayedMeasuredCount - displayedOnTimeCount),
-    isMock: shouldUseMock,
   }
 })
+const recentShipmentRows = computed(() =>
+  monthRows.value
+    .filter((row) => Boolean(row?.shipment) || Boolean(getShipmentAt(row)))
+    .map((row) => ({
+      ...row,
+      _shipmentAt: getShipmentAt(row),
+    }))
+    .sort((a, b) => {
+      const aTime = a._shipmentAt?.getTime() ?? 0
+      const bTime = b._shipmentAt?.getTime() ?? 0
+      return bTime - aTime || Number(b.id ?? 0) - Number(a.id ?? 0)
+    })
+    .slice(0, 6),
+)
 
 const buildWeekSummary = (week) => {
   const targetRows = weekRowsMap.value[week.key] ?? []
@@ -270,7 +303,7 @@ const fetchRows = async () => {
   const baseColumns =
     'id,no,initial,company,place,area,test_date,drawing_date,drawing_distributed_at,shipment_date,delivery_due_date,is_drawing,complete,delay_text'
   const withVirtualColumns = `${baseColumns},virtual_drawing_distributed`
-  const monthColumns = 'id,shipment,shipment_date,delivery_due_date,updated_at'
+  const monthColumns = 'id,no,initial,company,place,area,shipment,shipment_date,delivery_due_date,updated_at'
 
   let query = supabase.from(PRODUCT_LIST_TABLE).select(withVirtualColumns).in('test_date', testDates).order('test_date').order('no')
   let { data, error } = await query
@@ -303,6 +336,14 @@ const fetchRows = async () => {
   loading.value = false
 }
 
+const printReport = async () => {
+  if (typeof window === 'undefined') return
+  isPrinting.value = true
+  await nextTick()
+  window.print()
+  isPrinting.value = false
+}
+
 onMounted(async () => {
   await supabase.auth.getSession()
   await fetchRows()
@@ -310,15 +351,18 @@ onMounted(async () => {
 </script>
 
 <template>
-  <section class="min-h-screen bg-slate-100">
-    <header class="sticky top-0 z-10 border-b border-slate-200 bg-white/95 backdrop-blur">
+  <section class="report-root min-h-screen bg-slate-100">
+    <header class="report-header sticky top-0 z-10 border-b border-slate-200 bg-white/95 backdrop-blur">
       <div class="mx-auto flex max-w-7xl items-start justify-between gap-4 px-4 py-4 md:px-6">
         <div class="min-w-0">
-          <p class="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Design Meeting Report</p>
+          <p class="text-[11px] font-bold tracking-[0.12em] text-slate-500">설계부 보고자료</p>
           <h1 class="mt-1 text-lg font-extrabold text-slate-900 md:text-xl">설계부 화요일 회의 보고</h1>
-          <p class="mt-2 text-[13px] text-slate-600">1페이지는 2주 요약, 2페이지는 납기/산출/배포 상세 목록입니다.</p>
+          <p class="mt-2 text-[13px] text-slate-600">1페이지는 금주 요약, 2페이지는 납기/산출/배포 상세 목록입니다.</p>
         </div>
-        <Button class="shrink-0" variant="outline" @click="emit('go-back')">가이드로 돌아가기</Button>
+        <div class="flex shrink-0 gap-2">
+          <Button class="shrink-0" variant="outline" @click="printReport">인쇄</Button>
+          <Button v-if="props.showBackButton" class="shrink-0" variant="outline" @click="emit('go-back')">가이드로 돌아가기</Button>
+        </div>
       </div>
 
       <div class="mx-auto flex max-w-7xl gap-1 px-4 pb-3 md:px-6">
@@ -342,11 +386,6 @@ onMounted(async () => {
     </header>
 
     <main class="mx-auto max-w-7xl px-4 py-5 md:px-6 md:py-8">
-      <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-[13px] text-slate-600">
-        <strong class="text-slate-900">{{ formatKoreanDate(thisWeekTuesday) }}</strong> 회의 기준 ·
-        {{ formatKoreanDate(thisWeekTuesday) }} / {{ formatKoreanDate(nextWeekTuesday) }}
-      </div>
-
       <div v-if="loading" class="mt-6 rounded-3xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
         product_list 데이터를 불러오는 중입니다.
       </div>
@@ -356,7 +395,8 @@ onMounted(async () => {
       </div>
 
       <template v-else>
-        <div v-show="currentPage === 1" class="mt-6 space-y-6">
+        <div v-show="currentPage === 1 || isPrinting" class="report-page report-page-break mt-6 space-y-6">
+          <div class="report-print-title">설계부 화요일 회의 보고 · 1페이지 요약본</div>
           <section class="rounded-3xl border border-sky-200 bg-gradient-to-r from-sky-100 via-blue-50 to-indigo-100 p-6 text-slate-900 shadow-sm">
             <div class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
               <div>
@@ -366,12 +406,11 @@ onMounted(async () => {
                   <span class="rounded-full border border-sky-200 bg-white px-3 py-1 text-slate-700">출하 {{ monthlyDeliveryStats.shippedCount }}건</span>
                   <span class="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-emerald-700">준수 {{ monthlyDeliveryStats.onTimeCount }}건</span>
                   <span class="rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-rose-700">지연 {{ monthlyDeliveryStats.delayedCount }}건</span>
-                  <span v-if="monthlyDeliveryStats.isMock" class="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-amber-700">예시 데이터</span>
                 </div>
               </div>
               <div class="rounded-3xl border border-white/80 bg-white px-5 py-4 text-center shadow-sm">
                 <p class="text-[12px] font-bold text-sky-700">현재 준수율</p>
-                <p class="mt-1 text-4xl font-extrabold">{{ monthlyDeliveryStats.value || '' }}</p>
+                <p class="mt-1 text-4xl font-extrabold">{{ monthlyDeliveryStats.value }}</p>
               </div>
             </div>
           </section>
@@ -391,7 +430,7 @@ onMounted(async () => {
               </div>
             </div>
 
-            <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div class="design-print-grid-4 mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <div v-for="card in week.cards" :key="`${week.key}-${card.label}`" class="rounded-2xl border p-4" :class="card.tone">
                 <p class="text-[13px] font-bold">{{ card.label }}</p>
                 <p class="mt-2 text-xl font-extrabold">{{ card.value }}</p>
@@ -399,9 +438,53 @@ onMounted(async () => {
               </div>
             </div>
           </section>
+
+          <section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <p class="text-[13px] font-extrabold text-slate-900">최근 출하된 목록</p>
+                <p class="mt-1 text-[12px] text-slate-500">당월 출하 이력 기준 최근 6건</p>
+              </div>
+              <span class="rounded-full bg-sky-100 px-3 py-1 text-[11px] font-bold text-sky-700">{{ recentShipmentRows.length }}건</span>
+            </div>
+            <div class="mt-4 overflow-x-auto">
+              <table class="min-w-full border-separate border-spacing-0 text-sm">
+                <thead>
+                  <tr class="bg-slate-50 text-slate-600">
+                    <th class="border border-slate-200 px-3 py-2 text-center">출하일시</th>
+                    <th class="border border-slate-200 px-3 py-2 text-center">도번</th>
+                    <th class="border border-slate-200 px-3 py-2 text-center">회사</th>
+                    <th class="border border-slate-200 px-3 py-2 text-center">현장</th>
+                    <th class="border border-slate-200 px-3 py-2 text-center">구역</th>
+                    <th class="border border-slate-200 px-3 py-2 text-center">납기일</th>
+                    <th class="border border-slate-200 px-3 py-2 text-center">지연여부</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-if="!recentShipmentRows.length">
+                    <td colspan="7" class="border border-slate-200 px-3 py-6 text-center text-slate-400">최근 출하 데이터가 없습니다.</td>
+                  </tr>
+                  <tr v-for="row in recentShipmentRows" :key="`shipment-${row.id}`" class="bg-white">
+                    <td class="border border-slate-200 px-3 py-2 text-center">{{ formatShortDate(row.shipment_date || row.updated_at) }}</td>
+                    <td class="border border-slate-200 px-3 py-2 text-center font-semibold text-slate-900">{{ row.initial || row.no || '' }}</td>
+                    <td class="border border-slate-200 px-3 py-2 text-center">{{ row.company || '' }}</td>
+                    <td class="border border-slate-200 px-3 py-2 text-center">{{ row.place || '' }}</td>
+                    <td class="border border-slate-200 px-3 py-2 text-center">{{ row.area || '' }}</td>
+                    <td class="border border-slate-200 px-3 py-2 text-center">{{ formatShortDate(row.delivery_due_date) }}</td>
+                    <td class="border border-slate-200 px-3 py-2 text-center">
+                      <span class="inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold" :class="getShipmentStatusMeta(row).className">
+                        {{ getShipmentStatusMeta(row).label }}
+                      </span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
         </div>
 
-        <div v-show="currentPage === 2" class="mt-6 space-y-6">
+        <div v-show="currentPage === 2 || isPrinting" class="report-page mt-6 space-y-6">
+          <div class="report-print-title">설계부 화요일 회의 보고 · 2페이지 디테일</div>
           <section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
             <div class="flex items-center justify-between gap-3">
               <div>
@@ -517,3 +600,62 @@ onMounted(async () => {
     </main>
   </section>
 </template>
+
+<style scoped>
+.report-print-title {
+  display: none;
+}
+
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 8mm;
+  }
+
+  :global(html),
+  :global(body) {
+    background: #fff !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .report-root {
+    min-height: auto !important;
+    background: #fff !important;
+  }
+
+  .report-header {
+    display: none !important;
+  }
+
+  .report-page {
+    display: block !important;
+    background: #fff !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .report-page-break {
+    break-after: page;
+    page-break-after: always;
+  }
+
+  .report-print-title {
+    display: none !important;
+  }
+
+  .report-root :deep(main) {
+    max-width: none !important;
+    background: #fff !important;
+  }
+
+  .report-page > * {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .design-print-grid-4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  }
+}
+</style>

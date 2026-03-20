@@ -239,7 +239,7 @@ export function useProductionPlan(session) {
     planError.value = ''
 
     const baseColumns =
-      'id,no,initial,company,place,area,memo,full_text,work_type,hole,head,groove,weight,name,test_date,drawing,is_drawing,drawing_date,delivery_due_date,delay_time,delay_text,sales_amount,complete,complete_date,worker_t,worker_t_time,worker_main,worker_main_time,worker_nasa,worker_welding,marking_weld_a_status,marking_weld_a_started_on,marking_weld_a_completed_on,marking_weld_b_status,marking_weld_b_started_on,marking_weld_b_completed_on,marking_laser_1_status,marking_laser_1_started_on,marking_laser_1_completed_on,marking_laser_2_status,marking_laser_2_started_on,marking_laser_2_completed_on,cutting_status,beveling_status,beveling_started_on,beveling_completed_on,main_status,main_started_on,main_completed_on,nasa_status,nasa_started_on,nasa_completed_on'
+      'id,no,company_info,uid,initial,company,place,area,memo,full_text,work_type,hole,head,groove,weight,name,test_date,drawing,is_drawing,drawing_date,delivery_due_date,delay_time,delay_text,sales_amount,complete,complete_date,shipment,not_test,hold,outsourcing,paper,calculation,ahn,stamp,worker_t,worker_t_time,worker_t_time_final,worker_main,worker_main_time,worker_main_time_final,worker_nasa,worker_nasa_time,worker_nasa_time_final,worker_welding,worker_welding_time,worker_welding_time_final,marking_weld_a_status,marking_weld_a_started_on,marking_weld_a_completed_on,marking_weld_b_status,marking_weld_b_started_on,marking_weld_b_completed_on,marking_laser_1_status,marking_laser_1_started_on,marking_laser_1_completed_on,marking_laser_2_status,marking_laser_2_started_on,marking_laser_2_completed_on,cutting_status,beveling_status,beveling_started_on,beveling_completed_on,main_status,main_started_on,main_completed_on,nasa_status,nasa_started_on,nasa_completed_on'
     const withVirtualColumns = `${baseColumns},virtual_drawing_distributed`
     const runQuery = (columns) => {
       let query = supabase.from(PRODUCT_LIST_TABLE).select(columns)
@@ -661,6 +661,46 @@ export function useProductionPlan(session) {
     return { ok: true, files }
   }
 
+  const updatePlanRowFields = async ({ rowId, updates }) => {
+    if (!rowId || !updates || Object.keys(updates).length === 0) return { ok: false, reason: 'invalid_payload' }
+
+    const { error } = await supabase
+      .from(PRODUCT_LIST_TABLE)
+      .update(updates)
+      .eq('id', rowId)
+
+    if (error) {
+      planError.value = `행 수정 실패: ${error.message}`
+      return { ok: false, reason: 'db_error' }
+    }
+
+    const idx = planRows.value.findIndex((row) => row.id === rowId)
+    if (idx >= 0) {
+      const nextRows = [...planRows.value]
+      nextRows[idx] = { ...nextRows[idx], ...updates }
+      planRows.value = nextRows
+    }
+
+    return { ok: true }
+  }
+
+  const deletePlanRow = async ({ rowId }) => {
+    if (!rowId) return { ok: false, reason: 'invalid_row' }
+
+    const { error } = await supabase
+      .from(PRODUCT_LIST_TABLE)
+      .delete()
+      .eq('id', rowId)
+
+    if (error) {
+      planError.value = `행 삭제 실패: ${error.message}`
+      return { ok: false, reason: 'db_error' }
+    }
+
+    planRows.value = planRows.value.filter((row) => row.id !== rowId)
+    return { ok: true }
+  }
+
   const setupRealtime = () => {
     productListChannel?.unsubscribe()
     productListChannel = null
@@ -726,6 +766,8 @@ export function useProductionPlan(session) {
     reorderByNo,
     updateRowMenu,
     fetchDrawingFiles,
+    updatePlanRowFields,
+    deletePlanRow,
     isDistributedRow,
     LONG_PRESS_REQUIRED_MS,
   }

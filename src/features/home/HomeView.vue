@@ -28,8 +28,6 @@ const emit = defineEmits([
   'reset-week',
   'go-notifications',
   'go-stats',
-  'go-management-guide',
-  'go-admin-sales-dashboard',
   'toggle-work-status',
   'reorder-rows',
   'save-row-menu',
@@ -581,23 +579,12 @@ onBeforeUnmount(() => {
             {{ realtimeConnected ? '실시간 연결됨' : '실시간 재연결 중' }}
           </span>
         </div>
-        <div class="grid grid-cols-[1fr_1fr_1fr_auto_auto_auto_auto_auto] items-center gap-1 md:flex md:items-center md:gap-2">
+        <div class="grid grid-cols-[1fr_1fr_1fr_auto_auto] items-center gap-1 md:flex md:items-center md:gap-2">
           <Button class="h-8 px-2 text-[11px] md:h-9 md:px-3 md:text-xs" variant="outline" @click="emit('move-week', -1)">지난주</Button>
           <Button class="h-8 px-2 text-[11px] md:h-9 md:px-3 md:text-xs" variant="outline" :disabled="weekOffset === 0" @click="emit('reset-week')">
             이번주
           </Button>
           <Button class="h-8 px-2 text-[11px] md:h-9 md:px-3 md:text-xs" variant="outline" @click="emit('move-week', 1)">다음주</Button>
-          <Button class="h-8 px-2 text-[11px] md:h-9 md:px-3 md:text-xs" variant="outline" @click="emit('go-management-guide')">
-            가이드
-          </Button>
-          <Button
-            v-if="canReorderRows"
-            class="h-8 px-2 text-[11px] md:h-9 md:px-3 md:text-xs"
-            variant="outline"
-            @click="emit('go-admin-sales-dashboard')"
-          >
-            관리자
-          </Button>
           <button
             type="button"
             class="relative flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 md:h-9 md:w-9"

@@ -3,7 +3,9 @@ import { supabase } from '@/lib/supabase'
 import LoginPage from '@/pages/LoginPage.vue'
 import MainPage from '@/pages/MainPage.vue'
 import MainRegisterPage from '@/pages/MainRegisterPage.vue'
+import MainEditPage from '@/pages/MainEditPage.vue'
 import CompanyRegisterPage from '@/pages/CompanyRegisterPage.vue'
+import CompanyListPage from '@/pages/CompanyListPage.vue'
 import HomePage from '@/pages/HomePage.vue'
 import MyPage from '@/pages/MyPage.vue'
 import NotificationsPage from '@/pages/NotificationsPage.vue'
@@ -11,10 +13,9 @@ import StatsPage from '@/pages/StatsPage.vue'
 import ManagementGuidePage from '@/pages/ManagementGuidePage.vue'
 import DesignExecutiveReportExamplePage from '@/pages/DesignExecutiveReportExamplePage.vue'
 import SalesExecutiveReportExamplePage from '@/pages/SalesExecutiveReportExamplePage.vue'
+import SalesExecutiveAsItemDetailPage from '@/pages/SalesExecutiveAsItemDetailPage.vue'
 import OperationsExecutiveReportExamplePage from '@/pages/OperationsExecutiveReportExamplePage.vue'
 import ProductionExecutiveReportExamplePage from '@/pages/ProductionExecutiveReportExamplePage.vue'
-import ElectronicApprovalPage from '@/pages/ElectronicApprovalPage.vue'
-import ElectronicApprovalRegisterPage from '@/pages/ElectronicApprovalRegisterPage.vue'
 import AdminSalesDashboardPage from '@/pages/AdminSalesDashboardPage.vue'
 import AdminDesignDashboardPage from '@/pages/AdminDesignDashboardPage.vue'
 import AdminOperationsDashboardPage from '@/pages/AdminOperationsDashboardPage.vue'
@@ -39,9 +40,21 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
+    path: '/main/edit/:id',
+    name: 'main-edit',
+    component: MainEditPage,
+    meta: { requiresAuth: true },
+  },
+  {
     path: '/company/register',
     name: 'company-register',
     component: CompanyRegisterPage,
+    meta: { requiresAuth: true, requiresDesignDepartment: true },
+  },
+  {
+    path: '/company/list',
+    name: 'company-list',
+    component: CompanyListPage,
     meta: { requiresAuth: true, requiresDesignDepartment: true },
   },
   {
@@ -75,50 +88,67 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
-    path: '/management-guide',
-    name: 'management-guide',
+    path: '/reports',
+    name: 'reports',
     component: ManagementGuidePage,
     meta: { requiresAuth: true },
   },
   {
-    path: '/management-guide/design-executive-report-example',
-    name: 'design-executive-report-example',
+    path: '/reports/design',
+    name: 'design-report',
     component: DesignExecutiveReportExamplePage,
     meta: { requiresAuth: true },
   },
   {
-    path: '/management-guide/sales-executive-report-example',
-    name: 'sales-executive-report-example',
+    path: '/reports/sales',
+    name: 'sales-report',
     component: SalesExecutiveReportExamplePage,
     meta: { requiresAuth: true },
   },
   {
-    path: '/management-guide/operations-executive-report-example',
-    name: 'operations-executive-report-example',
+    path: '/reports/sales/as',
+    redirect: {
+      name: 'sales-report',
+      query: { page: '2' },
+    },
+  },
+  {
+    path: '/reports/sales/as/:id',
+    name: 'sales-as-detail',
+    component: SalesExecutiveAsItemDetailPage,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/reports/operations',
+    name: 'operations-report',
     component: OperationsExecutiveReportExamplePage,
     meta: { requiresAuth: true },
   },
   {
-    path: '/management-guide/production-executive-report-example',
-    name: 'production-executive-report-example',
+    path: '/reports/production',
+    name: 'production-report',
     component: ProductionExecutiveReportExamplePage,
     meta: { requiresAuth: true },
   },
   {
-    path: '/approval',
-    name: 'electronic-approval',
-    component: ElectronicApprovalPage,
-    meta: { requiresAuth: true },
+    path: '/management-guide',
+    redirect: '/reports',
   },
   {
-    path: '/approval/register',
-    name: 'electronic-approval-register',
-    component: ElectronicApprovalRegisterPage,
-    meta: { requiresAuth: true },
+    path: '/management-guide/design-executive-report-example',
+    redirect: '/reports/design',
   },
   {
-    path: '/reports',
-    redirect: '/approval',
+    path: '/management-guide/sales-executive-report-example',
+    redirect: '/reports/sales',
+  },
+  {
+    path: '/management-guide/operations-executive-report-example',
+    redirect: '/reports/operations',
+  },
+  {
+    path: '/management-guide/production-executive-report-example',
+    redirect: '/reports/production',
   },
   {
     path: '/admin/sales-dashboard',

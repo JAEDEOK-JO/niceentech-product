@@ -19,19 +19,22 @@ const profileSummary = computed(() => {
 const navItems = computed(() => {
   const items = [
     { key: 'main', label: '생산계획표', to: { name: 'main' } },
-    { key: 'electronic-approval', label: '전자결재', to: { name: 'electronic-approval' } },
+    { key: 'home', label: '생산진행표', to: { name: 'home' } },
+    { key: 'reports', label: '보고서', to: { name: 'reports' } },
   ]
   if (isAdminRole(profile.value?.role) || isDesignDepartment(profile.value?.department)) {
     items.push({ key: 'company-register', label: '회사등록', to: { name: 'company-register' } })
+    items.push({ key: 'company-list', label: '회사리스트', to: { name: 'company-list' } })
   }
   return items
 })
 
 const activeSection = computed(() => {
-  if (route.path.startsWith('/company')) return 'company-register'
-  if (route.path.startsWith('/approval')) return 'electronic-approval'
-  if (route.path.startsWith('/reports')) return 'electronic-approval'
+  if (route.path.startsWith('/company/list')) return 'company-list'
+  if (route.path.startsWith('/company/register')) return 'company-register'
+  if (route.path.startsWith('/reports')) return 'reports'
   if (route.path.startsWith('/main')) return 'main'
+  if (route.path.startsWith('/home')) return 'home'
   return ''
 })
 

@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import Button from '@/components/ui/button/Button.vue'
 import Input from '@/components/ui/input/Input.vue'
+import { COMPANY_TYPE_OPTIONS } from '@/constants/companyTypes'
 
 const props = defineProps({
   form: { type: Object, required: true },
@@ -218,12 +219,34 @@ const dialogTitle = computed(() => {
               :value="form.companyType"
               @change="emit('update-form', 'companyType', $event.target.value)"
             >
-              <option value="아파트">아파트</option>
-              <option value="물류센터">물류센터</option>
-              <option value="5층 미만">5층 미만</option>
-              <option value="15층 미만">15층 미만</option>
-              <option value="오피스텔">오피스텔</option>
+              <option v-for="item in COMPANY_TYPE_OPTIONS" :key="item" :value="item">{{ item }}</option>
             </select>
+          </div>
+
+          <div>
+            <p class="mb-2 text-sm font-bold text-slate-700">수주 상태</p>
+            <label class="flex h-11 items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900">
+              <span>{{ form.orderConfirmed ? '확정수주' : '수주예정' }}</span>
+              <input
+                type="checkbox"
+                class="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-500"
+                :checked="form.orderConfirmed"
+                @change="emit('update-form', 'orderConfirmed', $event.target.checked)"
+              />
+            </label>
+          </div>
+
+          <div>
+            <p class="mb-2 text-sm font-bold text-slate-700">현장 종료 여부</p>
+            <label class="flex h-11 items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900">
+              <span>{{ form.siteCompleted ? '종료' : '진행중' }}</span>
+              <input
+                type="checkbox"
+                class="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-500"
+                :checked="form.siteCompleted"
+                @change="emit('update-form', 'siteCompleted', $event.target.checked)"
+              />
+            </label>
           </div>
 
           <div>

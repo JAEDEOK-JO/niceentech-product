@@ -23,9 +23,9 @@ const props = defineProps({
 
 const classes = computed(() =>
   cn(
-    'inline-flex items-center justify-center rounded-xl text-sm font-semibold transition-colors h-11 px-4',
+    'inline-flex cursor-pointer items-center justify-center rounded-xl text-sm font-semibold transition-colors h-11 px-4',
     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
-    'disabled:pointer-events-none disabled:opacity-50',
+    'disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50',
     props.variant === 'default' &&
       'bg-blue-600 text-white hover:bg-blue-700 focus-visible:ring-blue-500',
     props.variant === 'outline' &&
