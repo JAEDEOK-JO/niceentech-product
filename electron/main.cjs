@@ -2,17 +2,6 @@ const { app, BrowserWindow, shell } = require('electron')
 const path = require('path')
 
 const isDev = !app.isPackaged
-const resolveDesktopRemoteUrl = () => {
-  const fromEnv = String(process.env.DESKTOP_REMOTE_URL ?? '').trim()
-  if (fromEnv) return fromEnv
-
-  try {
-    const pkg = require(path.join(app.getAppPath(), 'package.json'))
-    return String(pkg.desktopRemoteUrl ?? '').trim()
-  } catch {
-    return ''
-  }
-}
 
 function createMainWindow() {
   const win = new BrowserWindow({
@@ -32,13 +21,7 @@ function createMainWindow() {
   if (isDev) {
     win.loadURL('http://localhost:5173')
   } else {
-    const remoteUrl = resolveDesktopRemoteUrl()
-    if (remoteUrl && /^https?:\/\//i.test(remoteUrl)) {
-      win.loadURL(remoteUrl)
-    } else {
-      // Fallback for cases where remote URL is not configured.
-      win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'))
-    }
+    win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'))
   }
 
   win.webContents.on('before-input-event', (event, input) => {

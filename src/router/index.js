@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHashHistory, createWebHistory } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import LoginPage from '@/pages/LoginPage.vue'
 import MainPage from '@/pages/MainPage.vue'
@@ -21,6 +21,8 @@ import AdminDesignDashboardPage from '@/pages/AdminDesignDashboardPage.vue'
 import AdminOperationsDashboardPage from '@/pages/AdminOperationsDashboardPage.vue'
 import AdminProductionDashboardPage from '@/pages/AdminProductionDashboardPage.vue'
 import { isAdminRole, isDesignDepartment } from '@/utils/adminAccess'
+
+const isDesktopRuntime = typeof window !== 'undefined' && Boolean(window.desktop)
 
 const routes = [
   {
@@ -181,7 +183,7 @@ const routes = [
 ]
 
 const router = createRouter({
-  history: createWebHistory(),
+  history: isDesktopRuntime ? createWebHashHistory() : createWebHistory(),
   routes,
 })
 

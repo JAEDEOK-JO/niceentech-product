@@ -30,6 +30,24 @@ const reportMonthLabel = `${reportMonth + 1}월`
 const previousMonthLabel = `${reportMonth === 0 ? 12 : reportMonth}월`
 const reportMonthStart = new Date(reportYear, reportMonth, 1)
 const reportMonthEnd = new Date(reportYear, reportMonth + 1, 0)
+const startOfDay = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate())
+const addDays = (date, days) => {
+  const next = new Date(date)
+  next.setDate(next.getDate() + days)
+  return next
+}
+const getTuesdayOfCurrentWeek = (baseDate) => {
+  const safe = startOfDay(baseDate)
+  const day = safe.getDay()
+  const mondayOffset = day === 0 ? -6 : 1 - day
+  const monday = addDays(safe, mondayOffset)
+  return addDays(monday, 1)
+}
+const getUpcomingTuesday = (baseDate) => {
+  const safe = startOfDay(baseDate)
+  const currentWeekTuesday = getTuesdayOfCurrentWeek(safe)
+  return safe.getTime() > currentWeekTuesday.getTime() ? addDays(currentWeekTuesday, 7) : currentWeekTuesday
+}
 const formatTestDate = (date) =>
   `${String(date.getFullYear()).padStart(4, '0')}년 ${String(date.getMonth() + 1).padStart(2, '0')}월 ${String(date.getDate()).padStart(2, '0')}일`
 const formatIsoDate = (date) =>
@@ -57,6 +75,7 @@ const formatShortMonthDay = (value) => {
   if (!parsed) return normalizeText(value) || '-'
   return `${String(parsed.getMonth() + 1).padStart(2, '0')}월 ${String(parsed.getDate()).padStart(2, '0')}일`
 }
+const currentWeekTuesday = getUpcomingTuesday(now)
 
 const createDefaultRepairForm = (row = null) =>
   row
@@ -174,6 +193,14 @@ const previousMonthRows = computed(() =>
   rows.value.filter((row) => isCompletedOrShipped(row) && isMonthRow(row, reportMonth === 0 ? 11 : reportMonth - 1)),
 )
 const currentYearRows = computed(() => rows.value.filter((row) => isCompletedOrShipped(row) && isYearRow(row)))
+const currentWeekTargetRows = computed(() =>
+  rows.value.filter((row) => {
+    const date = getMonthlyReferenceDate(row)
+    return date ? startOfDay(date).getTime() === currentWeekTuesday.getTime() : false
+  }),
+)
+const currentWeekRows = computed(() => currentWeekTargetRows.value.filter((row) => isCompletedOrShipped(row)))
+const currentWeekPendingRows = computed(() => currentWeekTargetRows.value.filter((row) => !isCompletedOrShipped(row)))
 
 const buildCategoryCounts = (targetRows) => {
   const head = targetRows.reduce((sum, row) => sum + toNumber(row?.head), 0)
@@ -189,7 +216,22 @@ const buildCategoryCounts = (targetRows) => {
 const currentCounts = computed(() => buildCategoryCounts(currentMonthRows.value))
 const previousCounts = computed(() => buildCategoryCounts(previousMonthRows.value))
 const currentYearCounts = computed(() => buildCategoryCounts(currentYearRows.value))
+const currentWeekCounts = computed(() => buildCategoryCounts(currentWeekRows.value))
+const currentWeekPendingCounts = computed(() => buildCategoryCounts(currentWeekPendingRows.value))
 const currentMonthTotal = computed(() => Object.values(currentCounts.value).reduce((sum, value) => sum + toNumber(value), 0))
+const currentWeekSummaryRows = computed(() =>
+  categoryMeta.map((item) => ({
+    ...item,
+    completedValue: currentWeekCounts.value[item.key],
+    pendingValue: currentWeekPendingCounts.value[item.key],
+  })),
+)
+const currentYearSummaryRows = computed(() =>
+  categoryMeta.map((item) => ({
+    ...item,
+    value: currentYearCounts.value[item.key],
+  })),
+)
 
 const categoryChartRows = computed(() =>
   categoryMeta.map((item) => {
@@ -220,14 +262,6 @@ const chartGradient = computed(() => {
   })
   return `conic-gradient(${segments.join(', ')})`
 })
-
-const summaryCards = computed(() =>
-  categoryChartRows.value.map((item) => ({
-    label: item.label,
-    value: formatCount(item.yearValue),
-    tone: item.tone,
-  })),
-)
 
 const totalRepairCost = computed(() => repairHistoryRows.value.reduce((sum, row) => sum + toNumber(row?.cost), 0))
 
@@ -418,14 +452,52 @@ onMounted(async () => {
           </section>
 
           <section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
-            <div class="mb-4">
-              <p class="text-[13px] font-extrabold text-slate-900">{{ reportYearLabel }} 누적</p>
-            </div>
-            <div class="production-print-grid-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <div v-for="card in summaryCards" :key="card.label" class="rounded-2xl border p-4" :class="card.tone">
-                <p class="text-[13px] font-bold">{{ card.label }}</p>
-                <p class="mt-2 text-2xl font-extrabold">{{ card.value }}</p>
-              </div>
+            <div class="grid items-stretch gap-4 xl:grid-cols-2">
+              <article class="h-full rounded-2xl border border-rose-200 bg-rose-50 p-4">
+                <p class="text-[13px] font-extrabold text-rose-900">이번주 생산량</p>
+                <p class="mt-1 text-[11px] font-semibold text-rose-700">{{ formatTestDate(currentWeekTuesday) }} 검수 기준</p>
+                <div class="mt-4 space-y-2">
+                  <div
+                    v-for="item in currentWeekSummaryRows"
+                    :key="`${item.key}-week`"
+                    class="grid min-h-[58px] grid-cols-[72px_1fr_1fr] items-center gap-2 rounded-xl bg-white/80 px-3 py-2"
+                  >
+                    <div class="flex items-center gap-2 text-sm font-bold text-slate-900">
+                      <span class="h-2.5 w-2.5 rounded-full" :style="{ backgroundColor: item.color }" />
+                      <span>{{ item.label }}</span>
+                    </div>
+                    <div class="text-center">
+                      <p class="text-[10px] font-bold text-slate-500">완료/출하</p>
+                      <p class="text-sm font-extrabold text-slate-900">{{ formatCount(item.completedValue) }}</p>
+                    </div>
+                    <div class="text-center">
+                      <p class="text-[10px] font-bold text-slate-500">미완료</p>
+                      <p class="text-sm font-extrabold text-slate-900">{{ formatCount(item.pendingValue) }}</p>
+                    </div>
+                  </div>
+                </div>
+              </article>
+
+              <article class="h-full rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p class="text-[13px] font-extrabold text-slate-900">{{ reportYearLabel }} 누적</p>
+                <p class="mt-1 text-[11px] font-semibold text-slate-500">작업완료 또는 출하완료 기준 누적</p>
+                <div class="mt-4 space-y-2">
+                  <div
+                    v-for="item in currentYearSummaryRows"
+                    :key="`${item.key}-year`"
+                    class="grid min-h-[58px] grid-cols-[72px_1fr_1fr] items-center gap-2 rounded-xl bg-white px-3 py-2"
+                  >
+                    <div class="flex items-center gap-2 text-sm font-bold text-slate-900">
+                      <span class="h-2.5 w-2.5 rounded-full" :style="{ backgroundColor: item.color }" />
+                      <span>{{ item.label }}</span>
+                    </div>
+                    <div class="col-span-2 text-center">
+                      <p class="text-[10px] font-bold text-slate-500">완료/출하 누적</p>
+                      <p class="text-sm font-extrabold text-slate-900">{{ formatCount(item.value) }}</p>
+                    </div>
+                  </div>
+                </div>
+              </article>
             </div>
           </section>
 
