@@ -27,6 +27,8 @@ const emit = defineEmits([
   'cell-action',
   'move-test-date',
   'load-drawing-files',
+  'upload-drawing-files',
+  'delete-drawing-file',
 ])
 
 const overallTotals = computed(() =>
@@ -57,7 +59,15 @@ const isDrawingDialogOpen = ref(false)
 const drawingFiles = ref([])
 const drawingLoading = ref(false)
 const drawingError = ref('')
+const drawingUploadError = ref('')
+const drawingUploading = ref(false)
+const drawingFileInput = ref(null)
 const selectedDrawingUrl = ref('')
+const activeDrawingRow = ref(null)
+const drawingDeletingId = ref(null)
+const suppressDrawingClickId = ref(null)
+let drawingLongPressTimer = null
+const DRAWING_LONG_PRESS_MS = 700
 
 const formatKoreanDateLabel = (value) => {
   const parsed = parseIsoDate(value)
@@ -247,8 +257,10 @@ const handleCellClick = ({ row, columnKey }) => {
     return
   }
   if (columnKey === 'drawing') {
+    activeDrawingRow.value = row
     drawingLoading.value = true
     drawingError.value = ''
+    drawingUploadError.value = ''
     drawingFiles.value = []
     selectedDrawingUrl.value = ''
     isDrawingDialogOpen.value = true
@@ -293,11 +305,101 @@ const confirmTestDateMove = () => {
 }
 
 const closeDrawingDialog = () => {
+  if (drawingUploading.value || drawingDeletingId.value) return
+  clearDrawingLongPressTimer()
   isDrawingDialogOpen.value = false
   drawingLoading.value = false
   drawingError.value = ''
+  drawingUploadError.value = ''
+  drawingUploading.value = false
+  drawingDeletingId.value = null
+  suppressDrawingClickId.value = null
   drawingFiles.value = []
   selectedDrawingUrl.value = ''
+  activeDrawingRow.value = null
+}
+
+const openDrawingFilePicker = () => {
+  if (drawingUploading.value) return
+  drawingFileInput.value?.click()
+}
+
+const handleDrawingFileChange = (event) => {
+  drawingUploadError.value = ''
+  if (!activeDrawingRow.value?.id) return
+  const selectedFiles = Array.from(event.target?.files ?? []).filter((file) => file instanceof File)
+  if (selectedFiles.length === 0) {
+    return
+  }
+
+  drawingUploading.value = true
+  emit('upload-drawing-files', {
+    rowId: activeDrawingRow.value.id,
+    files: selectedFiles,
+    onResult: (result) => {
+      drawingUploading.value = false
+      if (event?.target) event.target.value = ''
+      if (!result?.ok) {
+        drawingUploadError.value = '도면 등록 실패'
+        return
+      }
+
+      const nextFiles = [...(result.files ?? []), ...drawingFiles.value]
+      drawingFiles.value = nextFiles
+      if (!selectedDrawingUrl.value) {
+        const firstFile = nextFiles.find((item) => String(item?.viewUrl ?? '').trim())
+        selectedDrawingUrl.value = firstFile?.viewUrl ?? ''
+      }
+    },
+  })
+}
+
+const clearDrawingLongPressTimer = () => {
+  if (drawingLongPressTimer) {
+    clearTimeout(drawingLongPressTimer)
+    drawingLongPressTimer = null
+  }
+}
+
+const handleDrawingItemPressStart = (file) => {
+  if (!file?.id || drawingDeletingId.value) return
+  clearDrawingLongPressTimer()
+  drawingLongPressTimer = setTimeout(() => {
+    suppressDrawingClickId.value = file.id
+    const confirmed = typeof window !== 'undefined' ? window.confirm('삭제하시겠습니까?') : false
+    if (!confirmed) return
+
+    drawingDeletingId.value = file.id
+    drawingUploadError.value = ''
+    emit('delete-drawing-file', {
+      fileId: file.id,
+      onResult: (result) => {
+        drawingDeletingId.value = null
+        if (!result?.ok) {
+          drawingUploadError.value = '도면 삭제 실패'
+          return
+        }
+        drawingFiles.value = drawingFiles.value.filter((item) => item.id !== file.id)
+        if (selectedDrawingUrl.value === file.viewUrl) {
+          const firstFile = drawingFiles.value.find((item) => String(item?.viewUrl ?? '').trim())
+          selectedDrawingUrl.value = firstFile?.viewUrl ?? ''
+        }
+      },
+    })
+  }, DRAWING_LONG_PRESS_MS)
+}
+
+const handleDrawingItemPressEnd = () => {
+  clearDrawingLongPressTimer()
+}
+
+const selectDrawingFile = (file) => {
+  if (!file?.viewUrl) return
+  if (suppressDrawingClickId.value === file.id) {
+    suppressDrawingClickId.value = null
+    return
+  }
+  selectedDrawingUrl.value = file.viewUrl
 }
 
 </script>
@@ -479,16 +581,36 @@ const closeDrawingDialog = () => {
 
     <div
       v-if="isDrawingDialogOpen"
-      class="print-hide fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 px-4 py-4"
+      class="print-hide fixed inset-0 z-[60] bg-slate-900/60"
       @click.self="closeDrawingDialog"
     >
-      <div class="grid h-[85vh] w-full max-w-6xl gap-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl md:grid-cols-[280px_1fr]">
+      <div class="grid h-screen w-screen gap-0 overflow-hidden bg-white md:grid-cols-[320px_1fr]">
         <div class="border-b border-slate-200 bg-white p-4 md:border-b-0 md:border-r">
-          <div class="mb-3 flex items-center justify-between gap-2">
-            <h3 class="text-base font-bold text-slate-900">도면 목록</h3>
-            <button type="button" class="text-sm text-slate-500 hover:text-slate-700" @click="closeDrawingDialog">닫기</button>
+          <div class="mb-4 flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <h3 class="text-base font-extrabold text-slate-900">도면 목록</h3>
+              <p class="mt-2 truncate text-sm font-semibold text-slate-900">{{ activeDrawingRow?.company || '-' }}</p>
+              <p class="truncate text-sm text-slate-600">{{ activeDrawingRow?.place || '-' }}</p>
+              <p class="truncate text-sm text-slate-500">{{ activeDrawingRow?.area || '-' }}</p>
+            </div>
+            <button type="button" class="shrink-0 text-sm text-slate-500 hover:text-slate-700" @click="closeDrawingDialog">닫기</button>
           </div>
-          <div class="max-h-[calc(85vh-88px)] space-y-2 overflow-y-auto">
+          <div class="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <p class="mb-2 text-xs font-bold text-slate-600">도면 등록</p>
+            <input
+              ref="drawingFileInput"
+              type="file"
+              multiple
+              accept=".pdf,image/*"
+              class="hidden"
+              @change="handleDrawingFileChange"
+            />
+            <p v-if="drawingUploadError" class="mt-2 text-xs font-bold text-red-600">{{ drawingUploadError }}</p>
+            <Button class="mt-3 h-9 w-full text-sm" :disabled="drawingUploading" @click="openDrawingFilePicker">
+              {{ drawingUploading ? '등록 중...' : '도면 등록' }}
+            </Button>
+          </div>
+          <div class="max-h-[calc(100vh-220px)] space-y-2 overflow-y-auto">
             <div v-if="drawingLoading" class="rounded-xl border border-slate-200 px-3 py-4 text-sm text-slate-500">도면 조회 중...</div>
             <div v-else-if="drawingError" class="rounded-xl border border-red-200 bg-red-50 px-3 py-4 text-sm text-red-600">{{ drawingError }}</div>
             <div v-else-if="drawingFiles.length === 0" class="rounded-xl border border-slate-200 px-3 py-4 text-sm text-slate-500">등록된 도면이 없습니다.</div>
@@ -498,9 +620,23 @@ const closeDrawingDialog = () => {
               type="button"
               class="w-full rounded-xl border px-3 py-2 text-left text-sm"
               :class="selectedDrawingUrl === file.viewUrl ? 'border-blue-300 bg-blue-50 text-blue-800' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'"
-              @click="selectedDrawingUrl = file.viewUrl"
+              @mousedown="handleDrawingItemPressStart(file)"
+              @mouseup="handleDrawingItemPressEnd"
+              @mouseleave="handleDrawingItemPressEnd"
+              @touchstart="handleDrawingItemPressStart(file)"
+              @touchend="handleDrawingItemPressEnd"
+              @touchcancel="handleDrawingItemPressEnd"
+              @click="selectDrawingFile(file)"
             >
-              <p class="truncate font-semibold">{{ file.name }}</p>
+              <div class="flex items-start justify-between gap-2">
+                <p class="truncate font-semibold">{{ file.name }}</p>
+                <span
+                  v-if="drawingDeletingId === file.id"
+                  class="shrink-0 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-700"
+                >
+                  삭제 중...
+                </span>
+              </div>
               <p class="mt-1 truncate text-xs text-slate-500">{{ file.rawPath || file.viewUrl || '' }}</p>
             </button>
           </div>

@@ -104,7 +104,7 @@ export const getCellText = (row, key) => {
     return formatStatusDate(row?.delivery_due_date)
   }
   if (key === 'drawing') {
-    if (Boolean(row?.drawing)) return '있음'
+    if (Boolean(row?.is_drawing)) return '있음'
     return '없음'
   }
   if ((key === 'head' || key === 'hole' || key === 'groove') && Number(row?.[key] ?? 0) === 0) return ''
@@ -157,14 +157,18 @@ export const getBodyCellClass = (row, column) => {
     } else {
       classes.push(statusClass(getStatusTone(row, column.key, getCellText(row, column.key))))
     }
-  } else if (column.key === 'company' && Boolean(row?.drawing)) {
-    classes.push('bg-slate-200')
+  } else if (column.key === 'head' && Boolean(row?.calculation)) {
+    classes.push('bg-lime-100')
   } else if (column.key === 'name' && Boolean(row?.paper)) {
     classes.push('bg-lime-200')
   } else if (column.key === 'design_distributed' && Boolean(row?.ahn)) {
     classes.push('bg-blue-300')
   } else if (column.key === 'initial' && Boolean(row?.stamp)) {
     classes.push('bg-yellow-200')
+  } else if (column.key === 'drawing' && Boolean(row?.is_drawing)) {
+    classes.push('bg-orange-100', 'text-orange-800')
+  } else if (column.key === 'drawing') {
+    classes.push('bg-white', 'text-black')
   } else if (['initial', 'design_distributed', 'delivery_due_date'].includes(column.key) && Boolean(row?.not_test)) {
     classes.push('bg-blue-100')
   } else if (Boolean(row?.outsourcing)) {

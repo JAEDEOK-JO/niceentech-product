@@ -25,6 +25,8 @@ const {
   updatePlanRowFields,
   deletePlanRow,
   fetchDrawingFiles,
+  uploadDrawingFiles,
+  deleteDrawingFile,
 } = useProductionPlan(session)
 
 const isOperationsDepartment = (value) => normalizeDepartment(value).includes(normalizeDepartment('공무'))
@@ -35,13 +37,6 @@ const formatKoreanDate = (value) => {
   const [, year, month, day] = matched
   return `${year}년 ${month}월 ${day}일`
 }
-const formatDrawingDate = (date = new Date()) => {
-  const year = String(date.getFullYear()).slice(-2)
-  const month = String(date.getMonth() + 1)
-  const day = String(date.getDate())
-  return `${year}.${month}.${day}`
-}
-
 const goRegister = () => {
   router.push({
     name: 'main-register',
@@ -126,15 +121,11 @@ const handleCellAction = async ({ row, columnKey }) => {
     return
   }
 
-  if (columnKey === 'company') {
+  if (columnKey === 'head') {
     if (!isAdminRole(profile.value?.role) && !isDesignDepartment(profile.value?.department)) return
-    const nextDrawing = !Boolean(row.drawing)
     await updatePlanRowFields({
       rowId: row.id,
-      updates: {
-        drawing: nextDrawing,
-        drawing_date: nextDrawing ? formatDrawingDate(new Date()) : null,
-      },
+      updates: { calculation: !Boolean(row.calculation) },
     })
     return
   }
@@ -156,6 +147,16 @@ const handleMoveTestDate = async ({ row, nextDateIso }) => {
 
 const handleLoadDrawingFiles = async ({ rowId, onResult }) => {
   const result = await fetchDrawingFiles({ rowId })
+  onResult?.(result)
+}
+
+const handleUploadDrawingFiles = async ({ rowId, files, onResult }) => {
+  const result = await uploadDrawingFiles({ rowId, files })
+  onResult?.(result)
+}
+
+const handleDeleteDrawingFile = async ({ fileId, onResult }) => {
+  const result = await deleteDrawingFile({ fileId })
   onResult?.(result)
 }
 
@@ -216,5 +217,7 @@ watch(
     @cell-action="handleCellAction"
     @move-test-date="handleMoveTestDate"
     @load-drawing-files="handleLoadDrawingFiles"
+    @upload-drawing-files="handleUploadDrawingFiles"
+    @delete-drawing-file="handleDeleteDrawingFile"
   />
 </template>

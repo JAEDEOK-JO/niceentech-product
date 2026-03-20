@@ -16,7 +16,7 @@ defineProps({
   overallTotals: { type: Object, required: true },
 })
 
-const clickableColumns = ['initial', 'design_distributed', 'name', 'company', 'place', 'area', 'drawing']
+const clickableColumns = ['initial', 'design_distributed', 'name', 'company', 'place', 'area', 'head', 'drawing']
 const tableBorderStyle = {
   borderColor: 'rgba(0, 0, 0, 0.28)',
   borderWidth: '0.1px',
@@ -68,7 +68,10 @@ const emit = defineEmits(['open-row-menu', 'cell-click'])
           </div>
         </div>
         <div class="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-slate-700">
-          <p class="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 font-semibold whitespace-nowrap">
+          <p
+            class="inline-flex items-center rounded-full px-2.5 py-1 font-semibold whitespace-nowrap"
+            :class="row.calculation ? 'bg-lime-100 text-lime-800' : 'bg-slate-100'"
+          >
             헤드 {{ getCellText(row, 'head') || '' }}
           </p>
           <p class="inline-flex items-center rounded-full bg-sky-50 px-2.5 py-1 font-semibold text-sky-700 whitespace-nowrap">
@@ -88,8 +91,8 @@ const emit = defineEmits(['open-row-menu', 'cell-click'])
               class="inline-flex items-center rounded-full px-2.5 py-1 font-bold whitespace-nowrap"
               :class="
                 getCellText(row, 'drawing') === '있음'
-                  ? 'bg-orange-100 text-orange-700'
-                  : 'bg-slate-100 text-slate-400'
+                  ? 'bg-orange-100 text-orange-800'
+                  : 'bg-white text-black'
               "
             >
               도면

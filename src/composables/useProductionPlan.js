@@ -65,6 +65,10 @@ const formatIsoDate = (date = new Date()) => {
   const d = String(date.getDate()).padStart(2, '0')
   return `${y}-${m}-${d}`
 }
+const sanitizeStorageFileName = (name) =>
+  String(name ?? '')
+    .trim()
+    .replace(/[^\w.\-가-힣]/g, '_')
 
 const getRowsTotals = (rows) =>
   rows.reduce(
@@ -661,6 +665,142 @@ export function useProductionPlan(session) {
     return { ok: true, files }
   }
 
+  const uploadDrawingFiles = async ({ rowId, files }) => {
+    if (!rowId) return { ok: false, reason: 'invalid_row' }
+    const uploadTargets = Array.from(files ?? []).filter((file) => file instanceof File)
+    if (uploadTargets.length === 0) return { ok: false, reason: 'empty_files' }
+
+    const uploadedRows = []
+    for (const file of uploadTargets) {
+      const safeName = sanitizeStorageFileName(file.name || `drawing-${Date.now()}`)
+      const randomId =
+        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+      const storagePath = `drawings/${rowId}/${randomId}_${safeName}`
+
+      const { error: uploadError } = await supabase.storage.from('media').upload(storagePath, file, {
+        cacheControl: '3600',
+        upsert: false,
+      })
+      if (uploadError) {
+        planError.value = `도면 업로드 실패: ${uploadError.message}`
+        return { ok: false, reason: 'upload_failed' }
+      }
+
+      const { data: publicUrlData } = supabase.storage.from('media').getPublicUrl(storagePath)
+      const publicUrl = String(publicUrlData?.publicUrl ?? '').trim()
+
+      const { data: insertedRow, error: insertError } = await supabase
+        .from('drawing_pdf')
+        .insert({
+          product_list_id: rowId,
+          name: safeName,
+          url: publicUrl || null,
+          storage_url: publicUrl || null,
+          nas_path: storagePath,
+        })
+        .select('id,name,url,storage_url,nas_path,created_at')
+        .single()
+
+      if (insertError) {
+        planError.value = `도면 정보 저장 실패: ${insertError.message}`
+        return { ok: false, reason: 'insert_failed' }
+      }
+
+      uploadedRows.push({
+        id: insertedRow.id,
+        name: String(insertedRow.name ?? '').trim() || safeName,
+        viewUrl: String(insertedRow.storage_url ?? insertedRow.url ?? '').trim(),
+        rawPath: String(insertedRow.nas_path ?? '').trim(),
+        createdAt: insertedRow.created_at,
+      })
+    }
+
+    const { error: productListUpdateError } = await supabase
+      .from(PRODUCT_LIST_TABLE)
+      .update({ is_drawing: true })
+      .eq('id', rowId)
+
+    if (productListUpdateError) {
+      planError.value = `도면 상태 반영 실패: ${productListUpdateError.message}`
+      return { ok: false, reason: 'product_list_update_failed' }
+    }
+
+    const rowIndex = planRows.value.findIndex((row) => row.id === rowId)
+    if (rowIndex >= 0) {
+      const nextRows = [...planRows.value]
+      nextRows[rowIndex] = { ...nextRows[rowIndex], is_drawing: true }
+      planRows.value = nextRows
+    }
+
+    return { ok: true, files: uploadedRows }
+  }
+
+  const deleteDrawingFile = async ({ fileId }) => {
+    if (!fileId) return { ok: false, reason: 'invalid_file' }
+
+    const { data: targetRow, error: targetError } = await supabase
+      .from('drawing_pdf')
+      .select('id,nas_path,product_list_id')
+      .eq('id', fileId)
+      .maybeSingle()
+
+    if (targetError) {
+      planError.value = `도면 삭제 조회 실패: ${targetError.message}`
+      return { ok: false, reason: 'db_error' }
+    }
+
+    const storagePath = String(targetRow?.nas_path ?? '').trim()
+    if (storagePath) {
+      const { error: storageError } = await supabase.storage.from('media').remove([storagePath])
+      if (storageError) {
+        planError.value = `도면 파일 삭제 실패: ${storageError.message}`
+        return { ok: false, reason: 'storage_delete_failed' }
+      }
+    }
+
+    const { error: deleteError } = await supabase.from('drawing_pdf').delete().eq('id', fileId)
+    if (deleteError) {
+      planError.value = `도면 정보 삭제 실패: ${deleteError.message}`
+      return { ok: false, reason: 'db_error' }
+    }
+
+    const productListId = Number(targetRow?.product_list_id ?? 0)
+    if (productListId > 0) {
+      const { count, error: countError } = await supabase
+        .from('drawing_pdf')
+        .select('id', { count: 'exact', head: true })
+        .eq('product_list_id', productListId)
+
+      if (countError) {
+        planError.value = `도면 개수 확인 실패: ${countError.message}`
+        return { ok: false, reason: 'count_failed' }
+      }
+
+      if ((count ?? 0) === 0) {
+        const { error: productListUpdateError } = await supabase
+          .from(PRODUCT_LIST_TABLE)
+          .update({ is_drawing: false })
+          .eq('id', productListId)
+
+        if (productListUpdateError) {
+          planError.value = `도면 상태 반영 실패: ${productListUpdateError.message}`
+          return { ok: false, reason: 'product_list_update_failed' }
+        }
+
+        const rowIndex = planRows.value.findIndex((row) => row.id === productListId)
+        if (rowIndex >= 0) {
+          const nextRows = [...planRows.value]
+          nextRows[rowIndex] = { ...nextRows[rowIndex], is_drawing: false }
+          planRows.value = nextRows
+        }
+      }
+    }
+
+    return { ok: true }
+  }
+
   const updatePlanRowFields = async ({ rowId, updates }) => {
     if (!rowId || !updates || Object.keys(updates).length === 0) return { ok: false, reason: 'invalid_payload' }
 
@@ -766,6 +906,8 @@ export function useProductionPlan(session) {
     reorderByNo,
     updateRowMenu,
     fetchDrawingFiles,
+    uploadDrawingFiles,
+    deleteDrawingFile,
     updatePlanRowFields,
     deletePlanRow,
     isDistributedRow,

@@ -193,7 +193,7 @@ const buildWeekSummary = (week) => {
   const targetRows = weekRowsMap.value[week.key] ?? []
   const totalCount = targetRows.length
   const distributedCount = targetRows.filter(isDistributed).length
-  const drawingCompletedCount = targetRows.filter((row) => Boolean(row?.is_drawing)).length
+  const drawingCompletedCount = targetRows.filter((row) => Boolean(row?.calculation)).length
   const dueRiskCount = targetRows.filter((row) => isDueRiskRow(row, week.date)).length
 
   const threshold = getPreviousThursdayNoon(week.date)
@@ -272,7 +272,7 @@ const dueRiskRows = computed(() =>
 )
 const pendingDistributionRows = computed(() =>
   detailedRows.value
-    .filter((row) => !isDistributed(row))
+    .filter((row) => !Boolean(row?.calculation))
     .sort((a, b) => {
       const aDate = parseFlexibleDateTime(a?.delivery_due_date)?.getTime() ?? Number.MAX_SAFE_INTEGER
       const bDate = parseFlexibleDateTime(b?.delivery_due_date)?.getTime() ?? Number.MAX_SAFE_INTEGER
@@ -301,7 +301,7 @@ const fetchRows = async () => {
   const testDates = targetWeeks.value.map((week) => formatKoreanDate(week.date))
   const { start, end } = monthRange.value
   const baseColumns =
-    'id,no,initial,company,place,area,test_date,drawing_date,drawing_distributed_at,shipment_date,delivery_due_date,is_drawing,complete,delay_text'
+    'id,no,initial,company,place,area,test_date,drawing_date,drawing_distributed_at,shipment_date,delivery_due_date,is_drawing,calculation,complete,delay_text'
   const withVirtualColumns = `${baseColumns},virtual_drawing_distributed`
   const monthColumns = 'id,no,initial,company,place,area,shipment,shipment_date,delivery_due_date,updated_at'
 
@@ -526,7 +526,7 @@ onMounted(async () => {
             <div class="flex items-center justify-between gap-3">
               <div>
                 <p class="text-[13px] font-extrabold text-slate-900">산출 안된 목록</p>
-                <p class="mt-1 text-[12px] text-slate-500">도면 미배포 기준</p>
+                <p class="mt-1 text-[12px] text-slate-500">산출서 미반영 기준</p>
               </div>
               <span class="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-bold text-slate-700">{{ pendingDistributionRows.length }}건</span>
             </div>
