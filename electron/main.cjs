@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron')
+const { app, BrowserWindow, dialog, ipcMain, powerMonitor, shell } = require('electron')
 const { autoUpdater } = require('electron-updater')
 const fs = require('fs')
 const path = require('path')
@@ -10,17 +10,20 @@ let forceUpdateActive = false
 let installingUpdate = false
 let isCheckingForUpdates = false
 let updateCheckTimer = null
+let lastUpdateCheckStartedAt = 0
 let updateState = {
   phase: 'idle',
   message: '업데이트 대기 중',
   detail: '',
+  progressPercent: 0,
   currentVersion: app.getVersion(),
   targetVersion: '',
   lastCheckedAt: null,
   error: '',
 }
 
-const UPDATE_CHECK_INTERVAL_MS = 10 * 60 * 1000
+const UPDATE_CHECK_INTERVAL_MS = 60 * 1000
+const UPDATE_CHECK_COOLDOWN_MS = 15 * 1000
 const updateLogFilePath = path.join(app.getPath('userData'), 'update.log')
 
 function appendUpdateLog(message) {
@@ -49,7 +52,9 @@ function setUpdateState(partial) {
   return updateState
 }
 
-function buildUpdateLockHtml(message, detail = '') {
+function buildUpdateLockHtml(message, detail = '', progressPercent = null) {
+  const hasProgress = Number.isFinite(progressPercent)
+  const safePercent = hasProgress ? Math.max(0, Math.min(100, progressPercent)) : 0
   return `<!doctype html>
 <html lang="ko">
   <head>
@@ -102,6 +107,31 @@ function buildUpdateLockHtml(message, detail = '') {
         color: #475569;
         white-space: pre-wrap;
       }
+      .progress {
+        margin-top: 18px;
+      }
+      .progress-meta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 8px;
+        font-size: 13px;
+        font-weight: 700;
+        color: #334155;
+      }
+      .progress-track {
+        height: 12px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: #e2e8f0;
+      }
+      .progress-bar {
+        height: 100%;
+        width: ${safePercent}%;
+        border-radius: 999px;
+        background: linear-gradient(90deg, #0f172a 0%, #2563eb 100%);
+        transition: width 160ms ease;
+      }
     </style>
   </head>
   <body>
@@ -110,6 +140,19 @@ function buildUpdateLockHtml(message, detail = '') {
         <div class="badge">업데이트 진행 중</div>
         <h1>${message}</h1>
         <p>${detail}</p>
+        ${
+          hasProgress
+            ? `<div class="progress">
+                <div class="progress-meta">
+                  <span>다운로드 진행률</span>
+                  <span>${safePercent.toFixed(1)}%</span>
+                </div>
+                <div class="progress-track">
+                  <div class="progress-bar"></div>
+                </div>
+              </div>`
+            : ''
+        }
       </div>
     </div>
   </body>
@@ -126,7 +169,7 @@ function setMainWindowInteractionEnabled(enabled) {
   }
 }
 
-function showUpdateLockWindow(message, detail = '') {
+function showUpdateLockWindow(message, detail = '', progressPercent = null) {
   if (!mainWindow || mainWindow.isDestroyed()) return
 
   forceUpdateActive = true
@@ -158,7 +201,7 @@ function showUpdateLockWindow(message, detail = '') {
     })
   }
 
-  const html = buildUpdateLockHtml(message, detail)
+  const html = buildUpdateLockHtml(message, detail, progressPercent)
   updateLockWindow.loadURL(`data:text/html;charset=UTF-8,${encodeURIComponent(html)}`).catch(() => {})
 
   if (!updateLockWindow.isVisible()) {
@@ -199,12 +242,19 @@ async function runUpdateCheck({ manual = false } = {}) {
     return updateState
   }
 
+  const now = Date.now()
+  if (!manual && now - lastUpdateCheckStartedAt < UPDATE_CHECK_COOLDOWN_MS) {
+    return updateState
+  }
+
   isCheckingForUpdates = true
+  lastUpdateCheckStartedAt = now
   appendUpdateLog(`check:start manual=${manual}`)
   setUpdateState({
     phase: 'checking',
     message: manual ? '업데이트를 확인하는 중입니다.' : '백그라운드에서 업데이트를 확인하는 중입니다.',
     detail: '',
+    progressPercent: 0,
     error: '',
     lastCheckedAt: new Date().toISOString(),
   })
@@ -220,6 +270,7 @@ async function runUpdateCheck({ manual = false } = {}) {
       phase: 'error',
       message: '업데이트 확인에 실패했습니다.',
       detail: message,
+      progressPercent: 0,
       error: message,
     })
 
@@ -254,6 +305,7 @@ function configureAutoUpdater() {
       phase: 'available',
       message: '새 버전을 찾았습니다.',
       detail: `${info?.version ?? '새 버전'} 다운로드를 시작합니다.`,
+      progressPercent: 0,
       targetVersion: String(info?.version ?? ''),
       error: '',
     })
@@ -270,11 +322,13 @@ function configureAutoUpdater() {
       phase: 'downloading',
       message: '업데이트 파일을 다운로드하는 중입니다.',
       detail: `진행률: ${percent.toFixed(1)}%`,
+      progressPercent: percent,
       error: '',
     })
     showUpdateLockWindow(
       '최신 버전 다운로드 중입니다.',
       `업데이트를 적용하는 동안 앱을 사용할 수 없습니다.\n진행률: ${percent.toFixed(1)}%`,
+      percent,
     )
   })
 
@@ -285,6 +339,7 @@ function configureAutoUpdater() {
       phase: 'downloaded',
       message: '업데이트 다운로드가 완료되었습니다.',
       detail: '앱을 종료하고 최신 버전 설치를 진행합니다.',
+      progressPercent: 100,
       error: '',
     })
     showUpdateLockWindow(
@@ -304,6 +359,7 @@ function configureAutoUpdater() {
       phase: 'up-to-date',
       message: '현재 최신 버전을 사용 중입니다.',
       detail: '',
+      progressPercent: 0,
       targetVersion: app.getVersion(),
       error: '',
     })
@@ -316,17 +372,23 @@ function configureAutoUpdater() {
       phase: 'error',
       message: '업데이트 처리 중 오류가 발생했습니다.',
       detail: message,
+      progressPercent: 0,
       error: message,
     })
 
     if (forceUpdateActive) {
-      showUpdateLockWindow(
-        '업데이트 중 문제가 발생했습니다.',
-        `앱을 종료한 뒤 다시 실행해 주세요.\n\n${message}`,
-      )
-      setTimeout(() => {
-        app.quit()
-      }, 3000)
+      hideUpdateLockWindow()
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        dialog
+          .showMessageBox(mainWindow, {
+            type: 'warning',
+            title: 'NICEENTECH 업데이트 오류',
+            message: '업데이트 중 문제가 발생했습니다.',
+            detail: message,
+            buttons: ['확인'],
+          })
+          .catch(() => {})
+      }
       return
     }
 
@@ -381,6 +443,10 @@ function createMainWindow() {
     broadcastUpdateState()
   })
 
+  mainWindow.on('focus', () => {
+    runUpdateCheck()
+  })
+
   mainWindow.on('close', (event) => {
     if (forceUpdateActive && !installingUpdate) {
       event.preventDefault()
@@ -406,6 +472,11 @@ app.whenReady().then(() => {
   appendUpdateLog(`app:ready version=${app.getVersion()} packaged=${app.isPackaged}`)
   createMainWindow()
   configureAutoUpdater()
+
+  powerMonitor.on('resume', () => {
+    appendUpdateLog('power:resume')
+    runUpdateCheck()
+  })
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

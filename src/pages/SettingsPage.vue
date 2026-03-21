@@ -9,6 +9,7 @@ const updateState = ref({
   phase: 'idle',
   message: '업데이트 대기 중',
   detail: '',
+  progressPercent: 0,
   currentVersion: fallbackVersion,
   targetVersion: '',
   lastCheckedAt: null,
@@ -116,6 +117,18 @@ onBeforeUnmount(() => {
               <p class="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">현재 상태</p>
               <p class="mt-2 text-lg font-extrabold text-slate-900">{{ updateState.message }}</p>
               <p class="mt-2 text-sm text-slate-600">{{ updateState.detail || '-' }}</p>
+              <div v-if="Number.isFinite(updateState.progressPercent) && updateState.progressPercent > 0" class="mt-4">
+                <div class="mb-2 flex items-center justify-between text-xs font-bold text-slate-500">
+                  <span>다운로드 진행률</span>
+                  <span>{{ updateState.progressPercent.toFixed(1) }}%</span>
+                </div>
+                <div class="h-3 overflow-hidden rounded-full bg-slate-200">
+                  <div
+                    class="h-full rounded-full bg-gradient-to-r from-slate-900 to-blue-600 transition-all duration-200"
+                    :style="{ width: `${Math.max(0, Math.min(100, updateState.progressPercent))}%` }"
+                  />
+                </div>
+              </div>
             </article>
 
             <article class="rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4">
