@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, shell } = require('electron')
+const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron')
 const { autoUpdater } = require('electron-updater')
 const path = require('path')
 
@@ -9,17 +9,31 @@ let forceUpdateActive = false
 let installingUpdate = false
 let isCheckingForUpdates = false
 let updateCheckTimer = null
+let updateState = {
+  phase: 'idle',
+  message: '업데이트 대기 중',
+  detail: '',
+  currentVersion: app.getVersion(),
+  targetVersion: '',
+  lastCheckedAt: null,
+  error: '',
+}
 
 const UPDATE_CHECK_INTERVAL_MS = 10 * 60 * 1000
 
-function shouldIgnoreUpdateError(error) {
-  const message = String(error?.message ?? error ?? '').toLowerCase()
-  return (
-    message.includes('404') ||
-    message.includes('latest.yml') ||
-    message.includes('no published versions') ||
-    message.includes('cannot find channel')
-  )
+function broadcastUpdateState() {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  mainWindow.webContents.send('desktop:update-status', updateState)
+}
+
+function setUpdateState(partial) {
+  updateState = {
+    ...updateState,
+    ...partial,
+    currentVersion: app.getVersion(),
+  }
+  broadcastUpdateState()
+  return updateState
 }
 
 function buildUpdateLockHtml(message, detail = '') {
@@ -154,15 +168,61 @@ function hideUpdateLockWindow() {
   updateLockWindow = null
 }
 
-function runUpdateCheck() {
-  if (isDev || isCheckingForUpdates || forceUpdateActive) return
-  isCheckingForUpdates = true
-  autoUpdater
-    .checkForUpdates()
-    .catch(() => {})
-    .finally(() => {
-      isCheckingForUpdates = false
+async function runUpdateCheck({ manual = false } = {}) {
+  if (isDev) {
+    return setUpdateState({
+      phase: 'unsupported',
+      message: '개발 모드에서는 자동업데이트를 확인하지 않습니다.',
+      detail: '',
+      error: '',
     })
+  }
+
+  if (isCheckingForUpdates) {
+    return updateState
+  }
+
+  if (forceUpdateActive && !manual) {
+    return updateState
+  }
+
+  isCheckingForUpdates = true
+  setUpdateState({
+    phase: 'checking',
+    message: manual ? '업데이트를 확인하는 중입니다.' : '백그라운드에서 업데이트를 확인하는 중입니다.',
+    detail: '',
+    error: '',
+    lastCheckedAt: new Date().toISOString(),
+  })
+
+  try {
+    await autoUpdater.checkForUpdates()
+    return updateState
+  } catch (error) {
+    const message = String(error?.message ?? error ?? '알 수 없는 오류')
+    setUpdateState({
+      phase: 'error',
+      message: '업데이트 확인에 실패했습니다.',
+      detail: message,
+      error: message,
+    })
+
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      await dialog
+        .showMessageBox(mainWindow, {
+          type: 'warning',
+          title: 'NICEENTECH 업데이트 오류',
+          message: manual ? '수동 업데이트 확인에 실패했습니다.' : '자동업데이트를 확인하는 중 문제가 발생했습니다.',
+          detail: message,
+          buttons: ['확인'],
+        })
+        .catch(() => {})
+    }
+
+    return updateState
+  } finally {
+    isCheckingForUpdates = false
+  }
 }
 
 function configureAutoUpdater() {
@@ -172,6 +232,13 @@ function configureAutoUpdater() {
   autoUpdater.autoInstallOnAppQuit = false
 
   autoUpdater.on('update-available', (info) => {
+    setUpdateState({
+      phase: 'available',
+      message: '새 버전을 찾았습니다.',
+      detail: `${info?.version ?? '새 버전'} 다운로드를 시작합니다.`,
+      targetVersion: String(info?.version ?? ''),
+      error: '',
+    })
     showUpdateLockWindow(
       '최신 버전으로 업데이트 중입니다.',
       `${info?.version ?? '새 버전'}을 다운로드하는 동안 앱을 사용할 수 없습니다.\n잠시만 기다려 주세요.`,
@@ -180,6 +247,12 @@ function configureAutoUpdater() {
 
   autoUpdater.on('download-progress', (progress) => {
     const percent = Number.isFinite(progress?.percent) ? Math.max(0, Math.min(100, progress.percent)) : 0
+    setUpdateState({
+      phase: 'downloading',
+      message: '업데이트 파일을 다운로드하는 중입니다.',
+      detail: `진행률: ${percent.toFixed(1)}%`,
+      error: '',
+    })
     showUpdateLockWindow(
       '최신 버전 다운로드 중입니다.',
       `업데이트를 적용하는 동안 앱을 사용할 수 없습니다.\n진행률: ${percent.toFixed(1)}%`,
@@ -188,6 +261,12 @@ function configureAutoUpdater() {
 
   autoUpdater.on('update-downloaded', () => {
     installingUpdate = true
+    setUpdateState({
+      phase: 'downloaded',
+      message: '업데이트 다운로드가 완료되었습니다.',
+      detail: '앱을 종료하고 최신 버전 설치를 진행합니다.',
+      error: '',
+    })
     showUpdateLockWindow(
       '업데이트 설치를 시작합니다.',
       '잠시 후 앱이 자동으로 종료되고 최신 버전으로 설치됩니다.',
@@ -200,11 +279,23 @@ function configureAutoUpdater() {
 
   autoUpdater.on('update-not-available', () => {
     hideUpdateLockWindow()
+    setUpdateState({
+      phase: 'up-to-date',
+      message: '현재 최신 버전을 사용 중입니다.',
+      detail: '',
+      targetVersion: app.getVersion(),
+      error: '',
+    })
   })
 
   autoUpdater.on('error', (error) => {
-    if (shouldIgnoreUpdateError(error)) return
     const message = String(error?.message ?? error ?? '알 수 없는 오류')
+    setUpdateState({
+      phase: 'error',
+      message: '업데이트 처리 중 오류가 발생했습니다.',
+      detail: message,
+      error: message,
+    })
 
     if (forceUpdateActive) {
       showUpdateLockWindow(
@@ -217,18 +308,17 @@ function configureAutoUpdater() {
       return
     }
 
-    if (!mainWindow) {
-      return
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      dialog
+        .showMessageBox(mainWindow, {
+          type: 'warning',
+          title: 'NICEENTECH 업데이트 오류',
+          message: '자동업데이트를 확인하는 중 문제가 발생했습니다.',
+          detail: message,
+          buttons: ['확인'],
+        })
+        .catch(() => {})
     }
-    dialog
-      .showMessageBox(mainWindow, {
-        type: 'warning',
-        title: 'NICEENTECH 업데이트 오류',
-        message: '자동업데이트를 확인하는 중 문제가 발생했습니다.',
-        detail: message,
-        buttons: ['확인'],
-      })
-      .catch(() => {})
   })
 
   setTimeout(() => {
@@ -263,6 +353,10 @@ function createMainWindow() {
 
   mainWindow.on('closed', () => {
     mainWindow = null
+  })
+
+  mainWindow.webContents.on('did-finish-load', () => {
+    broadcastUpdateState()
   })
 
   mainWindow.on('close', (event) => {
@@ -308,6 +402,17 @@ app.on('before-quit', () => {
     clearInterval(updateCheckTimer)
     updateCheckTimer = null
   }
+})
+
+ipcMain.handle('desktop:get-app-info', () => ({
+  version: app.getVersion(),
+  platform: process.platform,
+  isPackaged: app.isPackaged,
+  updateState,
+}))
+
+ipcMain.handle('desktop:check-for-updates', async () => {
+  return runUpdateCheck({ manual: true })
 })
 
 app.on('web-contents-created', (_, contents) => {
