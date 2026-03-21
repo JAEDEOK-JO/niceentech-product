@@ -3,7 +3,7 @@
   "description": "NICEENTECH desktop application",
   "author": "NICEENTECH",
   "private": true,
-  "version": "0.0.2",
+  "version": "0.0.3",
   "main": "electron/main.cjs",
   "type": "module",
   "repository": {
@@ -54,7 +54,8 @@
       {
         "provider": "github",
         "owner": "JAEDEOK-JO",
-        "repo": "niceentech-product"
+        "repo": "niceentech-product",
+        "releaseType": "release"
       }
     ],
     "extraMetadata": {
