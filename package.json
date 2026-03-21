@@ -3,7 +3,7 @@
   "description": "NICEENTECH desktop application",
   "author": "NICEENTECH",
   "private": true,
-  "version": "0.0.7",
+  "version": "0.0.8",
   "main": "electron/main.cjs",
   "type": "module",
   "repository": {
@@ -17,7 +17,7 @@
     "electron:dev": "wait-on tcp:5173 && electron .",
     "desktop:dev": "concurrently -k \"npm:dev\" \"npm:electron:dev\"",
     "desktop:build": "npm run build && electron-builder",
-    "desktop:publish": "npm run build && electron-builder"
+    "desktop:publish": "npm run build && electron-builder --publish never"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.97.0",
