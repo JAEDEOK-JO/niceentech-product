@@ -9,7 +9,7 @@ jobs:
   build-and-publish:
     runs-on: windows-latest
     permissions:
-      contents: read
+      contents: write
 
     steps:
       - name: Checkout
@@ -30,13 +30,22 @@ jobs:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
 
-      - name: Create public update release
+      - name: Create GitHub release
         env:
-          GH_TOKEN: ${{ secrets.PUBLIC_RELEASES_GH_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: pwsh
         run: |
           $version = "${{ github.ref_name }}".TrimStart('v')
           $exe = "release/NICEENTECH Setup $version.exe"
           $blockmap = "release/NICEENTECH Setup $version.exe.blockmap"
           $latest = "release/latest.yml"
-          gh release create "${{ github.ref_name }}" "$exe" "$blockmap" "$latest" --repo JAEDEOK-JO/niceentech-product-updates --title "${{ github.ref_name }}" --notes ""
+          $publishDir = "release/publish-assets"
+          New-Item -ItemType Directory -Force -Path $publishDir | Out-Null
+
+          $publishExe = Join-Path $publishDir "NICEENTECH-Setup-$version.exe"
+          $publishBlockmap = Join-Path $publishDir "NICEENTECH-Setup-$version.exe.blockmap"
+
+          Copy-Item $exe $publishExe -Force
+          Copy-Item $blockmap $publishBlockmap -Force
+
+          gh release create "${{ github.ref_name }}" "$publishExe" "$publishBlockmap" "$latest" --repo JAEDEOK-JO/niceentech-product --title "${{ github.ref_name }}" --notes ""
