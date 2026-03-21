@@ -8,6 +8,7 @@ import CompanyRegisterPage from '@/pages/CompanyRegisterPage.vue'
 import CompanyListPage from '@/pages/CompanyListPage.vue'
 import HomePage from '@/pages/HomePage.vue'
 import MyPage from '@/pages/MyPage.vue'
+import SettingsPage from '@/pages/SettingsPage.vue'
 import NotificationsPage from '@/pages/NotificationsPage.vue'
 import StatsPage from '@/pages/StatsPage.vue'
 import ManagementGuidePage from '@/pages/ManagementGuidePage.vue'
@@ -75,6 +76,12 @@ const routes = [
     path: '/mypage',
     name: 'mypage',
     component: MyPage,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/settings',
+    name: 'settings',
+    component: SettingsPage,
     meta: { requiresAuth: true },
   },
   {

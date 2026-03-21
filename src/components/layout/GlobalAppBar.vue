@@ -18,7 +18,7 @@ const profileSummary = computed(() => {
 
 const navItems = computed(() => {
   const items = [
-    { key: 'main', label: '생산계획표01', to: { name: 'main' } },
+    { key: 'main', label: '생산계획표', to: { name: 'main' } },
     { key: 'home', label: '생산진행표', to: { name: 'home' } },
     { key: 'reports', label: '보고서', to: { name: 'reports' } },
   ]
@@ -44,6 +44,10 @@ const goTo = (target) => {
 
 const goMyPage = () => {
   router.push({ name: 'mypage' })
+}
+
+const goSettings = () => {
+  router.push({ name: 'settings' })
 }
 </script>
 
@@ -76,13 +80,22 @@ const goMyPage = () => {
         </nav>
       </div>
 
-      <button
-        type="button"
-        class="max-w-[180px] truncate rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-900 hover:bg-slate-50 md:max-w-[260px]"
-        @click="goMyPage"
-      >
-        {{ profileSummary }}
-      </button>
+      <div class="flex shrink-0 items-center gap-2">
+        <button
+          type="button"
+          class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
+          @click="goSettings"
+        >
+          설정
+        </button>
+        <button
+          type="button"
+          class="max-w-[180px] truncate rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-900 hover:bg-slate-50 md:max-w-[260px]"
+          @click="goMyPage"
+        >
+          {{ profileSummary }}
+        </button>
+      </div>
     </div>
   </header>
 </template>
