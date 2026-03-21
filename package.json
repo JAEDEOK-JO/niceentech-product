@@ -1,21 +1,29 @@
 {
   "name": "niceentech_product",
+  "description": "NICEENTECH desktop application",
+  "author": "NICEENTECH",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.0.1",
   "main": "electron/main.cjs",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JAEDEOK-JO/niceentech-product.git"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
     "electron:dev": "wait-on tcp:5173 && electron .",
     "desktop:dev": "concurrently -k \"npm:dev\" \"npm:electron:dev\"",
-    "desktop:build": "npm run build && electron-builder"
+    "desktop:build": "npm run build && electron-builder",
+    "desktop:publish": "npm run build && electron-builder --publish always"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.97.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "electron-updater": "^6.8.3",
     "lucide-vue-next": "^0.575.0",
     "tailwind-merge": "^3.5.0",
     "vue": "^3.5.25",
@@ -41,6 +49,13 @@
       "dist/**/*",
       "electron/**/*",
       "package.json"
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "JAEDEOK-JO",
+        "repo": "niceentech-product"
+      }
     ],
     "extraMetadata": {
       "main": "electron/main.cjs"

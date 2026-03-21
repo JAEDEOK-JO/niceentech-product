@@ -34,18 +34,7 @@ VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 
 ## Electron 데스크톱 실행
 
-기존 Vue 코드를 그대로 사용하고, Electron으로 데스크톱 창만 추가한 구조입니다.
-
-### 운영 모드(온라인 최신 반영)
-
-Electron 패키지 앱은 `desktopRemoteUrl`로 지정된 웹 URL을 직접 엽니다.
-따라서 앱 재설치 없이 **재실행만으로 최신 배포본**이 반영됩니다.
-
-`package.json`에서 아래 값을 실제 배포 URL로 바꿔주세요.
-
-```json
-"desktopRemoteUrl": "https://your-vercel-url.vercel.app"
-```
+기존 Vue 코드를 그대로 사용하고, Electron으로 데스크톱 앱을 함께 빌드합니다.
 
 ### 개발 모드
 
@@ -63,3 +52,33 @@ npm run desktop:build
 
 - 웹 빌드(`dist`) 후 Electron 패키징을 진행합니다.
 - 결과물은 `release` 폴더에 생성됩니다.
+
+### 자동업데이트
+
+- 첫 설치만 `release/NICEENTECH Setup <version>.exe`로 진행합니다.
+- 이후에는 앱 실행 시 GitHub Releases의 최신 버전을 자동으로 확인합니다.
+- 새 버전이 있으면 백그라운드에서 다운로드하고, 재시작 시 설치됩니다.
+
+자동업데이트는 `electron-updater` + GitHub Releases 기준으로 설정되어 있습니다.
+
+#### 배포 방법
+
+1. `package.json`의 `version` 값을 올립니다.
+2. 커밋 후 태그를 생성합니다. 예: `v0.0.1`
+3. GitHub에 태그를 push 합니다.
+
+```bash
+git tag v0.0.1
+git push origin v0.0.1
+```
+
+그러면 `.github/workflows/desktop-release.yml` 워크플로가 실행되어 설치 파일과 업데이트 메타데이터를 GitHub Release에 업로드합니다.
+
+#### GitHub Secrets
+
+GitHub Actions에서 아래 Secrets가 필요합니다.
+
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
+
+`GH_TOKEN`은 워크플로 안에서 기본 `GITHUB_TOKEN`을 사용합니다.
