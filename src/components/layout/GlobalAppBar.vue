@@ -18,7 +18,7 @@ const profileSummary = computed(() => {
 
 const navItems = computed(() => {
   const items = [
-    { key: 'main', label: '생산계획표', to: { name: 'main' } },
+    { key: 'main', label: '생산계획표01', to: { name: 'main' } },
     { key: 'home', label: '생산진행표', to: { name: 'home' } },
     { key: 'reports', label: '보고서', to: { name: 'reports' } },
   ]
