@@ -1,5 +1,6 @@
 const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron')
 const { autoUpdater } = require('electron-updater')
+const fs = require('fs')
 const path = require('path')
 
 const isDev = !app.isPackaged
@@ -20,6 +21,17 @@ let updateState = {
 }
 
 const UPDATE_CHECK_INTERVAL_MS = 10 * 60 * 1000
+const updateLogFilePath = path.join(app.getPath('userData'), 'update.log')
+
+function appendUpdateLog(message) {
+  const line = `[${new Date().toISOString()}] ${message}\n`
+  try {
+    fs.mkdirSync(path.dirname(updateLogFilePath), { recursive: true })
+    fs.appendFileSync(updateLogFilePath, line, 'utf8')
+  } catch (error) {
+    console.error('Failed to write update log', error)
+  }
+}
 
 function broadcastUpdateState() {
   if (!mainWindow || mainWindow.isDestroyed()) return
@@ -32,6 +44,7 @@ function setUpdateState(partial) {
     ...partial,
     currentVersion: app.getVersion(),
   }
+  appendUpdateLog(`state=${updateState.phase} message=${updateState.message}${updateState.detail ? ` detail=${updateState.detail}` : ''}`)
   broadcastUpdateState()
   return updateState
 }
@@ -187,6 +200,7 @@ async function runUpdateCheck({ manual = false } = {}) {
   }
 
   isCheckingForUpdates = true
+  appendUpdateLog(`check:start manual=${manual}`)
   setUpdateState({
     phase: 'checking',
     message: manual ? '업데이트를 확인하는 중입니다.' : '백그라운드에서 업데이트를 확인하는 중입니다.',
@@ -197,9 +211,11 @@ async function runUpdateCheck({ manual = false } = {}) {
 
   try {
     await autoUpdater.checkForUpdates()
+    appendUpdateLog(`check:requested manual=${manual}`)
     return updateState
   } catch (error) {
     const message = String(error?.message ?? error ?? '알 수 없는 오류')
+    appendUpdateLog(`check:error manual=${manual} message=${message}`)
     setUpdateState({
       phase: 'error',
       message: '업데이트 확인에 실패했습니다.',
@@ -230,8 +246,10 @@ function configureAutoUpdater() {
 
   autoUpdater.autoDownload = true
   autoUpdater.autoInstallOnAppQuit = false
+  appendUpdateLog(`updater:configure version=${app.getVersion()}`)
 
   autoUpdater.on('update-available', (info) => {
+    appendUpdateLog(`updater:available version=${String(info?.version ?? '')}`)
     setUpdateState({
       phase: 'available',
       message: '새 버전을 찾았습니다.',
@@ -247,6 +265,7 @@ function configureAutoUpdater() {
 
   autoUpdater.on('download-progress', (progress) => {
     const percent = Number.isFinite(progress?.percent) ? Math.max(0, Math.min(100, progress.percent)) : 0
+    appendUpdateLog(`updater:downloading percent=${percent.toFixed(1)}`)
     setUpdateState({
       phase: 'downloading',
       message: '업데이트 파일을 다운로드하는 중입니다.',
@@ -261,6 +280,7 @@ function configureAutoUpdater() {
 
   autoUpdater.on('update-downloaded', () => {
     installingUpdate = true
+    appendUpdateLog('updater:downloaded')
     setUpdateState({
       phase: 'downloaded',
       message: '업데이트 다운로드가 완료되었습니다.',
@@ -279,6 +299,7 @@ function configureAutoUpdater() {
 
   autoUpdater.on('update-not-available', () => {
     hideUpdateLockWindow()
+    appendUpdateLog('updater:not-available')
     setUpdateState({
       phase: 'up-to-date',
       message: '현재 최신 버전을 사용 중입니다.',
@@ -290,6 +311,7 @@ function configureAutoUpdater() {
 
   autoUpdater.on('error', (error) => {
     const message = String(error?.message ?? error ?? '알 수 없는 오류')
+    appendUpdateLog(`updater:error message=${message}`)
     setUpdateState({
       phase: 'error',
       message: '업데이트 처리 중 오류가 발생했습니다.',
@@ -381,6 +403,7 @@ function createMainWindow() {
 }
 
 app.whenReady().then(() => {
+  appendUpdateLog(`app:ready version=${app.getVersion()} packaged=${app.isPackaged}`)
   createMainWindow()
   configureAutoUpdater()
 
@@ -407,7 +430,9 @@ app.on('before-quit', () => {
 ipcMain.handle('desktop:get-app-info', () => ({
   version: app.getVersion(),
   platform: process.platform,
+  arch: process.arch,
   isPackaged: app.isPackaged,
+  updateLogFilePath,
   updateState,
 }))
 

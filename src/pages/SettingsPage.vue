@@ -4,7 +4,7 @@ import packageJson from '../../package.json'
 
 const fallbackVersion = packageJson.version
 const appVersion = ref(fallbackVersion)
-const runtimePlatform = ref(window.desktop?.platform ?? 'web')
+const updateLogFilePath = ref('-')
 const updateState = ref({
   phase: 'idle',
   message: '업데이트 대기 중',
@@ -30,7 +30,7 @@ const syncAppInfo = async () => {
   try {
     const info = await window.desktop.getAppInfo()
     appVersion.value = info?.version ?? fallbackVersion
-    runtimePlatform.value = info?.platform ?? runtimePlatform.value
+    updateLogFilePath.value = info?.updateLogFilePath ?? '-'
     if (info?.updateState) {
       updateState.value = info.updateState
     }
@@ -85,15 +85,10 @@ onBeforeUnmount(() => {
       </section>
 
       <section class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div class="grid gap-3 sm:grid-cols-2">
+        <div class="grid gap-3">
           <article class="rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4">
             <p class="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">앱 버전</p>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ appVersion }}</p>
-          </article>
-
-          <article class="rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4">
-            <p class="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">실행 환경</p>
-            <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ runtimePlatform }}</p>
           </article>
         </div>
       </section>
@@ -137,6 +132,11 @@ onBeforeUnmount(() => {
             class="rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm font-medium text-rose-700"
           >
             {{ updateState.error }}
+          </div>
+
+          <div class="rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-sm text-slate-700">
+            <p class="font-bold text-slate-900">업데이트 로그 파일</p>
+            <p class="mt-2 break-all">{{ updateLogFilePath }}</p>
           </div>
 
           <div

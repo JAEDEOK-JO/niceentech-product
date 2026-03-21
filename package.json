@@ -3,7 +3,7 @@
   "description": "NICEENTECH desktop application",
   "author": "NICEENTECH",
   "private": true,
-  "version": "0.0.5",
+  "version": "0.0.6",
   "main": "electron/main.cjs",
   "type": "module",
   "repository": {
