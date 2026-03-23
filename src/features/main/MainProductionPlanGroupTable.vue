@@ -16,7 +16,7 @@ defineProps({
   overallTotals: { type: Object, required: true },
 })
 
-const clickableColumns = ['initial', 'design_distributed', 'name', 'company', 'place', 'area', 'head', 'drawing']
+const clickableColumns = ['initial', 'design_distributed', 'name', 'company', 'place', 'area', 'drawing']
 const tableBorderStyle = {
   borderColor: 'rgba(0, 0, 0, 0.28)',
   borderWidth: '0.1px',
@@ -51,7 +51,14 @@ const emit = defineEmits(['open-row-menu', 'cell-click'])
             <p class="text-xs text-slate-600">{{ row.area || '-' }}</p>
           </div>
           <div class="text-right text-xs font-semibold text-slate-600">
-            <p>담당 {{ row.name || '-' }}</p>
+            <p>
+              <span
+                class="inline-flex items-center rounded-full px-2 py-0.5"
+                :class="row.calculation ? 'bg-lime-100 text-lime-900' : 'bg-transparent text-slate-600'"
+              >
+                담당 {{ row.name || '-' }}
+              </span>
+            </p>
             <p>설계배포 {{ getCellText(row, 'design_distributed') }}</p>
             <p>도착 {{ getCellText(row, 'delivery_due_date') || '-' }}</p>
           </div>
@@ -68,10 +75,7 @@ const emit = defineEmits(['open-row-menu', 'cell-click'])
           </div>
         </div>
         <div class="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-slate-700">
-          <p
-            class="inline-flex items-center rounded-full px-2.5 py-1 font-semibold whitespace-nowrap"
-            :class="row.calculation ? 'bg-lime-100 text-lime-800' : 'bg-slate-100'"
-          >
+          <p class="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 font-semibold whitespace-nowrap">
             헤드 {{ getCellText(row, 'head') || '' }}
           </p>
           <p class="inline-flex items-center rounded-full bg-sky-50 px-2.5 py-1 font-semibold text-sky-700 whitespace-nowrap">

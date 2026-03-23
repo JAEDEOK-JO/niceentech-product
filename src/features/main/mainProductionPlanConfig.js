@@ -157,10 +157,10 @@ export const getBodyCellClass = (row, column) => {
     } else {
       classes.push(statusClass(getStatusTone(row, column.key, getCellText(row, column.key))))
     }
-  } else if (column.key === 'head' && Boolean(row?.calculation)) {
+  } else if (column.key === 'name' && Boolean(row?.calculation)) {
     classes.push('bg-lime-100')
-  } else if (column.key === 'name' && Boolean(row?.paper)) {
-    classes.push('bg-lime-200')
+  } else if (column.key === 'company' && String(row?.drawing_date ?? '').trim()) {
+    classes.push('bg-slate-100')
   } else if (column.key === 'design_distributed' && Boolean(row?.ahn)) {
     classes.push('bg-blue-300')
   } else if (column.key === 'initial' && Boolean(row?.stamp)) {

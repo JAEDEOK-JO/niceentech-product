@@ -68,6 +68,13 @@ const drawingDeletingId = ref(null)
 const suppressDrawingClickId = ref(null)
 let drawingLongPressTimer = null
 const DRAWING_LONG_PRESS_MS = 700
+const headerLegendBadges = [
+  { label: '증지만듦', className: 'border-yellow-300 bg-yellow-200 text-yellow-900' },
+  { label: '배포확인', className: 'border-blue-300 bg-blue-300 text-blue-950' },
+  { label: '산출완료', className: 'border-lime-200 bg-lime-100 text-lime-900' },
+  { label: '도면배포', className: 'border-slate-300 bg-slate-100 text-slate-700' },
+  { label: '보류', className: 'border-orange-200 bg-orange-100 text-orange-900' },
+]
 
 const formatKoreanDateLabel = (value) => {
   const parsed = parseIsoDate(value)
@@ -408,13 +415,24 @@ const selectDrawingFile = (file) => {
   <section class="min-h-screen bg-white">
     <main class="w-full px-4 pb-5 md:px-6 md:pb-8">
       <div class="print-title-bar sticky top-[72px] z-20 -mx-4 border-b border-slate-200 bg-white px-4 py-2 md:-mx-6 md:px-6">
-        <div class="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
-          <div>
-          
-            <h1 class="text-lg font-extrabold text-slate-900 md:text-xl">{{ pageTitle }}</h1>
+      <div class="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between xl:gap-4">
+          <div class="min-w-0">
+            <div class="flex flex-col gap-2 xl:flex-row xl:items-center xl:gap-3">
+              <h1 class="shrink-0 text-lg font-extrabold text-slate-900 md:text-xl">{{ pageTitle }}</h1>
+              <div class="flex flex-wrap items-center gap-1.5">
+                <span
+                  v-for="badge in headerLegendBadges"
+                  :key="badge.label"
+                  class="inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold whitespace-nowrap"
+                  :class="badge.className"
+                >
+                  {{ badge.label }}
+                </span>
+              </div>
+            </div>
           </div>
-          <div class="print-hide flex flex-col gap-2 xl:items-end">
-            <div class="flex flex-wrap items-center gap-2">
+          <div class="print-hide flex flex-col gap-2 xl:min-w-[520px] xl:flex-row xl:items-center xl:justify-end">
+            <div class="flex flex-wrap items-center gap-2 xl:justify-end">
               <Button class="h-8 px-3 text-xs md:text-sm" variant="outline" @click="emit('move-week', -1)">지난주</Button>
               <Button class="h-8 px-3 text-xs md:text-sm" variant="outline" :disabled="weekOffset === 0" @click="emit('reset-week')">
                 이번주
@@ -435,7 +453,8 @@ const selectDrawingFile = (file) => {
                   <path d="M3 10h18" />
                 </svg>
               </button>
-              <div class="relative min-w-[220px] flex-1 xl:w-[320px] xl:flex-none">
+            </div>
+            <div class="relative min-w-[220px] flex-1 xl:w-[320px] xl:flex-none">
                 <svg viewBox="0 0 24 24" class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 fill-none stroke-slate-400" stroke-width="2">
                   <circle cx="11" cy="11" r="7" />
                   <path d="m20 20-3.5-3.5" />
@@ -447,7 +466,6 @@ const selectDrawingFile = (file) => {
                   @update:model-value="handleSearchInput"
                   @keydown.enter="submitSearch"
                 />
-              </div>
             </div>
           </div>
         </div>
