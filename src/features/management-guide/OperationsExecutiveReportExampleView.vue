@@ -8,7 +8,9 @@ const COMPANY_LIST_TABLE = 'company_list'
 const METRIC_DEFINITIONS_TABLE = 'department_metric_definitions'
 const METRIC_ENTRIES_TABLE = 'department_metric_entries'
 const DEPARTMENT_CODE = 'operations'
-const PERIOD_TYPE = 'monthly'
+const INVENTORY_PERIOD_TYPE = 'weekly'
+const LEGACY_INVENTORY_PERIOD_TYPE = 'monthly'
+const ISSUE_PERIOD_TYPE = 'monthly'
 const METRIC_KEYS = {
   received: 'monthly_received_ton',
   used: 'monthly_used_ton',
@@ -68,6 +70,32 @@ const formatMonthValue = (date) => `${date.getFullYear()}-${String(date.getMonth
 const formatMonthEndValue = (date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate()).padStart(2, '0')}`
 const formatMonthTitle = (date) => `${date.getFullYear()}년 ${String(date.getMonth() + 1).padStart(2, '0')}월`
+const formatWeekRangeLabel = (startDate, endDate) => {
+  const [, startMonth, startDay] = String(startDate ?? '').split('-')
+  const [, endMonth, endDay] = String(endDate ?? '').split('-')
+  if (!startMonth || !startDay || !endMonth || !endDay) return ''
+  return `${Number(startMonth)}.${Number(startDay)} ~ ${Number(endMonth)}.${Number(endDay)}`
+}
+const getInventoryWeeks = (date) => {
+  const year = date.getFullYear()
+  const month = date.getMonth()
+  const lastDay = new Date(year, month + 1, 0).getDate()
+  const weeks = []
+
+  for (let startDay = 1, index = 0; startDay <= lastDay; startDay += 7, index += 1) {
+    const endDay = Math.min(startDay + 6, lastDay)
+    const startDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(startDay).padStart(2, '0')}`
+    const endDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(endDay).padStart(2, '0')}`
+    weeks.push({
+      label: `${index + 1}주차`,
+      startDate,
+      endDate,
+      rangeLabel: formatWeekRangeLabel(startDate, endDate),
+    })
+  }
+
+  return weeks
+}
 const formatShortDate = (value) => {
   const raw = normalizeText(value)
   const matched = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/)
@@ -80,13 +108,22 @@ const issueTypeLabelMap = {
 }
 
 const operationsMetricDefinitions = [
-  { metric_key: METRIC_KEYS.received, label: '월 입고', value_type: 'number', unit: '톤', sort_order: 1, is_active: true },
-  { metric_key: METRIC_KEYS.used, label: '월 사용', value_type: 'number', unit: '톤', sort_order: 2, is_active: true },
-  { metric_key: METRIC_KEYS.balance, label: '총 잔고', value_type: 'number', unit: '톤', sort_order: 3, is_active: true },
+  { metric_key: METRIC_KEYS.received, label: '주간 입고', value_type: 'number', unit: '톤', sort_order: 1, is_active: true },
+  { metric_key: METRIC_KEYS.used, label: '주간 사용', value_type: 'number', unit: '톤', sort_order: 2, is_active: true },
+  { metric_key: METRIC_KEYS.balance, label: '주간 잔고', value_type: 'number', unit: '톤', sort_order: 3, is_active: true },
   { metric_key: METRIC_KEYS.issueEntries, label: '월 이슈 목록', value_type: 'text', unit: '', sort_order: 4, is_active: true },
 ]
 
 const createDefaultInventoryForm = () => ({
+  received: '0',
+  used: '0',
+  balance: '0',
+})
+const createInventoryWeekForm = (week) => ({
+  weekStartDate: week.startDate,
+  weekEndDate: week.endDate,
+  weekLabel: week.label,
+  weekRangeLabel: week.rangeLabel,
   received: '0',
   used: '0',
   balance: '0',
@@ -136,7 +173,7 @@ const normalizeIssueEntry = (row, index = 0) => ({
 })
 
 const inventoryForm = ref(createDefaultInventoryForm())
-const inventoryDraft = ref(createDefaultInventoryForm())
+const inventoryDraftWeeks = ref([])
 const issueEntries = ref([])
 const issueForm = ref(createDefaultIssueForm())
 
@@ -147,6 +184,7 @@ const selectedInventoryMonthValue = computed(() => formatMonthValue(selectedInve
 const selectedInventoryMonthEndValue = computed(() => formatMonthEndValue(selectedInventoryMonth.value))
 const selectedInventoryMonthLabel = computed(() => formatMonthTitle(selectedInventoryMonth.value))
 const isCurrentInventoryMonth = computed(() => selectedInventoryMonthValue.value === reportMonthValue)
+const selectedInventoryWeeks = computed(() => getInventoryWeeks(selectedInventoryMonth.value))
 
 const ensureOperationsMetricDefinitions = async () => {
   const { error } = await supabase.from(METRIC_DEFINITIONS_TABLE).upsert(
@@ -165,19 +203,33 @@ const fetchMetricEntries = async () => {
     .from(METRIC_ENTRIES_TABLE)
     .select('metric_key,numeric_value,text_value')
     .eq('department_code', DEPARTMENT_CODE)
-    .eq('period_type', PERIOD_TYPE)
+    .eq('period_type', ISSUE_PERIOD_TYPE)
     .eq('period_start_date', reportMonthValue)
 
   if (error) throw new Error(error.message ?? '공무부 데이터를 불러오지 못했습니다.')
   return data ?? []
 }
 
-const fetchInventoryEntriesByMonth = async (monthValue) => {
+const fetchWeeklyInventoryEntriesByMonth = async (monthValue, monthEndValue) => {
+  const { data, error } = await supabase
+    .from(METRIC_ENTRIES_TABLE)
+    .select('metric_key,numeric_value,period_start_date,period_end_date')
+    .eq('department_code', DEPARTMENT_CODE)
+    .eq('period_type', INVENTORY_PERIOD_TYPE)
+    .gte('period_start_date', monthValue)
+    .lte('period_start_date', monthEndValue)
+    .in('metric_key', [METRIC_KEYS.received, METRIC_KEYS.used, METRIC_KEYS.balance])
+
+  if (error) throw new Error(error.message ?? '공무부 수치 데이터를 불러오지 못했습니다.')
+  return data ?? []
+}
+
+const fetchLegacyInventoryEntriesByMonth = async (monthValue) => {
   const { data, error } = await supabase
     .from(METRIC_ENTRIES_TABLE)
     .select('metric_key,numeric_value')
     .eq('department_code', DEPARTMENT_CODE)
-    .eq('period_type', PERIOD_TYPE)
+    .eq('period_type', LEGACY_INVENTORY_PERIOD_TYPE)
     .eq('period_start_date', monthValue)
     .in('metric_key', [METRIC_KEYS.received, METRIC_KEYS.used, METRIC_KEYS.balance])
 
@@ -190,26 +242,82 @@ const fetchAllBalanceEntries = async () => {
     .from(METRIC_ENTRIES_TABLE)
     .select('numeric_value')
     .eq('department_code', DEPARTMENT_CODE)
-    .eq('period_type', PERIOD_TYPE)
     .eq('metric_key', METRIC_KEYS.balance)
+    .in('period_type', [INVENTORY_PERIOD_TYPE, LEGACY_INVENTORY_PERIOD_TYPE])
 
   if (error) throw new Error(error.message ?? '공무부 잔고 데이터를 불러오지 못했습니다.')
   return data ?? []
 }
+
+const sumInventoryRows = (rows) =>
+  rows.reduce(
+    (accumulator, row) => {
+      const metricKey = normalizeText(row?.metric_key)
+      if (metricKey === METRIC_KEYS.received) accumulator.received += toNumber(row?.numeric_value)
+      if (metricKey === METRIC_KEYS.used) accumulator.used += toNumber(row?.numeric_value)
+      if (metricKey === METRIC_KEYS.balance) accumulator.balance += toNumber(row?.numeric_value)
+      return accumulator
+    },
+    { received: 0, used: 0, balance: 0 },
+  )
+
+const buildInventoryDraftWeeks = ({ monthDate, weeklyRows, legacyRows }) => {
+  const weeks = getInventoryWeeks(monthDate)
+  const weeklyEntryMap = new Map(
+    weeklyRows.map((row) => [`${normalizeText(row?.period_start_date)}:${normalizeText(row?.metric_key)}`, row]),
+  )
+  const legacyEntryMap = Object.fromEntries(legacyRows.map((row) => [normalizeText(row?.metric_key), row]))
+  const hasWeeklyRows = weeklyRows.length > 0
+
+  return weeks.map((week, index) => {
+    const form = createInventoryWeekForm(week)
+
+    if (hasWeeklyRows) {
+      form.received = String(toNumber(weeklyEntryMap.get(`${week.startDate}:${METRIC_KEYS.received}`)?.numeric_value))
+      form.used = String(toNumber(weeklyEntryMap.get(`${week.startDate}:${METRIC_KEYS.used}`)?.numeric_value))
+      form.balance = String(toNumber(weeklyEntryMap.get(`${week.startDate}:${METRIC_KEYS.balance}`)?.numeric_value))
+      return form
+    }
+
+    if (index === 0 && legacyRows.length > 0) {
+      form.received = String(toNumber(legacyEntryMap[METRIC_KEYS.received]?.numeric_value))
+      form.used = String(toNumber(legacyEntryMap[METRIC_KEYS.used]?.numeric_value))
+      form.balance = String(toNumber(legacyEntryMap[METRIC_KEYS.balance]?.numeric_value))
+    }
+
+    return form
+  })
+}
+
+const sumInventoryDraftWeeks = (rows) =>
+  rows.reduce(
+    (accumulator, row) => ({
+      received: accumulator.received + toNumber(row?.received),
+      used: accumulator.used + toNumber(row?.used),
+      balance: accumulator.balance + toNumber(row?.balance),
+    }),
+    { received: 0, used: 0, balance: 0 },
+  )
 
 const fetchReportData = async () => {
   loading.value = true
   errorMessage.value = ''
 
   try {
-    const [rows, balanceRows] = await Promise.all([fetchMetricEntries(), fetchAllBalanceEntries()])
+    const [rows, weeklyInventoryRows, legacyInventoryRows, balanceRows] = await Promise.all([
+      fetchMetricEntries(),
+      fetchWeeklyInventoryEntriesByMonth(reportMonthValue, reportMonthEndValue),
+      fetchLegacyInventoryEntriesByMonth(reportMonthValue),
+      fetchAllBalanceEntries(),
+    ])
     const entryMap = Object.fromEntries(rows.map((row) => [String(row.metric_key ?? '').trim(), row]))
     totalBalanceSum.value = balanceRows.reduce((sum, row) => sum + toNumber(row?.numeric_value), 0)
+    const inventoryTotals = weeklyInventoryRows.length > 0 ? sumInventoryRows(weeklyInventoryRows) : sumInventoryRows(legacyInventoryRows)
 
     inventoryForm.value = {
-      received: String(toNumber(entryMap[METRIC_KEYS.received]?.numeric_value)),
-      used: String(toNumber(entryMap[METRIC_KEYS.used]?.numeric_value)),
-      balance: String(toNumber(entryMap[METRIC_KEYS.balance]?.numeric_value)),
+      received: String(inventoryTotals.received),
+      used: String(inventoryTotals.used),
+      balance: String(inventoryTotals.balance),
     }
 
     const rawIssueJson = normalizeText(entryMap[METRIC_KEYS.issueEntries]?.text_value)
@@ -226,6 +334,7 @@ const fetchReportData = async () => {
   } catch (error) {
     errorMessage.value = error?.message ?? '공무부 데이터를 불러오지 못했습니다.'
     inventoryForm.value = createDefaultInventoryForm()
+    inventoryDraftWeeks.value = []
     issueEntries.value = []
     totalBalanceSum.value = 0
   } finally {
@@ -371,12 +480,13 @@ const upsertMetricEntry = async ({
   createdBy = null,
   periodStartDate = reportMonthValue,
   periodEndDate = reportMonthEndValue,
+  periodType = INVENTORY_PERIOD_TYPE,
 }) => {
   const { error } = await supabase.from(METRIC_ENTRIES_TABLE).upsert(
     {
       department_code: DEPARTMENT_CODE,
       metric_key: metricKey,
-      period_type: PERIOD_TYPE,
+      period_type: periodType,
       period_start_date: periodStartDate,
       period_end_date: periodEndDate,
       numeric_value: numericValue,
@@ -398,6 +508,9 @@ const saveIssueEntries = async (nextEntries, createdBy = null) => {
     numericValue: null,
     textValue: JSON.stringify(nextEntries),
     createdBy,
+    periodType: ISSUE_PERIOD_TYPE,
+    periodStartDate: reportMonthValue,
+    periodEndDate: reportMonthEndValue,
   })
   issueEntries.value = sortIssueEntries(nextEntries)
 }
@@ -405,7 +518,7 @@ const saveIssueEntries = async (nextEntries, createdBy = null) => {
 const openInventoryDialog = async () => {
   inventoryError.value = ''
   selectedInventoryMonth.value = new Date(reportYear, reportMonth - 1, 1)
-  inventoryDraft.value = { ...inventoryForm.value }
+  inventoryDraftWeeks.value = selectedInventoryWeeks.value.map(createInventoryWeekForm)
   isInventoryDialogOpen.value = true
   await loadInventoryDialogMonth()
 }
@@ -413,7 +526,7 @@ const openInventoryDialog = async () => {
 const closeInventoryDialog = () => {
   if (savingInventory.value) return
   inventoryError.value = ''
-  inventoryDraft.value = { ...inventoryForm.value }
+  inventoryDraftWeeks.value = selectedInventoryWeeks.value.map(createInventoryWeekForm)
   isInventoryDialogOpen.value = false
 }
 
@@ -421,16 +534,18 @@ const loadInventoryDialogMonth = async () => {
   inventoryError.value = ''
 
   try {
-    const rows = await fetchInventoryEntriesByMonth(selectedInventoryMonthValue.value)
-    const entryMap = Object.fromEntries(rows.map((row) => [String(row.metric_key ?? '').trim(), row]))
-    inventoryDraft.value = {
-      received: String(toNumber(entryMap[METRIC_KEYS.received]?.numeric_value)),
-      used: String(toNumber(entryMap[METRIC_KEYS.used]?.numeric_value)),
-      balance: String(toNumber(entryMap[METRIC_KEYS.balance]?.numeric_value)),
-    }
+    const [weeklyRows, legacyRows] = await Promise.all([
+      fetchWeeklyInventoryEntriesByMonth(selectedInventoryMonthValue.value, selectedInventoryMonthEndValue.value),
+      fetchLegacyInventoryEntriesByMonth(selectedInventoryMonthValue.value),
+    ])
+    inventoryDraftWeeks.value = buildInventoryDraftWeeks({
+      monthDate: selectedInventoryMonth.value,
+      weeklyRows,
+      legacyRows,
+    })
   } catch (error) {
     inventoryError.value = error?.message ?? '공무부 수치 데이터를 불러오지 못했습니다.'
-    inventoryDraft.value = createDefaultInventoryForm()
+    inventoryDraftWeeks.value = selectedInventoryWeeks.value.map(createInventoryWeekForm)
   }
 }
 
@@ -453,31 +568,43 @@ const saveInventory = async () => {
     const { data: sessionData } = await supabase.auth.getSession()
     const createdBy = sessionData.session?.user?.id ?? null
 
-    await Promise.all([
-      upsertMetricEntry({
-        metricKey: METRIC_KEYS.received,
-        numericValue: toNumber(inventoryDraft.value.received),
-        createdBy,
-        periodStartDate: selectedInventoryMonthValue.value,
-        periodEndDate: selectedInventoryMonthEndValue.value,
-      }),
-      upsertMetricEntry({
-        metricKey: METRIC_KEYS.used,
-        numericValue: toNumber(inventoryDraft.value.used),
-        createdBy,
-        periodStartDate: selectedInventoryMonthValue.value,
-        periodEndDate: selectedInventoryMonthEndValue.value,
-      }),
-      upsertMetricEntry({
-        metricKey: METRIC_KEYS.balance,
-        numericValue: toNumber(inventoryDraft.value.balance),
-        createdBy,
-        periodStartDate: selectedInventoryMonthValue.value,
-        periodEndDate: selectedInventoryMonthEndValue.value,
-      }),
-    ])
+    await Promise.all(
+      inventoryDraftWeeks.value.flatMap((week) => [
+        upsertMetricEntry({
+          metricKey: METRIC_KEYS.received,
+          numericValue: toNumber(week.received),
+          createdBy,
+          periodStartDate: week.weekStartDate,
+          periodEndDate: week.weekEndDate,
+          periodType: INVENTORY_PERIOD_TYPE,
+        }),
+        upsertMetricEntry({
+          metricKey: METRIC_KEYS.used,
+          numericValue: toNumber(week.used),
+          createdBy,
+          periodStartDate: week.weekStartDate,
+          periodEndDate: week.weekEndDate,
+          periodType: INVENTORY_PERIOD_TYPE,
+        }),
+        upsertMetricEntry({
+          metricKey: METRIC_KEYS.balance,
+          numericValue: toNumber(week.balance),
+          createdBy,
+          periodStartDate: week.weekStartDate,
+          periodEndDate: week.weekEndDate,
+          periodType: INVENTORY_PERIOD_TYPE,
+        }),
+      ]),
+    )
 
-    if (selectedInventoryMonthValue.value === reportMonthValue) inventoryForm.value = { ...inventoryDraft.value }
+    if (selectedInventoryMonthValue.value === reportMonthValue) {
+      const totals = sumInventoryDraftWeeks(inventoryDraftWeeks.value)
+      inventoryForm.value = {
+        received: String(totals.received),
+        used: String(totals.used),
+        balance: String(totals.balance),
+      }
+    }
     closeInventoryDialog()
   } catch (error) {
     inventoryError.value = error?.message ?? '공무 수치 저장에 실패했습니다.'
@@ -863,49 +990,64 @@ onMounted(fetchReportData)
           </div>
           <button type="button" class="text-sm font-semibold text-slate-500 hover:text-slate-700" :disabled="savingInventory" @click="closeInventoryDialog">닫기</button>
         </div>
-        <div class="mt-5 grid gap-4 md:grid-cols-3">
-          <label class="block">
-            <p class="mb-2 text-sm font-bold text-slate-700">{{ reportMonthLabel }} 입고</p>
-            <div class="flex items-center gap-2">
-              <input
-                :value="inventoryDraft.received"
-                type="text"
-                inputmode="decimal"
-                class="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-right text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
-                placeholder="0"
-                @input="inventoryDraft.received = sanitizeDecimalInput($event.target.value)"
-              />
-              <span class="shrink-0 text-xs font-semibold text-slate-500">톤</span>
-            </div>
-          </label>
-          <label class="block">
-            <p class="mb-2 text-sm font-bold text-slate-700">{{ reportMonthLabel }} 사용</p>
-            <div class="flex items-center gap-2">
-              <input
-                :value="inventoryDraft.used"
-                type="text"
-                inputmode="decimal"
-                class="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-right text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
-                placeholder="0"
-                @input="inventoryDraft.used = sanitizeDecimalInput($event.target.value)"
-              />
-              <span class="shrink-0 text-xs font-semibold text-slate-500">톤</span>
-            </div>
-          </label>
-          <label class="block">
-            <p class="mb-2 text-sm font-bold text-slate-700">총 잔고</p>
-            <div class="flex items-center gap-2">
-              <input
-                :value="inventoryDraft.balance"
-                type="text"
-                inputmode="decimal"
-                class="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-right text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
-                placeholder="0"
-                @input="inventoryDraft.balance = sanitizeDecimalInput($event.target.value)"
-              />
-              <span class="shrink-0 text-xs font-semibold text-slate-500">톤</span>
-            </div>
-          </label>
+        <div class="mt-4 overflow-x-auto">
+          <table class="min-w-full border-separate border-spacing-0 text-sm">
+            <thead>
+              <tr class="bg-slate-50 text-slate-600">
+                <th class="border border-slate-200 px-3 py-2 text-center">주차</th>
+                <th class="border border-slate-200 px-3 py-2 text-center">입고</th>
+                <th class="border border-slate-200 px-3 py-2 text-center">사용</th>
+                <th class="border border-slate-200 px-3 py-2 text-center">잔고</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="week in inventoryDraftWeeks" :key="week.weekStartDate" class="bg-white">
+                <td class="border border-slate-200 px-3 py-2 text-center font-semibold text-slate-900">
+                  {{ selectedInventoryMonthLabel }} {{ week.weekLabel }}
+                  <p class="mt-1 text-[11px] font-medium text-slate-500">{{ week.weekRangeLabel }}</p>
+                </td>
+                <td class="border border-slate-200 px-3 py-2">
+                  <div class="flex items-center gap-2">
+                    <input
+                      :value="week.received"
+                      type="text"
+                      inputmode="decimal"
+                      class="flex h-10 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-right text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                      placeholder="0"
+                      @input="week.received = sanitizeDecimalInput($event.target.value)"
+                    />
+                    <span class="shrink-0 text-xs font-semibold text-slate-500">톤</span>
+                  </div>
+                </td>
+                <td class="border border-slate-200 px-3 py-2">
+                  <div class="flex items-center gap-2">
+                    <input
+                      :value="week.used"
+                      type="text"
+                      inputmode="decimal"
+                      class="flex h-10 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-right text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                      placeholder="0"
+                      @input="week.used = sanitizeDecimalInput($event.target.value)"
+                    />
+                    <span class="shrink-0 text-xs font-semibold text-slate-500">톤</span>
+                  </div>
+                </td>
+                <td class="border border-slate-200 px-3 py-2">
+                  <div class="flex items-center gap-2">
+                    <input
+                      :value="week.balance"
+                      type="text"
+                      inputmode="decimal"
+                      class="flex h-10 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-right text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                      placeholder="0"
+                      @input="week.balance = sanitizeDecimalInput($event.target.value)"
+                    />
+                    <span class="shrink-0 text-xs font-semibold text-slate-500">톤</span>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
         <p v-if="inventoryError" class="mt-4 text-sm font-bold text-red-600">{{ inventoryError }}</p>
         <div class="mt-5 flex justify-end gap-2">

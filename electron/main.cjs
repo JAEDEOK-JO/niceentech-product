@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, powerMonitor, shell } = require('electron')
+const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron')
 const { autoUpdater } = require('electron-updater')
 const fs = require('fs')
 const path = require('path')
@@ -9,8 +9,8 @@ let updateLockWindow = null
 let forceUpdateActive = false
 let installingUpdate = false
 let isCheckingForUpdates = false
-let updateCheckTimer = null
-let lastUpdateCheckStartedAt = 0
+let pendingTargetVersion = ''
+let shouldDownloadOnNextAvailable = false
 let updateState = {
   phase: 'idle',
   message: '업데이트 대기 중',
@@ -22,9 +22,13 @@ let updateState = {
   error: '',
 }
 
-const UPDATE_CHECK_INTERVAL_MS = 60 * 1000
-const UPDATE_CHECK_COOLDOWN_MS = 15 * 1000
 const updateLogFilePath = path.join(app.getPath('userData'), 'update.log')
+
+function normalizeVersion(value) {
+  const raw = String(value ?? '').trim()
+  const matched = raw.match(/^v?(\d+\.\d+\.\d+)$/)
+  return matched ? matched[1] : ''
+}
 
 function appendUpdateLog(message) {
   const line = `[${new Date().toISOString()}] ${message}\n`
@@ -224,7 +228,7 @@ function hideUpdateLockWindow() {
   updateLockWindow = null
 }
 
-async function runUpdateCheck({ manual = false } = {}) {
+async function runUpdateCheck({ manual = false, startDownload = false, targetVersion = '' } = {}) {
   if (isDev) {
     return setUpdateState({
       phase: 'unsupported',
@@ -242,17 +246,13 @@ async function runUpdateCheck({ manual = false } = {}) {
     return updateState
   }
 
-  const now = Date.now()
-  if (!manual && now - lastUpdateCheckStartedAt < UPDATE_CHECK_COOLDOWN_MS) {
-    return updateState
-  }
-
   isCheckingForUpdates = true
-  lastUpdateCheckStartedAt = now
+  pendingTargetVersion = normalizeVersion(targetVersion)
+  shouldDownloadOnNextAvailable = Boolean(startDownload)
   appendUpdateLog(`check:start manual=${manual}`)
   setUpdateState({
     phase: 'checking',
-    message: manual ? '업데이트를 확인하는 중입니다.' : '백그라운드에서 업데이트를 확인하는 중입니다.',
+    message: startDownload ? '업데이트 릴리즈를 확인하는 중입니다.' : '업데이트를 확인하는 중입니다.',
     detail: '',
     progressPercent: 0,
     error: '',
@@ -295,24 +295,55 @@ async function runUpdateCheck({ manual = false } = {}) {
 function configureAutoUpdater() {
   if (isDev) return
 
-  autoUpdater.autoDownload = true
+  autoUpdater.autoDownload = false
   autoUpdater.autoInstallOnAppQuit = false
   appendUpdateLog(`updater:configure version=${app.getVersion()}`)
 
   autoUpdater.on('update-available', (info) => {
-    appendUpdateLog(`updater:available version=${String(info?.version ?? '')}`)
+    const nextVersion = normalizeVersion(info?.version) || String(info?.version ?? '')
+    appendUpdateLog(`updater:available version=${nextVersion}`)
+
+    if (pendingTargetVersion && nextVersion && pendingTargetVersion !== nextVersion) {
+      shouldDownloadOnNextAvailable = false
+      setUpdateState({
+        phase: 'unavailable',
+        message: '설정된 버전 릴리즈를 아직 찾지 못했습니다.',
+        detail: `설정 버전 ${pendingTargetVersion} / 확인된 릴리즈 ${nextVersion}`,
+        progressPercent: 0,
+        targetVersion: pendingTargetVersion,
+        error: '',
+      })
+      return
+    }
+
     setUpdateState({
       phase: 'available',
       message: '새 버전을 찾았습니다.',
-      detail: `${info?.version ?? '새 버전'} 다운로드를 시작합니다.`,
+      detail: shouldDownloadOnNextAvailable
+        ? `${nextVersion || '새 버전'} 다운로드를 시작합니다.`
+        : `${nextVersion || '새 버전'} 릴리즈가 확인되었습니다.`,
       progressPercent: 0,
-      targetVersion: String(info?.version ?? ''),
+      targetVersion: nextVersion,
       error: '',
     })
-    showUpdateLockWindow(
-      '최신 버전으로 업데이트 중입니다.',
-      `${info?.version ?? '새 버전'}을 다운로드하는 동안 앱을 사용할 수 없습니다.\n잠시만 기다려 주세요.`,
-    )
+
+    if (!shouldDownloadOnNextAvailable) {
+      return
+    }
+
+    autoUpdater.downloadUpdate().catch((error) => {
+      const message = String(error?.message ?? error ?? '알 수 없는 오류')
+      appendUpdateLog(`updater:download-request-error message=${message}`)
+      setUpdateState({
+        phase: 'error',
+        message: '업데이트 다운로드 시작에 실패했습니다.',
+        detail: message,
+        progressPercent: 0,
+        targetVersion: nextVersion || pendingTargetVersion,
+        error: message,
+      })
+      shouldDownloadOnNextAvailable = false
+    })
   })
 
   autoUpdater.on('download-progress', (progress) => {
@@ -334,6 +365,8 @@ function configureAutoUpdater() {
 
   autoUpdater.on('update-downloaded', () => {
     installingUpdate = true
+    shouldDownloadOnNextAvailable = false
+    pendingTargetVersion = ''
     appendUpdateLog('updater:downloaded')
     setUpdateState({
       phase: 'downloaded',
@@ -355,6 +388,23 @@ function configureAutoUpdater() {
   autoUpdater.on('update-not-available', () => {
     hideUpdateLockWindow()
     appendUpdateLog('updater:not-available')
+
+    const expectedVersion = pendingTargetVersion
+    shouldDownloadOnNextAvailable = false
+    pendingTargetVersion = ''
+
+    if (expectedVersion && expectedVersion !== normalizeVersion(app.getVersion())) {
+      setUpdateState({
+        phase: 'unavailable',
+        message: '설정된 버전 릴리즈를 아직 찾지 못했습니다.',
+        detail: `${expectedVersion} 버전이 GitHub 릴리즈에 아직 준비되지 않았습니다.`,
+        progressPercent: 0,
+        targetVersion: expectedVersion,
+        error: '',
+      })
+      return
+    }
+
     setUpdateState({
       phase: 'up-to-date',
       message: '현재 최신 버전을 사용 중입니다.',
@@ -367,6 +417,7 @@ function configureAutoUpdater() {
 
   autoUpdater.on('error', (error) => {
     const message = String(error?.message ?? error ?? '알 수 없는 오류')
+    shouldDownloadOnNextAvailable = false
     appendUpdateLog(`updater:error message=${message}`)
     setUpdateState({
       phase: 'error',
@@ -405,13 +456,6 @@ function configureAutoUpdater() {
     }
   })
 
-  setTimeout(() => {
-    runUpdateCheck()
-  }, 3000)
-
-  updateCheckTimer = setInterval(() => {
-    runUpdateCheck()
-  }, UPDATE_CHECK_INTERVAL_MS)
 }
 
 function createMainWindow() {
@@ -443,10 +487,6 @@ function createMainWindow() {
     broadcastUpdateState()
   })
 
-  mainWindow.on('focus', () => {
-    runUpdateCheck()
-  })
-
   mainWindow.on('close', (event) => {
     if (forceUpdateActive && !installingUpdate) {
       event.preventDefault()
@@ -473,11 +513,6 @@ app.whenReady().then(() => {
   createMainWindow()
   configureAutoUpdater()
 
-  powerMonitor.on('resume', () => {
-    appendUpdateLog('power:resume')
-    runUpdateCheck()
-  })
-
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createMainWindow()
@@ -491,13 +526,6 @@ app.on('window-all-closed', () => {
   }
 })
 
-app.on('before-quit', () => {
-  if (updateCheckTimer) {
-    clearInterval(updateCheckTimer)
-    updateCheckTimer = null
-  }
-})
-
 ipcMain.handle('desktop:get-app-info', () => ({
   version: app.getVersion(),
   platform: process.platform,
@@ -507,8 +535,12 @@ ipcMain.handle('desktop:get-app-info', () => ({
   updateState,
 }))
 
-ipcMain.handle('desktop:check-for-updates', async () => {
-  return runUpdateCheck({ manual: true })
+ipcMain.handle('desktop:check-for-updates', async (_event, options = {}) => {
+  return runUpdateCheck({
+    manual: true,
+    startDownload: Boolean(options?.startDownload),
+    targetVersion: options?.targetVersion ?? '',
+  })
 })
 
 app.on('web-contents-created', (_, contents) => {
