@@ -547,7 +547,6 @@ onMounted(async () => {
                         <th class="px-4 py-3 text-center">{{ previousMonthLabel }}</th>
                         <th class="px-4 py-3 text-center">{{ reportMonthLabel }}</th>
                         <th class="px-4 py-3 text-center">증감</th>
-                        <th class="px-4 py-3 text-center">상태</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -569,12 +568,6 @@ onMounted(async () => {
                           :class="item.diff >= 0 ? 'text-emerald-600' : 'text-rose-600'"
                         >
                           {{ item.diff >= 0 ? '+' : '' }}{{ formatCount(item.diff) }}
-                        </td>
-                        <td
-                          class="px-4 py-4 text-center text-[12px] font-bold"
-                          :class="item.diff >= 0 ? 'text-emerald-700' : 'text-rose-700'"
-                        >
-                          {{ item.diff >= 0 ? '증가' : '감소' }}
                         </td>
                       </tr>
                     </tbody>

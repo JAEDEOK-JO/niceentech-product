@@ -108,6 +108,7 @@ const getDrawingDistributedAt = (row, fallbackYear = new Date().getFullYear()) =
   parseFlexibleDateTime(row?.drawing_distributed_at, fallbackYear) ?? parseFlexibleDateTime(row?.drawing_date, fallbackYear)
 const getShipmentAt = (row, fallbackYear = new Date().getFullYear()) =>
   parseFlexibleDateTime(row?.shipment_date, fallbackYear) ?? parseFlexibleDateTime(row?.updated_at, fallbackYear)
+const isOtherWorkTypeRow = (row) => String(row?.work_type ?? '').trim() === '기타'
 const isDistributed = (row) =>
   String(row?.drawing_date ?? '').trim().length > 0 || Boolean(row?.virtual_drawing_distributed)
 const isDueRiskRow = (row, testDate) => {
@@ -197,19 +198,23 @@ const buildWeekSummary = (week) => {
   const dueRiskCount = targetRows.filter((row) => isDueRiskRow(row, week.date)).length
 
   const threshold = getPreviousThursdayNoon(week.date)
-  const distributedWithDrawingTime = targetRows.filter((row) => getDrawingDistributedAt(row, week.date.getFullYear()))
+  const thursdayEligibleRows = targetRows.filter((row) => !isOtherWorkTypeRow(row))
+  const distributedWithDrawingTime = thursdayEligibleRows.filter((row) =>
+    getDrawingDistributedAt(row, week.date.getFullYear()),
+  )
   const beforeNoonCount = distributedWithDrawingTime.filter((row) => {
     const drawingDate = getDrawingDistributedAt(row, week.date.getFullYear())
     return drawingDate && drawingDate.getTime() <= threshold.getTime()
   }).length
+  const thursdayTargetCount = distributedWithDrawingTime.length
 
   const thursdayRateValue =
     week.index === 0
-      ? formatPercent(beforeNoonCount, totalCount)
+      ? formatPercent(beforeNoonCount, thursdayTargetCount)
       : ''
   const thursdayRateNote =
     week.index === 0
-      ? `목요일 12시 이전 ${beforeNoonCount}/${totalCount || 0}건`
+      ? `목요일 12시 이전 ${beforeNoonCount}/${thursdayTargetCount || 0}건`
       : '산출 시점 변동으로 집계 제외'
 
   return {
@@ -284,6 +289,7 @@ const lateDistributionRows = computed(() => {
   const threshold = getPreviousThursdayNoon(firstWeek.date)
   return (weekRowsMap.value[firstWeek.key] ?? [])
     .filter((row) => {
+      if (isOtherWorkTypeRow(row)) return false
       const drawingDate = getDrawingDistributedAt(row, firstWeek.date.getFullYear())
       return drawingDate && drawingDate.getTime() > threshold.getTime()
     })
@@ -301,7 +307,7 @@ const fetchRows = async () => {
   const testDates = targetWeeks.value.map((week) => formatKoreanDate(week.date))
   const { start, end } = monthRange.value
   const baseColumns =
-    'id,no,initial,company,place,area,test_date,drawing_date,drawing_distributed_at,shipment_date,delivery_due_date,is_drawing,calculation,complete,delay_text'
+    'id,no,initial,company,place,area,work_type,test_date,drawing_date,drawing_distributed_at,shipment_date,delivery_due_date,is_drawing,calculation,complete,delay_text'
   const withVirtualColumns = `${baseColumns},virtual_drawing_distributed`
   const monthColumns = 'id,no,initial,company,place,area,shipment,shipment_date,delivery_due_date,updated_at'
 
