@@ -11,6 +11,7 @@ const SALES_WEEKLY_TABLE = 'sales_weekly_entries'
 const SALES_AS_TABLE = 'sales_as_entries'
 const WEEK_COUNT = 5
 const MONTHLY_TARGET = 600000000
+const SALES_REPORT_BASELINE_START = '2026-01-01'
 const emit = defineEmits(['go-back'])
 const props = defineProps({
   showBackButton: { type: Boolean, default: true },
@@ -78,6 +79,10 @@ const formatMonthTitle = (date) => `${date.getFullYear()}년 ${String(date.getMo
 const sanitizeMoneyInput = (value) => String(value ?? '').replace(/[^\d]/g, '')
 const getWeekLabel = (weekIndex) => ['첫째주', '둘째주', '셋째주', '넷째주', '다섯째주'][weekIndex - 1] ?? `${weekIndex}주차`
 const isCurrentMonthRow = (row) => String(row?.registration_month ?? '').slice(0, 7) === reportMonthValue.slice(0, 7)
+const isSalesBaselineRow = (row) => {
+  const raw = String(row?.registration_month ?? '').trim()
+  return Boolean(raw) && raw >= SALES_REPORT_BASELINE_START
+}
 const getNormalizedCompanyType = (row) => normalizeCompanyType(row?.company_type)
 const isNonApartment = (row) => getNormalizedCompanyType(row) !== '' && getNormalizedCompanyType(row) !== '아파트'
 const formatRegistrationMonth = (value) => {
@@ -356,8 +361,9 @@ const deleteAsEntry = async (rowId) => {
 }
 
 const currentMonthRows = computed(() => companyRows.value.filter((row) => isCurrentMonthRow(row)))
+const salesBaselineRows = computed(() => companyRows.value.filter((row) => isSalesBaselineRow(row)))
 const confirmedRows = computed(() => currentMonthRows.value.filter((row) => Boolean(row?.order_confirmed)))
-const expectedRows = computed(() => companyRows.value.filter((row) => !Boolean(row?.order_confirmed)))
+const expectedRows = computed(() => salesBaselineRows.value.filter((row) => !Boolean(row?.order_confirmed)))
 const weeklySalesTotal = computed(() => weeklySalesRows.value.reduce((sum, row) => sum + toNumber(row.sales_amount), 0))
 const salesProgress = computed(() => (!MONTHLY_TARGET ? 0 : Math.round((weeklySalesTotal.value / MONTHLY_TARGET) * 100)))
 const salesProgressWidth = computed(() => Math.min(100, Math.max(0, salesProgress.value)))
@@ -379,9 +385,9 @@ const yearlyMonthlySales = computed(() =>
 )
 const yearlySalesMax = computed(() => Math.max(...yearlyMonthlySales.value.map((item) => item.value), 0))
 const nonApartmentRatio = computed(() => {
-  const total = companyRows.value.length
+  const total = salesBaselineRows.value.length
   if (!total) return 0
-  return Math.round((companyRows.value.filter((row) => isNonApartment(row)).length / total) * 100)
+  return Math.round((salesBaselineRows.value.filter((row) => isNonApartment(row)).length / total) * 100)
 })
 const buildingTypeToneClasses = [
   'border-emerald-200 bg-emerald-50 text-emerald-700',
@@ -390,12 +396,14 @@ const buildingTypeToneClasses = [
   'border-amber-200 bg-amber-50 text-amber-700',
 ]
 const buildingTypeSummaryItems = computed(() => {
-  const total = companyRows.value.length
+  const typedRows = salesBaselineRows.value.filter((row) => Boolean(getNormalizedCompanyType(row)))
+  const total = typedRows.length
   if (!total) return []
 
   const counts = new Map()
-  for (const row of companyRows.value) {
-    const type = getNormalizedCompanyType(row) || '미입력'
+  for (const row of typedRows) {
+    const type = getNormalizedCompanyType(row)
+    if (!type) continue
     counts.set(type, (counts.get(type) ?? 0) + 1)
   }
 
@@ -418,7 +426,7 @@ const targetSummary = computed(() => ({
 const summaryCards = computed(() => [
   { label: '현재 매출', value: formatCurrency(weeklySalesTotal.value), note: `${reportMonthLabel} 주차 입력 합계`, tone: 'bg-slate-50 border-slate-200 text-slate-800', clickable: false },
   { label: '신규 수주', value: formatHead(confirmedHeadTotal.value), note: `${reportMonthLabel} 확정 헤드수`, tone: 'bg-emerald-50 border-emerald-200 text-emerald-800', clickable: false },
-  { label: '신규 수주 예정', value: formatHead(expectedHeadTotal.value), note: '전체 예정 헤드수', tone: 'bg-indigo-50 border-indigo-200 text-indigo-800', clickable: false },
+  { label: '신규 수주 예정', value: formatHead(expectedHeadTotal.value), note: '2026년 1월 이후 예정 헤드수', tone: 'bg-indigo-50 border-indigo-200 text-indigo-800', clickable: false },
   { label: 'AS 발생 건수', value: `${asRows.value.length}건`, note: `${reportMonthLabel} 접수 누계`, tone: 'bg-rose-50 border-rose-200 text-rose-800', clickable: true },
 ])
 const hasSalesDialogData = computed(() => weeklySalesInputs.value.some((row) => toNumber(row.salesAmount) > 0))
@@ -644,7 +652,7 @@ onBeforeUnmount(revokeAsPreviewUrls)
             <div class="flex items-center justify-between gap-3">
               <div>
                 <p class="text-[13px] font-extrabold text-slate-900">신규 수주 예정 목록</p>
-                <p class="mt-1 text-[12px] text-slate-500">전체 등록 예정 기준</p>
+                <p class="mt-1 text-[12px] text-slate-500">2026년 1월 이후 등록 예정 기준</p>
               </div>
               <span class="rounded-full bg-indigo-100 px-3 py-1 text-[11px] font-bold text-indigo-700">{{ expectedRows.length }}건</span>
             </div>
@@ -652,7 +660,7 @@ onBeforeUnmount(revokeAsPreviewUrls)
               <table class="min-w-full border-separate border-spacing-0 text-sm">
                 <thead><tr class="bg-slate-50 text-slate-600"><th class="border border-slate-200 px-3 py-2 text-center">등록월</th><th class="border border-slate-200 px-3 py-2 text-center">회사</th><th class="border border-slate-200 px-3 py-2 text-center">현장</th><th class="border border-slate-200 px-3 py-2 text-center">예상 헤드수</th><th class="border border-slate-200 px-3 py-2 text-center">건물종류</th></tr></thead>
                 <tbody>
-                  <tr v-if="expectedRows.length === 0" class="bg-white"><td colspan="5" class="border border-slate-200 px-3 py-8 text-center text-slate-500">전체 수주예정 데이터가 없습니다.</td></tr>
+                  <tr v-if="expectedRows.length === 0" class="bg-white"><td colspan="5" class="border border-slate-200 px-3 py-8 text-center text-slate-500">2026년 1월 이후 수주예정 데이터가 없습니다.</td></tr>
                   <tr v-for="row in expectedRows" :key="row.id" class="bg-white"><td class="border border-slate-200 px-3 py-2 text-center">{{ formatRegistrationMonth(row.registration_month) }}</td><td class="border border-slate-200 px-3 py-2 text-center">{{ row.company || '-' }}</td><td class="border border-slate-200 px-3 py-2 text-center">{{ row.place || '-' }}</td><td class="border border-slate-200 px-3 py-2 text-center font-semibold text-slate-900">{{ formatHead(row.total_head_count) }}</td><td class="border border-slate-200 px-3 py-2 text-center">{{ getNormalizedCompanyType(row) || '-' }}</td></tr>
                 </tbody>
               </table>
