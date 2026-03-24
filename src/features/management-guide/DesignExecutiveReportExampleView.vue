@@ -363,7 +363,6 @@ onMounted(async () => {
         <div class="min-w-0">
           <p class="text-[11px] font-bold tracking-[0.12em] text-slate-500">설계부 보고자료</p>
           <h1 class="mt-1 text-lg font-extrabold text-slate-900 md:text-xl">설계부 화요일 회의 보고</h1>
-          <p class="mt-2 text-[13px] text-slate-600">1페이지는 금주 요약, 2페이지는 납기/산출/배포 상세 목록입니다.</p>
         </div>
         <div class="flex shrink-0 gap-2">
           <Button class="shrink-0" variant="outline" @click="printReport">인쇄</Button>
@@ -428,7 +427,7 @@ onMounted(async () => {
           >
             <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
-                <p class="text-[12px] font-bold text-slate-500">검수 기준 요약</p>
+                <p class="text-[12px] font-bold text-slate-500">주간 현황</p>
                 <h2 class="mt-1 text-base font-extrabold text-slate-900">{{ formatKoreanDate(week.date) }}</h2>
               </div>
               <div class="rounded-2xl px-4 py-2 text-[12px] font-bold" :class="getWeekTone(week.index)">
@@ -468,7 +467,7 @@ onMounted(async () => {
                 </thead>
                 <tbody>
                   <tr v-if="!recentShipmentRows.length">
-                    <td colspan="7" class="border border-slate-200 px-3 py-6 text-center text-slate-400">최근 출하 데이터가 없습니다.</td>
+                    <td colspan="7" class="border border-slate-200 px-3 py-6 text-center text-slate-400">최근 출하 내역이 없습니다.</td>
                   </tr>
                   <tr v-for="row in recentShipmentRows" :key="`shipment-${row.id}`" class="bg-white">
                     <td class="border border-slate-200 px-3 py-2 text-center">{{ formatShortDate(row.shipment_date || row.updated_at) }}</td>
@@ -513,7 +512,7 @@ onMounted(async () => {
                 </thead>
                 <tbody>
                   <tr v-if="!dueRiskRows.length">
-                    <td colspan="6" class="border border-slate-200 px-3 py-6 text-center text-slate-400">납기 위험 데이터가 없습니다.</td>
+                    <td colspan="6" class="border border-slate-200 px-3 py-6 text-center text-slate-400">납기 위험 항목이 없습니다.</td>
                   </tr>
                   <tr v-for="row in dueRiskRows" :key="`risk-${row.id}`" class="bg-white">
                     <td class="border border-slate-200 px-3 py-2 text-center">{{ row._weekLabel }}</td>
@@ -550,7 +549,7 @@ onMounted(async () => {
                 </thead>
                 <tbody>
                   <tr v-if="!pendingDistributionRows.length">
-                    <td colspan="6" class="border border-slate-200 px-3 py-6 text-center text-slate-400">미배포 데이터가 없습니다.</td>
+                    <td colspan="6" class="border border-slate-200 px-3 py-6 text-center text-slate-400">미배포 항목이 없습니다.</td>
                   </tr>
                   <tr v-for="row in pendingDistributionRows" :key="`pending-${row.id}`" class="bg-white">
                     <td class="border border-slate-200 px-3 py-2 text-center">{{ row._weekLabel }}</td>
@@ -569,7 +568,7 @@ onMounted(async () => {
             <div class="flex items-center justify-between gap-3">
               <div>
                 <p class="text-[13px] font-extrabold text-slate-900">목요일 12시 이후 배포 목록</p>
-                <p class="mt-1 text-[12px] text-slate-500">금주 test_date 기준만 집계</p>
+                <p class="mt-1 text-[12px] text-slate-500">금주 기준</p>
               </div>
               <span class="rounded-full bg-violet-100 px-3 py-1 text-[11px] font-bold text-violet-700">{{ lateDistributionRows.length }}건</span>
             </div>
@@ -587,7 +586,7 @@ onMounted(async () => {
                 </thead>
                 <tbody>
                   <tr v-if="!lateDistributionRows.length">
-                    <td colspan="6" class="border border-slate-200 px-3 py-6 text-center text-slate-400">금주 기준 목요일 12시 이후 배포 데이터가 없습니다.</td>
+                    <td colspan="6" class="border border-slate-200 px-3 py-6 text-center text-slate-400">목요일 12시 이후 배포 건이 없습니다.</td>
                   </tr>
                   <tr v-for="row in lateDistributionRows" :key="`late-${row.id}`" class="bg-white">
                     <td class="border border-slate-200 px-3 py-2 text-center">{{ formatDateTimeText(row.drawing_distributed_at || row.drawing_date) }}</td>

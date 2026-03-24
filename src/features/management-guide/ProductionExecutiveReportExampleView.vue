@@ -390,7 +390,7 @@ onMounted(async () => {
         <div class="min-w-0">
           <p class="text-[11px] font-bold tracking-[0.12em] text-slate-500">생산부 보고자료</p>
           <h1 class="mt-1 text-lg font-extrabold text-slate-900 md:text-xl">생산부 대표 보고</h1>
-          <p class="mt-2 text-[13px] text-slate-600">{{ reportYearLabel }} 누적 수량과 {{ reportMonthLabel }} 생산 현황을 test_date 기준으로 봅니다.</p>
+          <p class="mt-2 text-[13px] text-slate-600">{{ reportYearLabel }} 누적과 {{ reportMonthLabel }} 생산 현황입니다.</p>
         </div>
         <div class="flex shrink-0 gap-2">
           <Button class="shrink-0" variant="outline" @click="printReport">인쇄</Button>
@@ -441,7 +441,7 @@ onMounted(async () => {
               <div>
                 <p class="text-[12px] font-bold text-rose-700">{{ reportYearLabel }} 누적 생산 현황</p>
                 <h2 class="mt-2 text-2xl font-extrabold text-slate-900">{{ reportYearLabel }} 누적 / {{ reportMonthLabel }} 생산 비교</h2>
-                <p class="mt-2 text-sm text-slate-600">작업완료 또는 출하완료 된 건만 집계합니다. 기준은 검수일입니다.</p>
+                <p class="mt-2 text-sm text-slate-600">검수일 기준, 완료 또는 출하 건만 반영합니다.</p>
               </div>
               <div class="rounded-3xl border border-white bg-white px-5 py-4 text-center shadow-sm">
                 <p class="text-[12px] font-bold text-rose-700">{{ reportYearLabel }}</p>
@@ -596,31 +596,22 @@ onMounted(async () => {
                     <th class="border border-slate-200 px-3 py-2 text-center">설비명</th>
                     <th class="border border-slate-200 px-3 py-2 text-center">수리 내역</th>
                     <th class="border border-slate-200 px-3 py-2 text-center">비용</th>
-                    <th class="border border-slate-200 px-3 py-2 text-center">관리</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr v-if="repairHistoryRows.length === 0" class="bg-white">
-                    <td colspan="5" class="border border-slate-200 px-3 py-8 text-center text-slate-500">{{ reportMonthLabel }} 수리내역 데이터가 없습니다.</td>
+                    <td colspan="4" class="border border-slate-200 px-3 py-8 text-center text-slate-500">{{ reportMonthLabel }} 수리내역이 없습니다.</td>
                   </tr>
-                  <tr v-for="row in repairHistoryRows" :key="row.id" class="bg-white">
+                  <tr
+                    v-for="row in repairHistoryRows"
+                    :key="row.id"
+                    class="cursor-pointer bg-white transition hover:bg-slate-50"
+                    @click="openRepairDialog(row)"
+                  >
                     <td class="border border-slate-200 px-3 py-2 text-center">{{ formatShortMonthDay(row.repaired_at) }}</td>
                     <td class="border border-slate-200 px-3 py-2 text-center">{{ row.equipment }}</td>
                     <td class="border border-slate-200 px-3 py-2 text-center">{{ row.detail }}</td>
                     <td class="border border-slate-200 px-3 py-2 text-center font-semibold text-slate-900">{{ formatRepairCost(row) }}</td>
-                    <td class="border border-slate-200 px-3 py-2 text-center">
-                      <div class="flex items-center justify-center gap-3">
-                        <button type="button" class="text-[12px] font-bold text-slate-500 hover:text-slate-800" @click="openRepairDialog(row)">수정</button>
-                        <button
-                          type="button"
-                          class="text-[12px] font-bold text-rose-500 hover:text-rose-700"
-                          :disabled="deletingRepairEntry"
-                          @click="deleteRepairEntry(row.id)"
-                        >
-                          삭제
-                        </button>
-                      </div>
-                    </td>
                   </tr>
                 </tbody>
               </table>

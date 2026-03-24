@@ -528,7 +528,7 @@ onBeforeUnmount(revokeAsPreviewUrls)
         <div class="min-w-0">
           <p class="text-[11px] font-bold tracking-[0.12em] text-slate-500">영업부 보고자료</p>
           <h1 class="mt-1 text-lg font-extrabold text-slate-900 md:text-xl">영업부 대표 보고</h1>
-          <p class="mt-2 text-[13px] text-slate-600">현재 매출, 신규 수주, 신규 수주 예정, AS 발생 건수를 중심으로 구성했습니다.</p>
+          <p class="mt-2 text-[13px] text-slate-600">매출, 수주, AS 현황을 정리한 화면입니다.</p>
         </div>
         <div class="flex shrink-0 gap-2">
           <Button class="shrink-0" variant="outline" @click="printReport">인쇄</Button>
@@ -602,7 +602,7 @@ onBeforeUnmount(revokeAsPreviewUrls)
             <div class="flex items-center justify-between gap-3">
               <div>
                 <p class="text-[13px] font-extrabold text-slate-900">{{ reportYear }}년 월별 매출</p>
-                <p class="mt-1 text-[12px] text-slate-500">1월부터 {{ reportMonthLabel }}까지 주차 입력 합계를 기준으로 표시합니다.</p>
+                <p class="mt-1 text-[12px] text-slate-500">1월부터 {{ reportMonthLabel }}까지 입력된 매출입니다.</p>
               </div>
             </div>
 
@@ -641,7 +641,7 @@ onBeforeUnmount(revokeAsPreviewUrls)
               <table class="min-w-full border-separate border-spacing-0 text-sm">
                 <thead><tr class="bg-slate-50 text-slate-600"><th class="border border-slate-200 px-3 py-2 text-center">등록월</th><th class="border border-slate-200 px-3 py-2 text-center">회사</th><th class="border border-slate-200 px-3 py-2 text-center">현장</th><th class="border border-slate-200 px-3 py-2 text-center">헤드수</th><th class="border border-slate-200 px-3 py-2 text-center">건물종류</th></tr></thead>
                 <tbody>
-                  <tr v-if="confirmedRows.length === 0" class="bg-white"><td colspan="5" class="border border-slate-200 px-3 py-8 text-center text-slate-500">이번 달 확정수주 데이터가 없습니다.</td></tr>
+                  <tr v-if="confirmedRows.length === 0" class="bg-white"><td colspan="5" class="border border-slate-200 px-3 py-8 text-center text-slate-500">이번 달 확정수주가 없습니다.</td></tr>
                   <tr v-for="row in confirmedRows" :key="row.id" class="bg-white"><td class="border border-slate-200 px-3 py-2 text-center">{{ formatRegistrationMonth(row.registration_month) }}</td><td class="border border-slate-200 px-3 py-2 text-center">{{ row.company || '-' }}</td><td class="border border-slate-200 px-3 py-2 text-center">{{ row.place || '-' }}</td><td class="border border-slate-200 px-3 py-2 text-center font-semibold text-slate-900">{{ formatHead(row.total_head_count) }}</td><td class="border border-slate-200 px-3 py-2 text-center">{{ getNormalizedCompanyType(row) || '-' }}</td></tr>
                 </tbody>
               </table>
@@ -652,7 +652,7 @@ onBeforeUnmount(revokeAsPreviewUrls)
             <div class="flex items-center justify-between gap-3">
               <div>
                 <p class="text-[13px] font-extrabold text-slate-900">신규 수주 예정 목록</p>
-                <p class="mt-1 text-[12px] text-slate-500">2026년 1월 이후 등록 예정 기준</p>
+                <p class="mt-1 text-[12px] text-slate-500">2026년 1월 이후 등록 예정</p>
               </div>
               <span class="rounded-full bg-indigo-100 px-3 py-1 text-[11px] font-bold text-indigo-700">{{ expectedRows.length }}건</span>
             </div>
@@ -660,7 +660,7 @@ onBeforeUnmount(revokeAsPreviewUrls)
               <table class="min-w-full border-separate border-spacing-0 text-sm">
                 <thead><tr class="bg-slate-50 text-slate-600"><th class="border border-slate-200 px-3 py-2 text-center">등록월</th><th class="border border-slate-200 px-3 py-2 text-center">회사</th><th class="border border-slate-200 px-3 py-2 text-center">현장</th><th class="border border-slate-200 px-3 py-2 text-center">예상 헤드수</th><th class="border border-slate-200 px-3 py-2 text-center">건물종류</th></tr></thead>
                 <tbody>
-                  <tr v-if="expectedRows.length === 0" class="bg-white"><td colspan="5" class="border border-slate-200 px-3 py-8 text-center text-slate-500">2026년 1월 이후 수주예정 데이터가 없습니다.</td></tr>
+                  <tr v-if="expectedRows.length === 0" class="bg-white"><td colspan="5" class="border border-slate-200 px-3 py-8 text-center text-slate-500">2026년 1월 이후 수주예정이 없습니다.</td></tr>
                   <tr v-for="row in expectedRows" :key="row.id" class="bg-white"><td class="border border-slate-200 px-3 py-2 text-center">{{ formatRegistrationMonth(row.registration_month) }}</td><td class="border border-slate-200 px-3 py-2 text-center">{{ row.company || '-' }}</td><td class="border border-slate-200 px-3 py-2 text-center">{{ row.place || '-' }}</td><td class="border border-slate-200 px-3 py-2 text-center font-semibold text-slate-900">{{ formatHead(row.total_head_count) }}</td><td class="border border-slate-200 px-3 py-2 text-center">{{ getNormalizedCompanyType(row) || '-' }}</td></tr>
                 </tbody>
               </table>
@@ -677,7 +677,7 @@ onBeforeUnmount(revokeAsPreviewUrls)
             </div>
 
             <div v-if="asRows.length === 0" class="mt-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
-              이번 달 AS 입력 데이터가 없습니다.
+              이번 달 AS가 없습니다.
             </div>
 
             <div v-else class="mt-4 space-y-3">

@@ -724,7 +724,6 @@ onMounted(fetchReportData)
         <div class="min-w-0">
           <p class="text-[11px] font-bold tracking-[0.12em] text-slate-500">공무부 보고자료</p>
           <h1 class="mt-1 text-lg font-extrabold text-slate-900 md:text-xl">공무부 대표 보고</h1>
-          <p class="mt-2 text-[13px] text-slate-600">입고, 사용, 잔고와 오제작/누락분 현황을 함께 정리합니다.</p>
         </div>
         <div class="flex shrink-0 gap-2">
           <Button class="shrink-0" variant="outline" @click="printReport">인쇄</Button>
@@ -769,7 +768,7 @@ onMounted(fetchReportData)
             <div>
               <p class="text-[12px] font-bold text-amber-700">{{ reportMonthLabel }} 공무부 보고</p>
               <h2 class="mt-2 text-2xl font-extrabold text-slate-900">{{ reportMonthLabel }} 입고 · 사용 · 잔고</h2>
-              <p class="mt-2 text-sm text-slate-600">입력한 수치를 기준으로 이번 달 현황이 바로 반영됩니다.</p>
+              <p class="mt-2 text-sm text-slate-600">이번 달 입력값 기준입니다.</p>
             </div>
             <div class="rounded-3xl border border-white bg-white px-5 py-4 text-center shadow-sm">
               <p class="text-[12px] font-bold text-amber-700">총 잔고</p>
@@ -788,12 +787,12 @@ onMounted(fetchReportData)
             <article class="rounded-2xl border border-amber-200 bg-amber-50 p-4">
               <p class="text-[13px] font-bold text-amber-800">오제작</p>
               <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ misproductionRows.length }}건</p>
-              <p class="mt-1 text-[11px] font-semibold text-amber-700">입력 목록 기준 자동 집계</p>
+              <p class="mt-1 text-[11px] font-semibold text-amber-700">입력 건수 합계</p>
             </article>
             <article class="rounded-2xl border border-rose-200 bg-rose-50 p-4">
               <p class="text-[13px] font-bold text-rose-800">누락분</p>
               <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ shortageRows.length }}건</p>
-              <p class="mt-1 text-[11px] font-semibold text-rose-700">입력 목록 기준 자동 집계</p>
+              <p class="mt-1 text-[11px] font-semibold text-rose-700">입력 건수 합계</p>
             </article>
           </div>
         </section>
@@ -801,7 +800,7 @@ onMounted(fetchReportData)
         <section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
           <div class="flex items-center justify-between gap-3">
             <p class="text-[13px] font-extrabold text-slate-900">진민택 / 민뚜라 비교</p>
-            <p class="mt-1 text-[12px] text-slate-500">입력한 이슈 데이터를 기준으로 자동 계산됩니다.</p>
+            <p class="mt-1 text-[12px] text-slate-500">이슈 입력 기준</p>
           </div>
           <div class="mt-4 overflow-hidden rounded-3xl border border-slate-200 bg-white">
             <div class="grid grid-cols-[120px_1fr_1fr] border-b border-slate-200 px-5 py-4 text-sm font-bold text-slate-700">

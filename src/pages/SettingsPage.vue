@@ -7,7 +7,7 @@ const appVersion = ref(fallbackVersion)
 const updateLogFilePath = ref('-')
 const updateState = ref({
   phase: 'idle',
-  message: '업데이트 대기 중',
+  message: '확인 전',
   detail: '',
   progressPercent: 0,
   currentVersion: fallbackVersion,
@@ -81,7 +81,6 @@ onBeforeUnmount(() => {
         <div class="flex flex-col gap-2">
           <p class="text-sm font-bold text-slate-500">설정</p>
           <h1 class="text-2xl font-extrabold text-slate-900">앱 정보</h1>
-          <p class="text-sm text-slate-600">현재 설치된 NICEENTECH 앱의 버전 정보를 확인할 수 있습니다.</p>
         </div>
       </section>
 
@@ -99,8 +98,7 @@ onBeforeUnmount(() => {
           <div class="flex items-start justify-between gap-3">
             <div class="flex flex-col gap-1">
               <p class="text-sm font-bold text-slate-500">업데이트</p>
-              <h2 class="text-xl font-extrabold text-slate-900">업데이트 상태 확인</h2>
-              <p class="text-sm text-slate-600">업데이트 실패 시 상세 이유를 여기서 바로 확인할 수 있습니다.</p>
+              <h2 class="text-xl font-extrabold text-slate-900">업데이트</h2>
             </div>
             <button
               type="button"
@@ -156,7 +154,7 @@ onBeforeUnmount(() => {
             v-if="!desktopSupported"
             class="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm font-medium text-amber-700"
           >
-            웹 브라우저에서는 데스크톱 업데이트 기능을 사용할 수 없습니다.
+            브라우저에서는 이 기능을 사용할 수 없습니다.
           </div>
         </div>
       </section>
