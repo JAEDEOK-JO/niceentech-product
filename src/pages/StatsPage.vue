@@ -15,10 +15,13 @@ const {
   selectedDateText,
   selectedWeekday,
   selectedTestDateLabel,
+  selectedDateOptions,
+  canMoveNextDay,
   summary,
-  processStats,
-  actualOvertimeInputMin,
-  actualOvertimeNote,
+  weekdayPlanRows,
+  lineInputs,
+  delayReasonOptions,
+  updateSelectedInputDate,
   saveDailyActualOvertime,
   refresh,
   moveDay,
@@ -28,14 +31,27 @@ const {
 const goHome = () => {
   router.push('/main')
 }
-const handleUpdateActualOvertimeMin = (value) => {
-  actualOvertimeInputMin.value = value
+const handleUpdateLineOvertimeMin = ({ lineType, value }) => {
+  lineInputs.value[lineType].actualOvertimeInputMin = value
 }
-const handleUpdateActualOvertimeNote = (value) => {
-  actualOvertimeNote.value = value
+const handleUpdateLineOvertimeNote = ({ lineType, value }) => {
+  lineInputs.value[lineType].actualOvertimeNote = value
 }
-const handleSaveDailyActual = async () => {
-  const result = await saveDailyActualOvertime()
+const handleUpdateDelayInputMin = ({ lineType, value }) => {
+  lineInputs.value[lineType].delayInputMin = value
+}
+const handleUpdateDelayReason = ({ lineType, value }) => {
+  lineInputs.value[lineType].delayReason = value
+}
+const handleUpdateNoOvertimeChecked = ({ lineType, value }) => {
+  lineInputs.value[lineType].isNoOvertimeChecked = value
+  if (value) lineInputs.value[lineType].actualOvertimeInputMin = 0
+}
+const handleUpdateSelectedInputDate = (value) => {
+  updateSelectedInputDate(value)
+}
+const handleSaveDailyActual = async (lineType) => {
+  const result = await saveDailyActualOvertime(lineType)
   if (!result?.ok) return
 }
 </script>
@@ -47,17 +63,23 @@ const handleSaveDailyActual = async () => {
     :selected-date-text="selectedDateText"
     :selected-weekday="selectedWeekday"
     :selected-test-date-label="selectedTestDateLabel"
+    :selected-date-options="selectedDateOptions"
+    :can-move-next-day="canMoveNextDay"
     :summary="summary"
-    :process-stats="processStats"
-    :actual-overtime-input-min="actualOvertimeInputMin"
-    :actual-overtime-note="actualOvertimeNote"
+    :weekday-plan-rows="weekdayPlanRows"
+    :line-inputs="lineInputs"
+    :delay-reason-options="delayReasonOptions"
     :can-edit-actual-overtime="isAdminRole(profile?.role)"
     @go-home="goHome"
     @refresh="refresh"
     @move-day="moveDay"
     @reset-today="resetToday"
-    @update:actual-overtime-input-min="handleUpdateActualOvertimeMin"
-    @update:actual-overtime-note="handleUpdateActualOvertimeNote"
+    @update:selected-input-date="handleUpdateSelectedInputDate"
+    @update:is-no-overtime-checked="handleUpdateNoOvertimeChecked"
+    @update:actual-overtime-input-min="handleUpdateLineOvertimeMin"
+    @update:actual-overtime-note="handleUpdateLineOvertimeNote"
+    @update:delay-input-min="handleUpdateDelayInputMin"
+    @update:delay-reason="handleUpdateDelayReason"
     @save-daily-actual="handleSaveDailyActual"
   />
 </template>

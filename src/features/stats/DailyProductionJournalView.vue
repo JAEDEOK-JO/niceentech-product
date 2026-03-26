@@ -1,39 +1,32 @@
 <script setup>
 import Button from '@/components/ui/button/Button.vue'
 
-const props = defineProps({
+defineProps({
   loading: { type: Boolean, default: false },
   error: { type: String, default: '' },
   selectedDateText: { type: String, default: '' },
   selectedWeekday: { type: String, default: '' },
   selectedTestDateLabel: { type: String, default: '' },
+  selectedDateOptions: { type: Array, default: () => [] },
+  canMoveNextDay: { type: Boolean, default: false },
   summary: { type: Object, required: true },
-  processStats: { type: Array, default: () => [] },
-  actualOvertimeInputMin: { type: Number, default: 0 },
-  actualOvertimeNote: { type: String, default: '' },
+  weekdayPlanRows: { type: Array, default: () => [] },
+  lineInputs: { type: Object, required: true },
+  delayReasonOptions: { type: Array, default: () => [] },
   canEditActualOvertime: { type: Boolean, default: false },
 })
-const getCompletedBarWidth = (completedQty, targetQty) => {
-  const safeCompleted = Math.max(0, Number(completedQty) || 0)
-  const safeTarget = Math.max(1, Number(targetQty) || 0)
-  if (safeCompleted <= 0) return '0%'
-  const ratio = (safeCompleted / safeTarget) * 100
-  return `${Math.max(4, Math.min(100, ratio))}%`
-}
-const getSummaryRatio = (part, total) => {
-  const safePart = Math.max(0, Number(part) || 0)
-  const safeTotal = Math.max(1, Number(total) || 0)
-  return Math.round((safePart / safeTotal) * 100)
-}
-const getSummaryBarWidth = (part, total) => `${Math.max(4, Math.min(100, getSummaryRatio(part, total)))}%`
 
 const emit = defineEmits([
   'go-home',
   'refresh',
   'move-day',
   'reset-today',
+  'update:selected-input-date',
+  'update:is-no-overtime-checked',
   'update:actualOvertimeInputMin',
   'update:actualOvertimeNote',
+  'update:delayInputMin',
+  'update:delayReason',
   'save-daily-actual',
 ])
 </script>
@@ -41,38 +34,176 @@ const emit = defineEmits([
 <template>
   <section class="min-h-screen w-full bg-slate-50">
     <header class="sticky top-0 z-10 border-b border-slate-200 bg-white">
-      <div class="flex items-start justify-between gap-3 px-4 py-3 md:px-6">
+      <div class="flex flex-col gap-3 px-4 py-3 md:px-6">
         <div class="min-w-0 flex-1">
-          <h1 class="text-base font-bold text-slate-900 md:text-xl">
-            {{ selectedDateText }} ({{ selectedWeekday }})
-            <span class="text-orange-600">일일 생산일지</span>
+          <h1 class="text-lg font-extrabold text-slate-900 md:text-2xl">
+            <span class="text-orange-600">주간 생산 계산</span>
           </h1>
-          <p class="mt-1 text-xs text-slate-500">검수일 : {{ selectedTestDateLabel }}</p>
+          <div class="mt-2 flex flex-wrap items-center gap-2 text-sm">
+            <span class="rounded-full border border-orange-200 bg-orange-50 px-3 py-1 font-semibold text-orange-700">
+              입력 기준일 {{ selectedDateText }} ({{ selectedWeekday }})
+            </span>
+            <span class="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 font-semibold text-sky-700">
+              검수일 {{ selectedTestDateLabel }}
+            </span>
+            <span
+              v-for="line in summary.lines"
+              :key="`${line.key}-badge`"
+              class="rounded-full px-3 py-1 font-semibold"
+              :class="
+                line.accent === 'emerald'
+                  ? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
+                  : 'border border-cyan-200 bg-cyan-50 text-cyan-700'
+              "
+            >
+              {{ line.title }} {{ line.quantityLabel }} {{ line.totalQtyText }}
+            </span>
+            <span class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 font-medium text-slate-600">
+              기준 주차 {{ summary.weekRangeText }}
+            </span>
+            <span class="rounded-full border border-violet-200 bg-violet-50 px-3 py-1 font-medium text-violet-700">
+              마감 {{ summary.deadlineText }}
+            </span>
+          </div>
         </div>
-        <div class="flex shrink-0 items-center gap-1.5">
-          <button
-            type="button"
-            class="relative flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 md:h-10 md:w-10"
-            @click="emit('move-day', -1)"
-          >
-            <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M15 18l-6-6 6-6" />
-            </svg>
-            <span class="sr-only">지난일</span>
-          </button>
-          <button
-            type="button"
-            class="relative flex h-9 w-9 items-center justify-center rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 md:h-10 md:w-10"
-            @click="emit('reset-today')"
-          >
-            <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="4" width="18" height="18" rx="2" />
-              <path d="M16 2v4" />
-              <path d="M8 2v4" />
-              <path d="M3 10h18" />
-            </svg>
-            <span class="sr-only">오늘</span>
-          </button>
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              class="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              @click="emit('move-day', -1)"
+            >
+              지난주
+            </button>
+            <button
+              type="button"
+              class="inline-flex h-9 items-center rounded-lg border border-blue-200 bg-blue-50 px-3 text-sm font-semibold text-blue-700 hover:bg-blue-100"
+              @click="emit('reset-today')"
+            >
+              이번주
+            </button>
+            <button
+              type="button"
+              class="inline-flex h-9 items-center rounded-lg border px-3 text-sm font-semibold transition"
+              :class="
+                canMoveNextDay
+                  ? 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                  : 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400'
+              "
+              :disabled="!canMoveNextDay"
+              @click="emit('move-day', 1)"
+            >
+              다음주
+            </button>
+            <div
+              v-if="canEditActualOvertime"
+              class="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2 py-2"
+            >
+              <span class="text-xs font-semibold text-slate-600">입력 날짜</span>
+              <select
+                class="h-9 min-w-[140px] rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-700"
+                :value="selectedDateText"
+                @change="emit('update:selected-input-date', $event.target.value)"
+              >
+                <option v-for="option in selectedDateOptions" :key="option.value" :value="option.value">
+                  {{ option.label }}
+                </option>
+              </select>
+              <div class="flex flex-wrap items-center gap-2 rounded-md border border-emerald-200 bg-white px-2 py-2">
+                <span class="text-xs font-bold text-emerald-700">헤드</span>
+                <label class="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700">
+                  <input
+                    :checked="lineInputs.branch_head.isNoOvertimeChecked"
+                    type="checkbox"
+                    class="h-3.5 w-3.5 rounded border-slate-300"
+                    @change="emit('update:is-no-overtime-checked', { lineType: 'branch_head', value: $event.target.checked })"
+                  />
+                  <span>없음</span>
+                </label>
+                <input
+                  v-if="!lineInputs.branch_head.isNoOvertimeChecked"
+                  :value="lineInputs.branch_head.actualOvertimeInputMin"
+                  type="number"
+                  min="0"
+                  step="1"
+                  class="h-8 w-20 rounded-md border border-slate-300 px-2 text-right text-sm"
+                  @input="emit('update:actualOvertimeInputMin', { lineType: 'branch_head', value: Number($event.target.value || 0) })"
+                />
+                <span
+                  v-else
+                  class="inline-flex h-8 items-center rounded-md border border-slate-300 bg-slate-50 px-2 text-xs font-semibold text-slate-500"
+                >
+                  야근없음
+                </span>
+                <span class="text-[11px] font-semibold text-slate-500">지연</span>
+                <input
+                  :value="lineInputs.branch_head.delayInputMin"
+                  type="number"
+                  min="0"
+                  step="1"
+                  class="h-8 w-20 rounded-md border border-slate-300 px-2 text-right text-sm"
+                  @input="emit('update:delayInputMin', { lineType: 'branch_head', value: Number($event.target.value || 0) })"
+                />
+                <select
+                  class="h-8 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700"
+                  :value="lineInputs.branch_head.delayReason"
+                  @change="emit('update:delayReason', { lineType: 'branch_head', value: $event.target.value })"
+                >
+                  <option v-for="option in delayReasonOptions" :key="`branch-${option.value}`" :value="option.value">
+                    {{ option.label }}
+                  </option>
+                </select>
+                <Button class="h-8 px-2.5 text-xs" @click="emit('save-daily-actual', 'branch_head')">저장</Button>
+              </div>
+              <div class="flex flex-wrap items-center gap-2 rounded-md border border-cyan-200 bg-white px-2 py-2">
+                <span class="text-xs font-bold text-cyan-700">홀</span>
+                <label class="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700">
+                  <input
+                    :checked="lineInputs.main_hole.isNoOvertimeChecked"
+                    type="checkbox"
+                    class="h-3.5 w-3.5 rounded border-slate-300"
+                    @change="emit('update:is-no-overtime-checked', { lineType: 'main_hole', value: $event.target.checked })"
+                  />
+                  <span>없음</span>
+                </label>
+                <input
+                  v-if="!lineInputs.main_hole.isNoOvertimeChecked"
+                  :value="lineInputs.main_hole.actualOvertimeInputMin"
+                  type="number"
+                  min="0"
+                  step="1"
+                  class="h-8 w-20 rounded-md border border-slate-300 px-2 text-right text-sm"
+                  @input="emit('update:actualOvertimeInputMin', { lineType: 'main_hole', value: Number($event.target.value || 0) })"
+                />
+                <span
+                  v-else
+                  class="inline-flex h-8 items-center rounded-md border border-slate-300 bg-slate-50 px-2 text-xs font-semibold text-slate-500"
+                >
+                  야근없음
+                </span>
+                <span class="text-[11px] font-semibold text-slate-500">지연</span>
+                <input
+                  :value="lineInputs.main_hole.delayInputMin"
+                  type="number"
+                  min="0"
+                  step="1"
+                  class="h-8 w-20 rounded-md border border-slate-300 px-2 text-right text-sm"
+                  @input="emit('update:delayInputMin', { lineType: 'main_hole', value: Number($event.target.value || 0) })"
+                />
+                <select
+                  class="h-8 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700"
+                  :value="lineInputs.main_hole.delayReason"
+                  @change="emit('update:delayReason', { lineType: 'main_hole', value: $event.target.value })"
+                >
+                  <option v-for="option in delayReasonOptions" :key="`main-${option.value}`" :value="option.value">
+                    {{ option.label }}
+                  </option>
+                </select>
+                <Button class="h-8 px-2.5 text-xs" @click="emit('save-daily-actual', 'main_hole')">저장</Button>
+              </div>
+            </div>
+          </div>
+          <div class="flex shrink-0 items-center gap-1.5">
           <button
             type="button"
             class="relative flex h-9 w-9 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 md:h-10 md:w-10"
@@ -95,216 +226,158 @@ const emit = defineEmits([
             </svg>
             <span class="sr-only">홈</span>
           </button>
+          </div>
         </div>
       </div>
     </header>
 
     <div class="space-y-4 px-4 py-4 md:px-6">
-      <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
-        <div class="rounded-xl border border-emerald-200 bg-white p-3">
-          <p class="text-[11px] font-bold text-emerald-700">헤드</p>
-          <p class="mt-2 text-sm font-extrabold text-slate-900">
-            배포수({{ summary.distributedHead }}) / 전체수({{ summary.totalHead }})
-          </p>
-          <div class="mt-2 h-2.5 overflow-hidden rounded-full bg-slate-200">
-            <div
-              class="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all"
-              :style="{ width: getSummaryBarWidth(summary.distributedHead, summary.totalHead) }"
-            />
+      <div class="grid grid-cols-1 gap-3 lg:grid-cols-3">
+        <article
+          v-for="line in summary.lines"
+          :key="line.key"
+          class="rounded-2xl bg-white p-4"
+          :class="
+            line.accent === 'emerald' ? 'border border-emerald-200' : 'border border-cyan-200'
+          "
+        >
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <p
+                class="text-xs font-bold"
+                :class="line.accent === 'emerald' ? 'text-emerald-700' : 'text-cyan-700'"
+              >
+                {{ line.title }} {{ line.quantityLabel }}
+              </p>
+              <p class="mt-1 text-3xl font-extrabold text-slate-900">{{ line.remainingQtyText }}</p>
+              <p class="text-[11px] font-semibold text-slate-500">남은 수량</p>
+            </div>
+            <span
+              class="inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold"
+              :class="
+                line.weekendText === '필요'
+                  ? 'bg-rose-50 text-rose-700'
+                  : 'bg-emerald-50 text-emerald-700'
+              "
+            >
+              주말 {{ line.weekendText }}
+            </span>
           </div>
-          <p class="mt-2 text-right text-xs font-extrabold text-emerald-700">
-            {{ getSummaryRatio(summary.distributedHead, summary.totalHead) }}%
-          </p>
-        </div>
-        <div class="rounded-xl border border-cyan-200 bg-white p-3">
-          <p class="text-[11px] font-bold text-cyan-700">홀</p>
-          <p class="mt-2 text-sm font-extrabold text-slate-900">
-            배포수({{ summary.distributedHole }}) / 전체수({{ summary.totalHole }})
-          </p>
-          <div class="mt-2 h-2.5 overflow-hidden rounded-full bg-slate-200">
-            <div
-              class="h-full rounded-full bg-gradient-to-r from-cyan-500 to-sky-400 transition-all"
-              :style="{ width: getSummaryBarWidth(summary.distributedHole, summary.totalHole) }"
-            />
+          <div class="mt-3 flex flex-wrap gap-2 text-[11px] font-semibold">
+            <span class="rounded-full bg-slate-900 px-3 py-1.5 text-white">전체 {{ line.totalQtyText }}</span>
+            <span class="rounded-full bg-slate-50 px-3 py-1.5 text-slate-700">배포 전체 {{ line.distributedQtyText }}</span>
+            <span class="rounded-full bg-slate-50 px-3 py-1.5 text-slate-700">완료 처리 {{ line.completedQtyText }}</span>
+            <span class="rounded-full bg-amber-50 px-3 py-1.5 text-amber-800">미배포 대기 {{ line.pendingQtyText }}</span>
+            <span
+              class="rounded-full px-3 py-1.5"
+              :class="line.accent === 'emerald' ? 'bg-emerald-50 text-emerald-700' : 'bg-cyan-50 text-cyan-700'"
+            >
+              계산야근 {{ line.calculatedOvertimeText }}
+            </span>
           </div>
-          <p class="mt-2 text-right text-xs font-extrabold text-cyan-700">
-            {{ getSummaryRatio(summary.distributedHole, summary.totalHole) }}%
+          <div class="mt-3 flex flex-wrap gap-1.5 text-[11px] font-semibold">
+            <span class="rounded-full bg-slate-100 px-2.5 py-1 text-slate-700">작업시간 {{ line.unitSecText }}</span>
+            <span class="rounded-full bg-slate-100 px-2.5 py-1 text-slate-700">정시 {{ line.regularDayQtyText }}</span>
+            <span
+              class="rounded-full px-2.5 py-1"
+              :class="line.accent === 'emerald' ? 'bg-emerald-100 text-emerald-800' : 'bg-cyan-100 text-cyan-800'"
+            >
+              실제 {{ line.actualOvertimeText }}
+            </span>
+            <span class="rounded-full bg-violet-50 px-2.5 py-1 text-violet-700">일치율 {{ line.matchRateText }}</span>
+          </div>
+        </article>
+        <div class="rounded-2xl border border-violet-200 bg-white p-4">
+          <p class="text-xs font-bold text-violet-700">전체 평균 데이터</p>
+          <p class="mt-2 text-xl font-extrabold text-slate-900">{{ summary.average.periodText }}</p>
+          <div class="mt-3 flex flex-wrap gap-2 text-[11px] font-semibold">
+            <span class="rounded-full bg-violet-50 px-3 py-1.5 text-violet-700">집계 {{ summary.average.weeksCountText }}</span>
+            <span class="rounded-full bg-emerald-50 px-3 py-1.5 text-emerald-700">헤드 평균 {{ summary.average.avgHeadQtyText }}</span>
+            <span class="rounded-full bg-cyan-50 px-3 py-1.5 text-cyan-700">홀 평균 {{ summary.average.avgHoleQtyText }}</span>
+          </div>
+          <p class="mt-3 text-[11px] font-medium text-slate-500">
+            2023년 1월부터 검수일 기준 주차별 수량을 묶어서 평균을 계산합니다.
           </p>
-        </div>
-        <div class="rounded-xl border border-indigo-200 bg-white p-3 sm:hidden">
-          <p class="text-[11px] font-bold text-indigo-700">오늘 작업</p>
-          <div class="mt-2 grid grid-cols-2 gap-2 text-sm">
-            <div class="rounded-lg bg-indigo-50 px-3 py-2">
-              <p class="text-[11px] font-bold text-indigo-700">추정</p>
-              <p class="mt-1 font-extrabold text-slate-900">{{ summary.dayEstimatedQty }}</p>
-            </div>
-            <div class="rounded-lg bg-sky-50 px-3 py-2">
-              <p class="text-[11px] font-bold text-sky-700">완료</p>
-              <p class="mt-1 font-extrabold text-slate-900">{{ summary.dayDoneQty }}</p>
-            </div>
-          </div>
-          <p class="mt-2 text-[11px] text-slate-500">총 헤드수/홀수 ÷ 소요일 기준</p>
-        </div>
-        <div class="hidden rounded-xl border border-indigo-200 bg-white p-3 sm:block">
-          <p class="text-[11px] font-bold text-indigo-700">오늘 추정 헤드수/홀수</p>
-          <p class="mt-1 text-sm font-extrabold text-slate-900">{{ summary.dayEstimatedQty }}</p>
-          <p class="mt-1 text-[11px] text-slate-500">총 헤드수/홀수 ÷ 소요일</p>
-        </div>
-        <div class="hidden rounded-xl border border-sky-200 bg-white p-3 sm:block">
-          <p class="text-[11px] font-bold text-sky-700">오늘 완료 헤드수/홀수</p>
-          <p class="mt-1 text-sm font-extrabold text-slate-900">{{ summary.dayDoneQty }}</p>
-        </div>
-        <div class="rounded-xl border border-fuchsia-200 bg-white p-3">
-          <p class="text-[11px] font-bold text-fuchsia-700">야근 현황</p>
-          <div class="mt-2 grid grid-cols-3 gap-2 text-sm">
-            <div class="rounded-lg bg-fuchsia-50 px-2 py-2">
-              <p class="text-[11px] font-bold text-fuchsia-700">자동</p>
-              <p class="mt-1 font-extrabold text-slate-900">{{ summary.autoOvertimeText }}</p>
-            </div>
-            <div class="rounded-lg bg-rose-50 px-2 py-2">
-              <p class="text-[11px] font-bold text-rose-700">실제</p>
-              <p class="mt-1 font-extrabold text-slate-900">{{ summary.actualOvertimeText }}</p>
-            </div>
-            <div class="rounded-lg bg-violet-50 px-2 py-2">
-              <p class="text-[11px] font-bold text-violet-700">달성률</p>
-              <p class="mt-1 font-extrabold text-slate-900">{{ summary.overtimeAchievementRateText }}</p>
-            </div>
-          </div>
+          <p v-if="summary.average.cachedAtText" class="mt-1 text-[11px] text-slate-400">
+            최근 집계 {{ summary.average.cachedAtText }}
+          </p>
         </div>
       </div>
 
-      <div v-if="canEditActualOvertime" class="rounded-xl border border-slate-200 bg-white p-3">
-        <p class="mb-2 text-xs font-bold text-slate-600">실제 야근 입력(분)</p>
-        <div class="grid gap-2 md:grid-cols-[120px_1fr_auto]">
-          <input
-            :value="actualOvertimeInputMin"
-            type="number"
-            min="0"
-            step="1"
-            class="h-9 rounded-md border border-slate-300 px-2 text-sm text-right"
-            @input="emit('update:actualOvertimeInputMin', Number($event.target.value || 0))"
-          />
-          <input
-            :value="actualOvertimeNote"
-            type="text"
-            class="h-9 rounded-md border border-slate-300 px-2 text-sm"
-            placeholder="메모"
-            @input="emit('update:actualOvertimeNote', $event.target.value)"
-          />
-          <Button class="h-9 px-3 text-xs" @click="emit('save-daily-actual')">저장</Button>
-        </div>
+      <div v-if="loading" class="rounded-2xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
+        통계 불러오는 중...
       </div>
-
-      <div v-if="loading" class="rounded-xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
-        일지 로딩 중...
-      </div>
-      <div v-else-if="error" class="rounded-xl border border-red-200 bg-red-50 p-6 text-center text-sm text-red-700">
+      <div v-else-if="error" class="rounded-2xl border border-red-200 bg-red-50 p-6 text-center text-sm text-red-700">
         {{ error }}
       </div>
-      <div v-else class="rounded-xl border border-slate-200 bg-white p-4">
-        <div class="mb-4 flex items-center justify-between">
-          <div>
-            <h2 class="text-sm font-bold text-slate-900">공정 묶음 현황</h2>
-            <p class="text-xs text-slate-500">표로 비교하고, 완료율은 얇은 진행 바로 보조 표시합니다.</p>
+      <div v-else class="space-y-4">
+        <div class="rounded-2xl border border-slate-200 bg-white p-4">
+          <div class="flex flex-col gap-1 md:flex-row md:items-end md:justify-between">
+            <div>
+              <h2 class="text-sm font-bold text-slate-900">일자별 계산표</h2>
+              <p class="text-xs text-slate-500">헤드/홀 기준으로 날짜별 계산과 실제 입력을 같이 봅니다.</p>
+            </div>
+            <p class="text-xs font-semibold text-slate-500">입력 기준일: {{ selectedDateText }} ({{ selectedWeekday }})</p>
+          </div>
+          <div class="mt-4 overflow-x-auto">
+            <table class="min-w-[1220px] w-full border-collapse">
+              <thead class="bg-slate-100">
+                <tr>
+                  <th class="border border-slate-200 px-3 py-2 text-center text-xs font-bold text-slate-700">일자</th>
+                  <th class="border border-emerald-300 bg-emerald-100 px-3 py-2 text-center text-xs font-bold text-emerald-800">헤드 계산 야근</th>
+                  <th class="border border-emerald-300 bg-emerald-100 px-3 py-2 text-center text-xs font-bold text-emerald-800">헤드 실제야근</th>
+                  <th class="min-w-[120px] border border-emerald-300 bg-emerald-100 px-3 py-2 text-center text-xs font-bold text-emerald-800">헤드 비고</th>
+                  <th class="border border-cyan-300 bg-cyan-100 px-3 py-2 text-center text-xs font-bold text-cyan-800">홀 계산 야근</th>
+                  <th class="border border-cyan-300 bg-cyan-100 px-3 py-2 text-center text-xs font-bold text-cyan-800">홀 실제야근</th>
+                  <th class="min-w-[140px] border border-cyan-300 bg-cyan-100 px-3 py-2 text-center text-xs font-bold text-cyan-800">홀 비고</th>
+                  <th class="min-w-[280px] border border-slate-200 px-3 py-2 text-center text-xs font-bold text-slate-700">지연사유</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="row in weekdayPlanRows"
+                  :key="row.key"
+                  :class="row.isSelected ? 'bg-orange-50' : 'bg-white'"
+                >
+                  <td class="whitespace-nowrap border border-slate-200 px-3 py-3 text-center text-sm font-semibold text-slate-900">
+                    {{ row.dateText }}
+                  </td>
+                  <td
+                    class="border border-slate-200 px-3 py-3 text-center text-sm font-bold text-emerald-700"
+                    :class="row.isSelected ? 'bg-orange-50' : 'bg-white'"
+                  >
+                    {{ row.branch.calculatedText }}
+                  </td>
+                  <td
+                    class="border border-slate-200 px-3 py-3 text-center text-sm font-bold text-emerald-700"
+                    :class="row.isSelected ? 'bg-orange-50' : 'bg-white'"
+                  >
+                    {{ row.branch.actualText }}
+                  </td>
+                  <td
+                    class="border border-slate-200 px-3 py-3 text-center text-sm font-semibold"
+                    :class="[row.isSelected ? 'bg-orange-50' : 'bg-white', row.branch.tone]"
+                  >
+                    {{ row.branch.note }}
+                  </td>
+                  <td class="border border-orange-50 bg-orange-50/20 px-3 py-3 text-center text-sm font-bold text-cyan-700">
+                    {{ row.main.calculatedText }}
+                  </td>
+                  <td class="border border-orange-50 bg-orange-50/20 px-3 py-3 text-center text-sm font-bold text-cyan-700">
+                    {{ row.main.actualText }}
+                  </td>
+                  <td class="min-w-[140px] border border-orange-50 bg-orange-50/20 px-3 py-3 text-center text-sm font-semibold" :class="row.main.tone">
+                    {{ row.main.note }}
+                  </td>
+                  <td class="min-w-[280px] border border-slate-200 px-4 py-3 text-center text-sm text-slate-700">
+                    {{ row.delaySummaryText }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
-        <div v-if="processStats.length > 0" class="space-y-3 md:hidden">
-          <article
-            v-for="row in processStats"
-            :key="`${row.key}-mobile`"
-            class="rounded-2xl border border-slate-200 bg-slate-50/80 p-4"
-          >
-            <div class="flex items-start justify-between gap-3">
-              <div>
-                <h3 class="text-base font-extrabold text-slate-900">{{ row.label }}</h3>
-                <p v-if="row.subLabel" class="mt-0.5 text-[11px] font-semibold text-slate-500">{{ row.subLabel }}</p>
-                <p class="mt-1 text-[11px] text-slate-500">{{ row.totalLabel }} {{ row.targetQty }}</p>
-              </div>
-              <div class="text-right">
-                <p class="text-[11px] font-bold text-slate-500">{{ row.remainingLabel }}</p>
-                <p class="mt-1 text-xl font-extrabold text-rose-600">{{ row.remainingQty }}</p>
-              </div>
-            </div>
-            <div class="mt-3">
-              <div class="mb-1 flex items-center justify-between text-[11px] font-bold text-slate-500">
-                <span>완료율</span>
-                <span>{{ row.completionRate }}%</span>
-              </div>
-              <div class="h-2 overflow-hidden rounded-full bg-slate-200">
-                <div
-                  class="h-full rounded-full bg-gradient-to-r from-emerald-500 to-sky-400 transition-all"
-                  :style="{ width: getCompletedBarWidth(row.completedQty, row.targetQty) }"
-                />
-              </div>
-            </div>
-            <div class="mt-3 grid grid-cols-4 gap-2 text-center">
-              <div class="rounded-xl bg-white px-3 py-2">
-                <p class="text-[11px] font-bold text-slate-500">오늘 추정</p>
-                <p class="mt-1 text-sm font-extrabold text-emerald-700">{{ row.estimatedTodayQty }}</p>
-              </div>
-              <div class="rounded-xl bg-white px-3 py-2">
-                <p class="text-[11px] font-bold text-slate-500">오늘 완료</p>
-                <p class="mt-1 text-sm font-extrabold text-sky-700">{{ row.completedTodayQty }}</p>
-              </div>
-              <div class="rounded-xl bg-white px-3 py-2">
-                <p class="text-[11px] font-bold text-slate-500">{{ row.totalLabel }}</p>
-                <p class="mt-1 text-sm font-extrabold text-slate-900">{{ row.targetQty }}</p>
-              </div>
-              <div class="rounded-xl bg-white px-3 py-2">
-                <p class="text-[11px] font-bold text-slate-500">평균 소요일</p>
-                <p class="mt-1 text-sm font-extrabold text-violet-700">{{ row.avgLeadDaysText }}</p>
-              </div>
-            </div>
-          </article>
-        </div>
-        <div v-if="processStats.length > 0" class="hidden overflow-x-auto md:block">
-          <table class="min-w-[760px] w-full border-collapse">
-            <thead class="bg-slate-100">
-              <tr>
-                <th class="border border-slate-200 px-3 py-2 text-center text-xs font-bold text-slate-700">공정</th>
-                <th class="border border-slate-200 px-3 py-2 text-center text-xs font-bold text-slate-700">총 헤드수/총 홀수</th>
-                <th class="border border-slate-200 px-3 py-2 text-center text-xs font-bold text-slate-700">오늘 추정</th>
-                <th class="border border-slate-200 px-3 py-2 text-center text-xs font-bold text-slate-700">오늘 완료</th>
-                <th class="border border-slate-200 px-3 py-2 text-center text-xs font-bold text-slate-700">남은 헤드수/남은 홀수</th>
-                <th class="border border-slate-200 px-3 py-2 text-center text-xs font-bold text-slate-700">평균 소요일</th>
-                <th class="border border-slate-200 px-3 py-2 text-center text-xs font-bold text-slate-700">완료율</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="row in processStats" :key="row.key" class="bg-white">
-                <td class="border border-slate-200 px-3 py-3 text-center text-sm font-bold text-slate-900">
-                  <div>{{ row.label }}</div>
-                  <div v-if="row.subLabel" class="mt-0.5 text-[11px] font-semibold text-slate-500">{{ row.subLabel }}</div>
-                </td>
-                <td class="border border-slate-200 px-3 py-3 text-center text-sm text-slate-700">
-                  <div class="font-semibold">{{ row.targetQty }}</div>
-                  <div class="mt-1 text-[11px] text-slate-500">{{ row.totalLabel }}</div>
-                </td>
-                <td class="border border-slate-200 px-3 py-3 text-center text-sm font-extrabold text-emerald-700">{{ row.estimatedTodayQty }}</td>
-                <td class="border border-slate-200 px-3 py-3 text-center text-sm font-extrabold text-sky-700">{{ row.completedTodayQty }}</td>
-                <td class="border border-slate-200 px-3 py-3 text-center text-sm">
-                  <div class="font-extrabold text-rose-600">{{ row.remainingQty }}</div>
-                  <div class="mt-1 text-[11px] text-slate-500">{{ row.remainingLabel }}</div>
-                </td>
-                <td class="border border-slate-200 px-3 py-3 text-center text-sm font-semibold text-violet-700">{{ row.avgLeadDaysText }}</td>
-                <td class="border border-slate-200 px-3 py-3 text-sm">
-                  <div class="flex items-center gap-3">
-                    <div class="h-2 flex-1 overflow-hidden rounded-full bg-slate-200">
-                      <div
-                        class="h-full rounded-full bg-gradient-to-r from-emerald-500 to-sky-400 transition-all"
-                        :style="{ width: getCompletedBarWidth(row.completedQty, row.targetQty) }"
-                      />
-                    </div>
-                    <span class="w-12 text-right text-xs font-extrabold text-slate-700">{{ row.completionRate }}%</span>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div v-else class="rounded-xl border border-slate-200 bg-white px-3 py-5 text-center text-sm text-slate-500">
-          집계 데이터가 없습니다.
-        </div>
+
       </div>
     </div>
   </section>

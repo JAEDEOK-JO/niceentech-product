@@ -27,7 +27,10 @@ const reportYear = now.getFullYear()
 const reportMonth = now.getMonth()
 const reportYearLabel = `${reportYear}년`
 const reportMonthLabel = `${reportMonth + 1}월`
-const previousMonthLabel = `${reportMonth === 0 ? 12 : reportMonth}월`
+const getMonthDateByOffset = (offset) => new Date(reportYear, reportMonth + offset, 1)
+const getMonthLabelByOffset = (offset) => `${getMonthDateByOffset(offset).getMonth() + 1}월`
+const previousMonthLabel = getMonthLabelByOffset(-1)
+const twoMonthsAgoLabel = getMonthLabelByOffset(-2)
 const reportMonthStart = new Date(reportYear, reportMonth, 1)
 const reportMonthEnd = new Date(reportYear, reportMonth + 1, 0)
 const startOfDay = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate())
@@ -76,6 +79,18 @@ const formatShortMonthDay = (value) => {
   return `${String(parsed.getMonth() + 1).padStart(2, '0')}월 ${String(parsed.getDate()).padStart(2, '0')}일`
 }
 const currentWeekTuesday = getUpcomingTuesday(now)
+const currentMonthWeekCutoff = new Date(
+  reportYear,
+  reportMonth,
+  Math.min(currentWeekTuesday.getDate(), new Date(reportYear, reportMonth + 1, 0).getDate()),
+)
+const monthTuesdayDates = Array.from({ length: new Date(reportYear, reportMonth + 1, 0).getDate() }, (_, index) => {
+  const date = new Date(reportYear, reportMonth, index + 1)
+  return date.getDay() === 2 ? date : null
+}).filter(Boolean)
+const currentMonthWeekOrder =
+  monthTuesdayDates.filter((date) => startOfDay(date).getTime() <= startOfDay(currentMonthWeekCutoff).getTime()).length || 1
+const currentMonthProgressLabel = `${reportMonthLabel} 현재까지`
 
 const createDefaultRepairForm = (row = null) =>
   row
@@ -139,14 +154,14 @@ const isYearRow = (row) => {
 }
 
 const fetchRows = async () => {
-  const startOfYear = new Date(reportYear, 0, 1)
+  const fetchStart = new Date(reportYear, reportMonth - 2, 1)
   const endOfYear = new Date(reportYear, 11, 31)
 
   const { data, error } = await supabase
     .from(PRODUCT_LIST_TABLE)
     .select('id,work_type,head,hole,groove,test_date,complete,shipment')
     .or('complete.eq.true,shipment.eq.true')
-    .gte('test_date', formatTestDate(startOfYear))
+    .gte('test_date', formatTestDate(fetchStart))
     .lte('test_date', formatTestDate(endOfYear))
     .order('id', { ascending: false })
 
@@ -189,8 +204,17 @@ const fetchReportData = async () => {
 }
 
 const currentMonthRows = computed(() => rows.value.filter((row) => isCompletedOrShipped(row) && isMonthRow(row, reportMonth)))
+const twoMonthsAgoRows = computed(() =>
+  rows.value.filter((row) => isCompletedOrShipped(row) && isMonthRow(row, getMonthDateByOffset(-2).getMonth())),
+)
 const previousMonthRows = computed(() =>
-  rows.value.filter((row) => isCompletedOrShipped(row) && isMonthRow(row, reportMonth === 0 ? 11 : reportMonth - 1)),
+  rows.value.filter((row) => isCompletedOrShipped(row) && isMonthRow(row, getMonthDateByOffset(-1).getMonth())),
+)
+const currentMonthProgressRows = computed(() =>
+  currentMonthRows.value.filter((row) => {
+    const date = getMonthlyReferenceDate(row)
+    return date ? startOfDay(date).getTime() <= startOfDay(currentMonthWeekCutoff).getTime() : false
+  }),
 )
 const currentYearRows = computed(() => rows.value.filter((row) => isCompletedOrShipped(row) && isYearRow(row)))
 const currentWeekTargetRows = computed(() =>
@@ -213,8 +237,10 @@ const buildCategoryCounts = (targetRows) => {
   return { head, hole, groove, nasa }
 }
 
+const twoMonthsAgoCounts = computed(() => buildCategoryCounts(twoMonthsAgoRows.value))
 const currentCounts = computed(() => buildCategoryCounts(currentMonthRows.value))
 const previousCounts = computed(() => buildCategoryCounts(previousMonthRows.value))
+const currentMonthProgressCounts = computed(() => buildCategoryCounts(currentMonthProgressRows.value))
 const currentYearCounts = computed(() => buildCategoryCounts(currentYearRows.value))
 const currentWeekCounts = computed(() => buildCategoryCounts(currentWeekRows.value))
 const currentWeekPendingCounts = computed(() => buildCategoryCounts(currentWeekPendingRows.value))
@@ -244,6 +270,21 @@ const categoryChartRows = computed(() =>
       previousValue,
       diff: monthValue - previousValue,
       share: currentMonthTotal.value ? Math.round((monthValue / currentMonthTotal.value) * 100) : 0,
+    }
+  }),
+)
+const monthlyComparisonRows = computed(() =>
+  categoryMeta.map((item) => {
+    const twoMonthsAgoValue = twoMonthsAgoCounts.value[item.key]
+    const previousValue = previousCounts.value[item.key]
+    const currentProgressValue = currentMonthProgressCounts.value[item.key]
+    const progressRate = previousValue > 0 ? Math.round((currentProgressValue / previousValue) * 100) : 0
+    return {
+      ...item,
+      twoMonthsAgoValue,
+      previousValue,
+      currentProgressValue,
+      progressRate,
     }
   }),
 )
@@ -538,20 +579,24 @@ onMounted(async () => {
               </article>
 
               <article class="rounded-2xl border border-slate-200 bg-white p-5">
-                <p class="text-[13px] font-extrabold text-slate-900">{{ previousMonthLabel }} / {{ reportMonthLabel }} 비교</p>
+                <p class="text-[13px] font-extrabold text-slate-900">
+                  {{ twoMonthsAgoLabel }} / {{ previousMonthLabel }} / {{ currentMonthProgressLabel }} 비교
+                </p>
+                <p class="mt-1 text-[12px] text-slate-500">이번달은 이번 주 화요일 기준 누적만 반영합니다.</p>
                 <div class="mt-4">
                   <table class="min-w-full table-fixed border-collapse text-sm">
                     <thead class="border-b border-slate-200 text-[12px] font-bold text-slate-600">
                       <tr>
                         <th class="w-[110px] px-4 py-3 text-left">항목</th>
+                        <th class="px-4 py-3 text-center">{{ twoMonthsAgoLabel }}</th>
                         <th class="px-4 py-3 text-center">{{ previousMonthLabel }}</th>
-                        <th class="px-4 py-3 text-center">{{ reportMonthLabel }}</th>
-                        <th class="px-4 py-3 text-center">증감</th>
+                        <th class="px-4 py-3 text-center">{{ currentMonthProgressLabel }}</th>
+                        <th class="px-4 py-3 text-center">증감률</th>
                       </tr>
                     </thead>
                     <tbody>
                       <tr
-                        v-for="item in categoryChartRows"
+                        v-for="item in monthlyComparisonRows"
                         :key="`${item.key}-compare`"
                         class="border-t border-slate-200"
                       >
@@ -561,13 +606,14 @@ onMounted(async () => {
                             <span>{{ item.label }}</span>
                           </div>
                         </td>
-                        <td class="px-4 py-4 text-center font-semibold text-slate-500">{{ formatCount(item.previousValue) }}</td>
-                        <td class="px-4 py-4 text-center font-extrabold text-slate-900">{{ formatCount(item.monthValue) }}</td>
+                        <td class="px-4 py-4 text-center font-semibold text-slate-500">{{ formatCount(item.twoMonthsAgoValue) }}</td>
+                        <td class="px-4 py-4 text-center font-semibold text-slate-700">{{ formatCount(item.previousValue) }}</td>
+                        <td class="px-4 py-4 text-center font-extrabold text-slate-900">{{ formatCount(item.currentProgressValue) }}</td>
                         <td
                           class="px-4 py-4 text-center font-extrabold"
-                          :class="item.diff >= 0 ? 'text-emerald-600' : 'text-rose-600'"
+                          :class="item.currentProgressValue >= item.previousValue ? 'text-emerald-600' : 'text-rose-600'"
                         >
-                          {{ item.diff >= 0 ? '+' : '' }}{{ formatCount(item.diff) }}
+                          {{ item.progressRate }}%
                         </td>
                       </tr>
                     </tbody>
