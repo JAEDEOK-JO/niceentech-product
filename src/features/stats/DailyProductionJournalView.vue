@@ -110,7 +110,7 @@ const emit = defineEmits([
                 </option>
               </select>
               <div class="flex flex-wrap items-center gap-2 rounded-md border border-emerald-200 bg-white px-2 py-2">
-                <span class="text-xs font-bold text-emerald-700">헤드</span>
+                <span class="text-xs font-bold text-emerald-700">가지관</span>
                 <label class="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700">
                   <input
                     :checked="lineInputs.branch_head.isNoOvertimeChecked"
@@ -156,7 +156,7 @@ const emit = defineEmits([
                 <Button class="h-8 px-2.5 text-xs" @click="emit('save-daily-actual', 'branch_head')">저장</Button>
               </div>
               <div class="flex flex-wrap items-center gap-2 rounded-md border border-cyan-200 bg-white px-2 py-2">
-                <span class="text-xs font-bold text-cyan-700">홀</span>
+                <span class="text-xs font-bold text-cyan-700">메인관</span>
                 <label class="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700">
                   <input
                     :checked="lineInputs.main_hole.isNoOvertimeChecked"
@@ -324,12 +324,12 @@ const emit = defineEmits([
               <thead class="bg-slate-100">
                 <tr>
                   <th class="border border-slate-200 px-3 py-2 text-center text-xs font-bold text-slate-700">일자</th>
-                  <th class="border border-emerald-300 bg-emerald-100 px-3 py-2 text-center text-xs font-bold text-emerald-800">헤드 계산 야근</th>
-                  <th class="border border-emerald-300 bg-emerald-100 px-3 py-2 text-center text-xs font-bold text-emerald-800">헤드 실제야근</th>
-                  <th class="min-w-[120px] border border-emerald-300 bg-emerald-100 px-3 py-2 text-center text-xs font-bold text-emerald-800">헤드 비고</th>
-                  <th class="border border-cyan-300 bg-cyan-100 px-3 py-2 text-center text-xs font-bold text-cyan-800">홀 계산 야근</th>
-                  <th class="border border-cyan-300 bg-cyan-100 px-3 py-2 text-center text-xs font-bold text-cyan-800">홀 실제야근</th>
-                  <th class="min-w-[140px] border border-cyan-300 bg-cyan-100 px-3 py-2 text-center text-xs font-bold text-cyan-800">홀 비고</th>
+                  <th class="border border-emerald-300 bg-emerald-100 px-3 py-2 text-center text-xs font-bold text-emerald-800">가지관 계산 야근</th>
+                  <th class="border border-emerald-300 bg-emerald-100 px-3 py-2 text-center text-xs font-bold text-emerald-800">가지관 실제 야근</th>
+                  <th class="min-w-[120px] border border-emerald-300 bg-emerald-100 px-3 py-2 text-center text-xs font-bold text-emerald-800">가지관 비고</th>
+                  <th class="border border-cyan-300 bg-cyan-100 px-3 py-2 text-center text-xs font-bold text-cyan-800">메인관 계산 야근</th>
+                  <th class="border border-cyan-300 bg-cyan-100 px-3 py-2 text-center text-xs font-bold text-cyan-800">메인관 실제 야근</th>
+                  <th class="min-w-[140px] border border-cyan-300 bg-cyan-100 px-3 py-2 text-center text-xs font-bold text-cyan-800">메인관 비고</th>
                   <th class="min-w-[280px] border border-slate-200 px-3 py-2 text-center text-xs font-bold text-slate-700">지연사유</th>
                 </tr>
               </thead>

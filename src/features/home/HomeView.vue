@@ -675,7 +675,7 @@ onBeforeUnmount(() => {
               <article
                 v-for="row in groupData.rows"
                 :key="`mobile-${groupData.group}-${row.id}`"
-                class="rounded-xl border p-2 shadow-sm select-none"
+                class="home-list-mobile-card rounded-xl border p-2 shadow-sm select-none"
                 :draggable="canReorderRows"
                 @dragstart="handleDragStart($event, row.id)"
                 @dragover="handleDragOver"
@@ -786,7 +786,7 @@ onBeforeUnmount(() => {
               </div>
             </div>
 
-            <div class="hidden overflow-auto rounded-xl border border-slate-200 bg-white shadow-sm md:block">
+            <div class="home-list-table hidden overflow-auto rounded-xl border border-slate-200 bg-white shadow-sm md:block">
               <table class="w-full border-collapse" :style="{ minWidth: `${tableTotalWidth}px`, tableLayout: 'fixed' }">
                 <thead class="bg-blue-50">
                   <tr>
@@ -817,9 +817,7 @@ onBeforeUnmount(() => {
                           ? 'bg-sky-50 text-slate-700 hover:bg-sky-50'
                           : isRowDisabled(row)
                             ? 'bg-slate-50 text-slate-400'
-                          : isDistributedRow(row)
-                            ? 'font-semibold hover:bg-slate-50/70'
-                            : 'hover:bg-slate-50/70'
+                          : 'hover:bg-slate-50/70'
                     "
                     role="button"
                     tabindex="0"
@@ -1158,3 +1156,10 @@ onBeforeUnmount(() => {
     </div>
   </section>
 </template>
+
+<style scoped>
+.home-list-mobile-card,
+.home-list-table tbody tr {
+  font-weight: 400;
+}
+</style>

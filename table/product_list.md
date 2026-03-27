@@ -43,7 +43,7 @@
 | place | text | N |  | 현장명 |
 | area | text | N |  | 구역명 |
 | hole | bigint | N | `'0'::bigint` | 홀 수량 |
-| head | bigint | N | `'0'::bigint` | 헤드 수량 |
+| head | bigint | N | `'0'::bigint` | 가지관 헤드 수량 |
 | memo | text | N | `''::text` | 비고 메모 |
 | initial | text | N |  | 도번 |
 | test_date | text | N |  | 검수날짜, 주간 조회 기준 |

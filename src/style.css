@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 @font-face {
-  font-family: "The Jamsil";
-  src: url("/The Jamsil OTF 3 Regular.otf") format("opentype");
+  font-family: "Pretendard";
+  src: url("/Pretendard-Medium.otf") format("opentype");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -10,13 +10,13 @@
 
 :root {
   --background: 0 0% 100%;
-  --foreground: 222.2 84% 4.9%;
+  --foreground: 222.2 84% 8.5%;
   --card: 0 0% 100%;
-  --card-foreground: 222.2 84% 4.9%;
+  --card-foreground: 222.2 84% 8.5%;
   --primary: 221.2 83.2% 53.3%;
   --primary-foreground: 210 40% 98%;
   --secondary: 210 40% 96.1%;
-  --secondary-foreground: 222.2 47.4% 11.2%;
+  --secondary-foreground: 222.2 47.4% 15%;
   --muted: 210 40% 96.1%;
   --muted-foreground: 215.4 16.3% 46.9%;
   --border: 214.3 31.8% 91.4%;
@@ -35,7 +35,10 @@ body {
   min-height: 100vh;
   background: hsl(var(--background));
   color: hsl(var(--foreground));
-  font-family: "The Jamsil", system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  font-family: "Pretendard", system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 button:not(:disabled) {
