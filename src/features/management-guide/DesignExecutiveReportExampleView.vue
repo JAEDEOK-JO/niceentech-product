@@ -52,6 +52,11 @@ const formatPercent = (part, total) => {
   if (!total) return ''
   return `${Math.round((part / total) * 100)}%`
 }
+const toNumber = (value) => {
+  const n = Number(value)
+  return Number.isFinite(n) ? n : 0
+}
+const formatHeadQty = (value) => Number(value || 0).toLocaleString('ko-KR')
 const getTuesdayOfCurrentWeek = (baseDate) => {
   const safe = startOfDay(baseDate)
   const day = safe.getDay()
@@ -194,6 +199,8 @@ const buildWeekSummary = (week) => {
   const targetRows = weekRowsMap.value[week.key] ?? []
   const totalCount = targetRows.length
   const distributedCount = targetRows.filter(isDistributed).length
+  const totalHeadQty = targetRows.reduce((sum, row) => sum + toNumber(row?.head), 0)
+  const distributedHeadQty = targetRows.filter(isDistributed).reduce((sum, row) => sum + toNumber(row?.head), 0)
   const drawingCompletedCount = targetRows.filter((row) => Boolean(row?.calculation)).length
   const dueRiskCount = targetRows.filter((row) => isDueRiskRow(row, week.date)).length
 
@@ -228,8 +235,8 @@ const buildWeekSummary = (week) => {
     cards: [
       {
         label: '도면 배포 현황',
-        value: `${distributedCount}/${totalCount || 0}건`,
-        note: `총 ${totalCount || 0}건 중 ${distributedCount}건 배포 완료`,
+        value: `${formatHeadQty(distributedHeadQty)}/${formatHeadQty(totalHeadQty)} 헤드`,
+        note: `헤드 ${formatHeadQty(totalHeadQty)}개 중 ${formatHeadQty(distributedHeadQty)}개 배포 완료`,
         tone: 'bg-slate-50 border-slate-200 text-slate-800',
       },
       {
@@ -307,7 +314,7 @@ const fetchRows = async () => {
   const testDates = targetWeeks.value.map((week) => formatKoreanDate(week.date))
   const { start, end } = monthRange.value
   const baseColumns =
-    'id,no,initial,company,place,area,work_type,test_date,drawing_date,drawing_distributed_at,shipment_date,delivery_due_date,is_drawing,calculation,complete,delay_text'
+    'id,no,initial,company,place,area,work_type,head,test_date,drawing_date,drawing_distributed_at,shipment_date,delivery_due_date,is_drawing,calculation,complete,delay_text'
   const withVirtualColumns = `${baseColumns},virtual_drawing_distributed`
   const monthColumns = 'id,no,initial,company,place,area,shipment,shipment_date,delivery_due_date,updated_at'
 

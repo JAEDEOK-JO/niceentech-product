@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase'
 
 const PRODUCT_LIST_TABLE = 'product_list'
 const OVERTIME_TABLE = 'production_line_overtime_logs'
-const AVERAGE_STATS_CACHE_KEY = 'stats-weekly-average-v1'
+const AVERAGE_STATS_CACHE_KEY = 'stats-weekly-average-v3'
 const AVERAGE_STATS_CACHE_TTL_MS = 6 * 60 * 60 * 1000
 const AVERAGE_STATS_START_DATE = '2023년 01월 01일'
 const DEFAULT_HEAD_UNIT_SEC = 50
@@ -13,19 +13,11 @@ const REGULAR_WORK_SEC = 8 * 3600
 const TUESDAY_DEADLINE_WORK_SEC = 2 * 3600
 const WEEKDAY_OVERTIME_MAX_SEC = 3.5 * 3600
 const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토']
-const DELAY_REASON_OPTIONS = [
-  { value: '', label: '사유' },
-  { value: '설비고장', label: '설비고장' },
-  { value: '도면지연', label: '도면지연' },
-  { value: '자재부족', label: '자재부족' },
-  { value: '재작업', label: '재작업' },
-  { value: '인원부족', label: '인원부족' },
-  { value: '기타', label: '기타' },
-]
 const LINE_DEFS = [
   { key: 'branch_head', title: '헤드', quantityLabel: '수량', accent: 'emerald' },
   { key: 'main_hole', title: '홀', quantityLabel: '수량', accent: 'cyan' },
 ]
+const EXCLUDED_CURRENT_STATS_WORK_TYPES = new Set(['나사'])
 
 const toNumber = (value) => {
   const n = Number(value)
@@ -56,6 +48,7 @@ const formatHourMinute = (seconds) => {
 }
 const formatQty = (value, unit = '개') => `${Number(value || 0).toLocaleString('ko-KR')}${unit}`
 const normalizeWorkType = (value) => String(value ?? '').replaceAll(' ', '').trim()
+const isIncludedCurrentStatsWorkType = (value) => !EXCLUDED_CURRENT_STATS_WORK_TYPES.has(normalizeWorkType(value))
 const isDistributed = (row) =>
   String(row?.drawing_date ?? '').trim().length > 0 || Boolean(row?.virtual_drawing_distributed)
 const parseMonthDayDate = (value, baseDate = new Date()) => {
@@ -282,6 +275,7 @@ export function useDailyProductionJournal(session) {
 
   const selectedTestDateText = computed(() => formatKoreanDate(selectedTestDate.value))
   const scheduleDates = computed(() => getScheduleDatesByTestDate(selectedTestDate.value))
+  const remainingScheduleDates = computed(() => getScheduleDates(selectedInputDate.value, selectedTestDate.value))
   const selectedWorkDateText = computed(() => formatKoreanDate(selectedInputDate.value))
   const selectedWeekRangeText = computed(
     () => `${formatMonthDay(scheduleDates.value[0])} ~ ${formatMonthDay(scheduleDates.value[scheduleDates.value.length - 1])}`,
@@ -390,7 +384,7 @@ export function useDailyProductionJournal(session) {
       error.value = `통계 조회 실패: ${queryError.message}`
       return
     }
-    rowsByTestDate.value = { [testDate]: data ?? [] }
+    rowsByTestDate.value = { [testDate]: (data ?? []).filter((row) => isIncludedCurrentStatsWorkType(row?.work_type)) }
   }
 
   const fetchOvertimeLogs = async () => {
@@ -476,6 +470,8 @@ export function useDailyProductionJournal(session) {
     distributedRows.value.filter((row) => !isCompletedByDate(row, selectedInputDate.value)),
   )
   const pendingRows = computed(() => selectedRows.value.filter((row) => !isDistributed(row)))
+  const getRemainingDistributedRowsForDate = (targetDate) =>
+    distributedRows.value.filter((row) => !isCompletedByDate(row, targetDate))
 
   const lineMetrics = computed(() =>
     LINE_DEFS.reduce((acc, line) => {
@@ -491,10 +487,10 @@ export function useDailyProductionJournal(session) {
         remaining.qty,
         Math.max(1, unitSec),
         remaining.requiredSec,
-        scheduleDates.value,
+        remainingScheduleDates.value,
         selectedTestDate.value,
       )
-      const actualWeekdayOvertimeTotalSec = scheduleDates.value.reduce((sum, date) => {
+      const actualWeekdayOvertimeTotalSec = remainingScheduleDates.value.reduce((sum, date) => {
         if (getOvertimeCapSecForDate(date, selectedTestDate.value) <= 0) return sum
         const entry = overtimeByWorkDate.value[formatKoreanDate(date)]?.[line.key]
         return sum + Math.max(0, toNumber(entry?.actualOvertimeMin) * 60)
@@ -559,13 +555,26 @@ export function useDailyProductionJournal(session) {
       const day = date.getDay()
       const isWeekend = day === 0 || day === 6
       const isDeadlineTuesday = isSameDay(date, selectedTestDate.value) && day === 2
-      const regularWorkSec = getRegularWorkSecForDate(date, selectedTestDate.value)
+      const remainingRowsForDate = getRemainingDistributedRowsForDate(date)
+      const scheduleDatesFromCurrentDate = getScheduleDates(date, selectedTestDate.value)
       const lineRows = LINE_DEFS.reduce((acc, line) => {
-        const metric = lineMetrics.value[line.key]
+        const remaining = buildLineTotals(remainingRowsForDate, setting.value, line.key)
+        const unitSec = remaining.qty > 0
+          ? Math.round(remaining.requiredSec / remaining.qty)
+          : line.key === 'branch_head'
+          ? setting.value.weldingHeadTimeSec
+          : setting.value.holeTimeSec
+        const plan = buildMetricPlan(
+          remaining.qty,
+          Math.max(1, unitSec),
+          remaining.requiredSec,
+          scheduleDatesFromCurrentDate,
+          selectedTestDate.value,
+        )
         const entry = overtimeByWorkDate.value[workDateText]?.[line.key] ?? createEmptyLineEntry()
         const actualOvertimeSec = Math.max(0, toNumber(entry.actualOvertimeMin) * 60)
         const requiredOvertimeSec =
-          getOvertimeCapSecForDate(date, selectedTestDate.value) > 0 ? metric.plan.weekdayDailyRequiredOvertimeSec : 0
+          getOvertimeCapSecForDate(date, selectedTestDate.value) > 0 ? plan.weekdayDailyRequiredOvertimeSec : 0
         const delayText =
           entry.delayMin > 0
             ? `${formatHourMinute(entry.delayMin * 60)}${entry.delayReason ? ` · ${entry.delayReason}` : ''}`
@@ -573,7 +582,7 @@ export function useDailyProductionJournal(session) {
             ? entry.delayReason
             : ''
         const baseNote = isWeekend
-          ? metric.plan.weekendRequirementMap[workDateText]
+          ? plan.weekendRequirementMap[workDateText]
             ? '정시 작업 필요'
             : '주말 작업 불필요'
           : isDeadlineTuesday
@@ -586,7 +595,7 @@ export function useDailyProductionJournal(session) {
           ? '충족'
           : '부족'
         acc[line.key] = {
-          calculatedText: requiredOvertimeSec > 0 ? formatHourMinute(requiredOvertimeSec) : '',
+          calculatedText: requiredOvertimeSec > 0 ? formatHourMinute(requiredOvertimeSec) : '정시 작업 가능',
           actualText: !entry.saved ? '' : actualOvertimeSec <= 0 ? '야근없음' : formatHourMinute(actualOvertimeSec),
           note: baseNote,
           delayText,
@@ -740,7 +749,6 @@ export function useDailyProductionJournal(session) {
     summary,
     weekdayPlanRows,
     lineInputs,
-    delayReasonOptions: DELAY_REASON_OPTIONS,
     updateSelectedInputDate,
     saveDailyActualOvertime,
     refresh,

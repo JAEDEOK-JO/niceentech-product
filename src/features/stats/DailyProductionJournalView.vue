@@ -12,7 +12,6 @@ defineProps({
   summary: { type: Object, required: true },
   weekdayPlanRows: { type: Array, default: () => [] },
   lineInputs: { type: Object, required: true },
-  delayReasonOptions: { type: Array, default: () => [] },
   canEditActualOvertime: { type: Boolean, default: false },
 })
 
@@ -144,15 +143,13 @@ const emit = defineEmits([
                   class="h-8 w-20 rounded-md border border-slate-300 px-2 text-right text-sm"
                   @input="emit('update:delayInputMin', { lineType: 'branch_head', value: Number($event.target.value || 0) })"
                 />
-                <select
-                  class="h-8 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700"
+                <input
                   :value="lineInputs.branch_head.delayReason"
-                  @change="emit('update:delayReason', { lineType: 'branch_head', value: $event.target.value })"
-                >
-                  <option v-for="option in delayReasonOptions" :key="`branch-${option.value}`" :value="option.value">
-                    {{ option.label }}
-                  </option>
-                </select>
+                  type="text"
+                  placeholder="지연사유 입력"
+                  class="h-8 min-w-[140px] rounded-md border border-slate-300 px-2 text-xs text-slate-700"
+                  @input="emit('update:delayReason', { lineType: 'branch_head', value: $event.target.value })"
+                />
                 <Button class="h-8 px-2.5 text-xs" @click="emit('save-daily-actual', 'branch_head')">저장</Button>
               </div>
               <div class="flex flex-wrap items-center gap-2 rounded-md border border-cyan-200 bg-white px-2 py-2">
@@ -190,15 +187,13 @@ const emit = defineEmits([
                   class="h-8 w-20 rounded-md border border-slate-300 px-2 text-right text-sm"
                   @input="emit('update:delayInputMin', { lineType: 'main_hole', value: Number($event.target.value || 0) })"
                 />
-                <select
-                  class="h-8 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700"
+                <input
                   :value="lineInputs.main_hole.delayReason"
-                  @change="emit('update:delayReason', { lineType: 'main_hole', value: $event.target.value })"
-                >
-                  <option v-for="option in delayReasonOptions" :key="`main-${option.value}`" :value="option.value">
-                    {{ option.label }}
-                  </option>
-                </select>
+                  type="text"
+                  placeholder="지연사유 입력"
+                  class="h-8 min-w-[140px] rounded-md border border-slate-300 px-2 text-xs text-slate-700"
+                  @input="emit('update:delayReason', { lineType: 'main_hole', value: $event.target.value })"
+                />
                 <Button class="h-8 px-2.5 text-xs" @click="emit('save-daily-actual', 'main_hole')">저장</Button>
               </div>
             </div>

@@ -20,7 +20,6 @@ const {
   summary,
   weekdayPlanRows,
   lineInputs,
-  delayReasonOptions,
   updateSelectedInputDate,
   saveDailyActualOvertime,
   refresh,
@@ -68,7 +67,6 @@ const handleSaveDailyActual = async (lineType) => {
     :summary="summary"
     :weekday-plan-rows="weekdayPlanRows"
     :line-inputs="lineInputs"
-    :delay-reason-options="delayReasonOptions"
     :can-edit-actual-overtime="isAdminRole(profile?.role)"
     @go-home="goHome"
     @refresh="refresh"
