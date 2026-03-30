@@ -378,6 +378,18 @@ export function useProductionPlan(session) {
     if (worker_main !== '작업완료' && row.worker_main === '작업완료') {
       updatePayload.worker_main_time = ''
     }
+    if (field === 'nasa_status' && next === '작업완료' && row.worker_nasa !== '작업완료') {
+      updatePayload.worker_nasa_time = todayText
+    }
+    if (field === 'nasa_status' && next !== '작업완료' && row.worker_nasa === '작업완료') {
+      updatePayload.worker_nasa_time = ''
+    }
+    if ((field === 'marking_weld_a_status' || field === 'marking_weld_b_status') && next === '작업완료' && row.worker_welding !== '작업완료') {
+      updatePayload.worker_welding_time = todayText
+    }
+    if ((field === 'marking_weld_a_status' || field === 'marking_weld_b_status') && next !== '작업완료' && row.worker_welding === '작업완료') {
+      updatePayload.worker_welding_time = ''
+    }
 
     const { error } = await supabase
       .from(PRODUCT_LIST_TABLE)

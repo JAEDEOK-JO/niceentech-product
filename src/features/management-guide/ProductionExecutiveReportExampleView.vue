@@ -5,6 +5,9 @@ import Button from '@/components/ui/button/Button.vue'
 
 const PRODUCT_LIST_TABLE = 'product_list'
 const PRODUCTION_REPAIR_HISTORY_TABLE = 'production_repair_history'
+const QUALITY_LIST_TABLE = 'quality_list'
+const QUALITY_AGGREGATION_START = new Date(2023, 0, 1)
+const QUALITY_THRESHOLD = 3000
 
 const emit = defineEmits(['go-back'])
 const props = defineProps({
@@ -15,6 +18,7 @@ const loading = ref(false)
 const errorMessage = ref('')
 const rows = ref([])
 const repairHistoryRows = ref([])
+const qualityRows = ref([])
 const isRepairDialogOpen = ref(false)
 const savingRepairEntry = ref(false)
 const deletingRepairEntry = ref(false)
@@ -62,17 +66,34 @@ const categoryMeta = [
   { key: 'groove', label: '그루브', color: '#8b5cf6', tone: 'bg-violet-50 border-violet-200 text-violet-800' },
   { key: 'nasa', label: '나사', color: '#f59e0b', tone: 'bg-amber-50 border-amber-200 text-amber-800' },
 ]
+const HEAD_HOLE_WORK_TYPES = new Set(['용접/무용접', '전실/입상', '기타'])
 
 const toNumber = (value) => {
   const num = Number(value)
   return Number.isFinite(num) ? num : 0
 }
 const normalizeText = (value) => String(value ?? '').trim()
-const isCompletedOrShipped = (row) => Boolean(row?.complete) || Boolean(row?.shipment)
+const isDoneStatus = (value) => {
+  const text = normalizeText(value)
+  return text === '작업완료' || text === '출하완료'
+}
+const isNoneStatus = (value) => normalizeText(value) === '없음'
+const isCompletedOrShipped = (row) =>
+  Boolean(row?.complete) ||
+  Boolean(row?.shipment) ||
+  isDoneStatus(row?.worker_t) ||
+  isDoneStatus(row?.worker_main) ||
+  isDoneStatus(row?.worker_nasa) ||
+  (isNoneStatus(row?.worker_t) &&
+    isNoneStatus(row?.worker_main) &&
+    isNoneStatus(row?.worker_nasa) &&
+    isNoneStatus(row?.worker_welding))
 const formatCount = (value, unit = '개') => `${Number(value || 0).toLocaleString('ko-KR')}${unit}`
 const formatCurrency = (value) => `${Number(value || 0).toLocaleString('ko-KR')}원`
+const formatRatio = (value) => `${Number(value || 0).toFixed(2)}%`
 const formatRepairCost = (row) => (Boolean(row?.is_warranty) ? '무상' : formatCurrency(row?.cost))
 const sanitizeMoneyInput = (value) => String(value ?? '').replace(/\D/g, '')
+const getCategorySubLabel = (item) => (item?.key === 'head' ? '나사포함' : '')
 const formatShortMonthDay = (value) => {
   const parsed = parseFlexibleDate(value)
   if (!parsed) return normalizeText(value) || '-'
@@ -84,12 +105,6 @@ const currentMonthWeekCutoff = new Date(
   reportMonth,
   Math.min(currentWeekTuesday.getDate(), new Date(reportYear, reportMonth + 1, 0).getDate()),
 )
-const monthTuesdayDates = Array.from({ length: new Date(reportYear, reportMonth + 1, 0).getDate() }, (_, index) => {
-  const date = new Date(reportYear, reportMonth, index + 1)
-  return date.getDay() === 2 ? date : null
-}).filter(Boolean)
-const currentMonthWeekOrder =
-  monthTuesdayDates.filter((date) => startOfDay(date).getTime() <= startOfDay(currentMonthWeekCutoff).getTime()).length || 1
 const currentMonthProgressLabel = `${reportMonthLabel} 현재까지`
 
 const createDefaultRepairForm = (row = null) =>
@@ -159,8 +174,9 @@ const fetchRows = async () => {
 
   const { data, error } = await supabase
     .from(PRODUCT_LIST_TABLE)
-    .select('id,work_type,head,hole,groove,test_date,complete,shipment')
-    .or('complete.eq.true,shipment.eq.true')
+    .select(
+      'id,work_type,head,hole,groove,test_date,complete,shipment,worker_t,worker_main,worker_nasa,worker_welding',
+    )
     .gte('test_date', formatTestDate(fetchStart))
     .lte('test_date', formatTestDate(endOfYear))
     .order('id', { ascending: false })
@@ -188,16 +204,71 @@ const fetchRepairHistory = async () => {
   repairHistoryRows.value = data ?? []
 }
 
+const buildQualityQtySum = (row) =>
+  toNumber(row?.a25) +
+  toNumber(row?.a32) +
+  toNumber(row?.a40) +
+  toNumber(row?.a50) +
+  toNumber(row?.a65) +
+  toNumber(row?.m65) +
+  toNumber(row?.m80) +
+  toNumber(row?.m100) +
+  toNumber(row?.m125) +
+  toNumber(row?.m150) +
+  toNumber(row?.m200)
+
+const buildQualityCancelQtySum = (row) =>
+  (Boolean(row?.a32_return) ? toNumber(row?.a32) : 0) +
+  (Boolean(row?.a40_return) ? toNumber(row?.a40) : 0) +
+  (Boolean(row?.a50_return) ? toNumber(row?.a50) : 0) +
+  (Boolean(row?.a65_return) ? toNumber(row?.a65) : 0) +
+  (Boolean(row?.m65_return) ? toNumber(row?.m65) : 0) +
+  (Boolean(row?.m80_return) ? toNumber(row?.m80) : 0) +
+  (Boolean(row?.m100_return) ? toNumber(row?.m100) : 0) +
+  (Boolean(row?.m125_return) ? toNumber(row?.m125) : 0) +
+  (Boolean(row?.m150_return) ? toNumber(row?.m150) : 0) +
+  (Boolean(row?.m200_return) ? toNumber(row?.m200) : 0)
+
+const fetchQualityRows = async () => {
+  const batchSize = 1000
+  let from = 0
+  let hasMore = true
+  const allRows = []
+
+  while (hasMore) {
+    const to = from + batchSize - 1
+    const { data, error } = await supabase
+      .from(QUALITY_LIST_TABLE)
+      .select(
+        'id,test_date,a25,a32,a40,a50,a65,m65,m80,m100,m125,m150,m200,a32_return,a40_return,a50_return,a65_return,m65_return,m80_return,m100_return,m125_return,m150_return,m200_return',
+      )
+      .order('id', { ascending: true })
+      .range(from, to)
+
+    if (error) {
+      throw new Error(error.message ?? '검수 집계 데이터를 불러오지 못했습니다.')
+    }
+
+    const nextRows = data ?? []
+    allRows.push(...nextRows)
+    hasMore = nextRows.length === batchSize
+    from += batchSize
+  }
+
+  qualityRows.value = allRows
+}
+
 const fetchReportData = async () => {
   loading.value = true
   errorMessage.value = ''
 
   try {
-    await Promise.all([fetchRows(), fetchRepairHistory()])
+    await Promise.all([fetchRows(), fetchRepairHistory(), fetchQualityRows()])
   } catch (error) {
     errorMessage.value = error?.message ?? '생산 데이터를 불러오지 못했습니다.'
     rows.value = []
     repairHistoryRows.value = []
+    qualityRows.value = []
   } finally {
     loading.value = false
   }
@@ -228,7 +299,9 @@ const currentWeekPendingRows = computed(() => currentWeekTargetRows.value.filter
 
 const buildCategoryCounts = (targetRows) => {
   const head = targetRows.reduce((sum, row) => sum + toNumber(row?.head), 0)
-  const hole = targetRows.reduce((sum, row) => sum + toNumber(row?.hole), 0)
+  const hole = targetRows
+    .filter((row) => HEAD_HOLE_WORK_TYPES.has(normalizeText(row?.work_type)))
+    .reduce((sum, row) => sum + toNumber(row?.hole), 0)
   const groove = targetRows.reduce((sum, row) => sum + toNumber(row?.groove), 0)
   const nasa = targetRows
     .filter((row) => normalizeText(row?.work_type) === '나사')
@@ -258,21 +331,65 @@ const currentYearSummaryRows = computed(() =>
     value: currentYearCounts.value[item.key],
   })),
 )
+const qualityAggregatedRows = computed(() => {
+  const grouped = {}
 
-const categoryChartRows = computed(() =>
-  categoryMeta.map((item) => {
-    const monthValue = currentCounts.value[item.key]
-    const previousValue = previousCounts.value[item.key]
-    return {
-      ...item,
-      yearValue: currentYearCounts.value[item.key],
-      monthValue,
-      previousValue,
-      diff: monthValue - previousValue,
-      share: currentMonthTotal.value ? Math.round((monthValue / currentMonthTotal.value) * 100) : 0,
+  for (const row of qualityRows.value) {
+    const testDate = normalizeText(row?.test_date)
+    const date = parseFlexibleDate(testDate)
+    if (!date || startOfDay(date).getTime() < startOfDay(QUALITY_AGGREGATION_START).getTime()) continue
+    if (!grouped[testDate]) {
+      grouped[testDate] = {
+        testDate,
+        _date: date,
+        totalQty: 0,
+        cancelQty: 0,
+      }
     }
-  }),
-)
+    grouped[testDate].totalQty += buildQualityQtySum(row)
+    grouped[testDate].cancelQty += buildQualityCancelQtySum(row)
+  }
+
+  return Object.values(grouped)
+})
+const buildQualityReturnMetric = (targetRows, label) => {
+  const qualifiedRows = targetRows.filter((row) => toNumber(row?.totalQty) > QUALITY_THRESHOLD)
+  const totalQty = qualifiedRows.reduce((sum, row) => sum + toNumber(row?.totalQty), 0)
+  const cancelQty = qualifiedRows.reduce((sum, row) => sum + toNumber(row?.cancelQty), 0)
+  return {
+    label,
+    qualifiedCount: qualifiedRows.length,
+    totalQty,
+    cancelQty,
+    ratio: totalQty > 0 ? (cancelQty * 100) / totalQty : 0,
+  }
+}
+const qualityReturnOverallSummary = computed(() => {
+  const qualifiedRows = qualityAggregatedRows.value.filter((row) => toNumber(row?.totalQty) > QUALITY_THRESHOLD)
+  const totalQty = qualifiedRows.reduce((sum, row) => sum + toNumber(row?.totalQty), 0)
+  const cancelQty = qualifiedRows.reduce((sum, row) => sum + toNumber(row?.cancelQty), 0)
+  const ratio = totalQty > 0 ? (cancelQty * 100) / totalQty : 0
+  return {
+    qualifiedCount: qualifiedRows.length,
+    ratio,
+  }
+})
+const qualityReturnSummaryRows = computed(() => {
+  const weekRows = qualityAggregatedRows.value.filter(
+    (row) => startOfDay(row._date).getTime() === currentWeekTuesday.getTime(),
+  )
+  const monthRows = qualityAggregatedRows.value.filter(
+    (row) => row._date.getFullYear() === reportYear && row._date.getMonth() === reportMonth,
+  )
+  const yearRows = qualityAggregatedRows.value.filter((row) => row._date.getFullYear() === reportYear)
+
+  return [
+    buildQualityReturnMetric(weekRows, `${formatTestDate(currentWeekTuesday)} 검수`),
+    buildQualityReturnMetric(monthRows, `${reportMonthLabel} 검수`),
+    buildQualityReturnMetric(yearRows, `${reportYear}년 검수`),
+  ]
+})
+
 const monthlyComparisonRows = computed(() =>
   categoryMeta.map((item) => {
     const twoMonthsAgoValue = twoMonthsAgoCounts.value[item.key]
@@ -288,21 +405,6 @@ const monthlyComparisonRows = computed(() =>
     }
   }),
 )
-
-const chartGradient = computed(() => {
-  const monthTotal = categoryChartRows.value.reduce((sum, item) => sum + item.monthValue, 0)
-  if (!monthTotal) return 'conic-gradient(#e2e8f0 0deg 360deg)'
-
-  let currentDegree = 0
-  const segments = categoryChartRows.value.map((item) => {
-    const degree = (item.monthValue / monthTotal) * 360
-    const start = currentDegree
-    const end = currentDegree + degree
-    currentDegree = end
-    return `${item.color} ${start}deg ${end}deg`
-  })
-  return `conic-gradient(${segments.join(', ')})`
-})
 
 const totalRepairCost = computed(() => repairHistoryRows.value.reduce((sum, row) => sum + toNumber(row?.cost), 0))
 
@@ -495,8 +597,8 @@ onMounted(async () => {
           <section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
             <div class="grid items-stretch gap-4 xl:grid-cols-2">
               <article class="h-full rounded-2xl border border-rose-200 bg-rose-50 p-4">
-                <p class="text-[13px] font-extrabold text-rose-900">이번주 생산량</p>
-                <p class="mt-1 text-[11px] font-semibold text-rose-700">{{ formatTestDate(currentWeekTuesday) }} 검수 기준</p>
+                <p class="text-[15px] font-extrabold text-rose-900">이번주 생산량</p>
+                <p class="mt-1 text-[13px] font-semibold text-rose-700">{{ formatTestDate(currentWeekTuesday) }} 검수 기준</p>
                 <div class="mt-4 space-y-2">
                   <div
                     v-for="item in currentWeekSummaryRows"
@@ -505,7 +607,12 @@ onMounted(async () => {
                   >
                     <div class="flex items-center gap-2 text-sm font-bold text-slate-900">
                       <span class="h-2.5 w-2.5 rounded-full" :style="{ backgroundColor: item.color }" />
-                      <span>{{ item.label }}</span>
+                      <div class="leading-tight">
+                        <div>{{ item.label }}</div>
+                        <div v-if="getCategorySubLabel(item)" class="text-[10px] font-semibold text-slate-500">
+                          {{ getCategorySubLabel(item) }}
+                        </div>
+                      </div>
                     </div>
                     <div class="text-center">
                       <p class="text-[10px] font-bold text-slate-500">완료/출하</p>
@@ -520,8 +627,8 @@ onMounted(async () => {
               </article>
 
               <article class="h-full rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <p class="text-[13px] font-extrabold text-slate-900">{{ reportYearLabel }} 누적</p>
-                <p class="mt-1 text-[11px] font-semibold text-slate-500">작업완료 또는 출하완료 기준 누적</p>
+                <p class="text-[15px] font-extrabold text-slate-900">{{ reportYearLabel }} 누적</p>
+                <p class="mt-1 text-[13px] font-semibold text-slate-500">작업완료 또는 출하완료 기준 누적</p>
                 <div class="mt-4 space-y-2">
                   <div
                     v-for="item in currentYearSummaryRows"
@@ -530,7 +637,12 @@ onMounted(async () => {
                   >
                     <div class="flex items-center gap-2 text-sm font-bold text-slate-900">
                       <span class="h-2.5 w-2.5 rounded-full" :style="{ backgroundColor: item.color }" />
-                      <span>{{ item.label }}</span>
+                      <div class="leading-tight">
+                        <div>{{ item.label }}</div>
+                        <div v-if="getCategorySubLabel(item)" class="text-[10px] font-semibold text-slate-500">
+                          {{ getCategorySubLabel(item) }}
+                        </div>
+                      </div>
                     </div>
                     <div class="col-span-2 text-center">
                       <p class="text-[10px] font-bold text-slate-500">완료/출하 누적</p>
@@ -547,42 +659,43 @@ onMounted(async () => {
               <article class="rounded-2xl border border-slate-200 bg-white p-5">
                 <div class="flex items-center justify-between gap-3">
                   <div>
-                    <p class="text-[13px] font-extrabold text-slate-900">{{ reportMonthLabel }} 생산 항목 비중</p>
-                    <p class="mt-1 text-[12px] text-slate-500">이번 달 수량 기준</p>
+                    <p class="text-[15px] font-extrabold text-slate-900">미생산 반납 비율 (증지수량)</p>
+                    <p class="mt-1 text-[14px] text-slate-500">
+                      2023년 01월 이후 현재까지 {{ QUALITY_THRESHOLD.toLocaleString('ko-KR') }}개 초과
+                      <span class="font-extrabold text-rose-600">{{ qualityReturnOverallSummary.qualifiedCount }}건</span>
+                    </p>
+                    <p class="mt-1 text-[14px] font-semibold text-slate-700">
+                      {{ QUALITY_THRESHOLD.toLocaleString('ko-KR') }}개 초과 구간 미생산 비율
+                      <span class="font-extrabold text-rose-600">{{ formatRatio(qualityReturnOverallSummary.ratio) }}</span>
+                    </p>
+                    <p class="mt-3 inline-flex rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-[12px] font-extrabold text-indigo-700">
+                      증지수량 3,000개 = 헤드환산 4,500개
+                    </p>
                   </div>
-                  <span class="text-[11px] font-bold text-slate-500">항목별 비중</span>
                 </div>
-                <div class="mt-5 grid gap-5 lg:grid-cols-[240px_1fr] lg:items-center">
-                  <div class="mx-auto flex h-52 w-52 items-center justify-center rounded-full border border-slate-200" :style="{ background: chartGradient }">
-                    <div class="flex h-36 w-36 items-center justify-center rounded-full bg-white text-center">
-                      <div>
-                        <p class="text-[11px] font-bold text-slate-400">{{ reportMonthLabel }}</p>
-                        <p class="mt-1 text-xl font-extrabold text-slate-900">비중</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div class="divide-y divide-slate-200">
-                    <div
-                      v-for="item in categoryChartRows"
-                      :key="item.key"
-                      class="grid grid-cols-[96px_1fr_84px] items-center gap-3 py-3"
-                    >
-                      <div class="flex items-center gap-2 text-left text-sm font-semibold text-slate-900">
-                        <span class="h-2.5 w-2.5 rounded-full" :style="{ backgroundColor: item.color }" />
-                        <span>{{ item.label }}</span>
-                      </div>
-                      <div class="text-center text-[12px] font-bold text-slate-500">{{ item.share }}%</div>
-                      <div class="text-right text-sm font-extrabold text-slate-900">{{ formatCount(item.monthValue) }}</div>
-                    </div>
+                <div class="mt-4 grid gap-3 md:grid-cols-3">
+                  <div
+                    v-for="item in qualityReturnSummaryRows"
+                    :key="item.label"
+                    class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4"
+                  >
+                    <p class="text-[12px] font-bold text-slate-600">{{ item.label }}</p>
+                    <p class="mt-2 text-2xl font-extrabold text-rose-600">{{ formatRatio(item.ratio) }}</p>
+                    <p class="mt-2 text-[12px] font-semibold text-slate-600">
+                      미생산 <span class="font-extrabold text-rose-600">{{ formatCount(item.cancelQty) }}</span>
+                    </p>
+                    <p class="mt-2 text-[11px] text-slate-500">
+                      {{ QUALITY_THRESHOLD.toLocaleString('ko-KR') }}개 초과 <span class="font-extrabold text-rose-600">{{ item.qualifiedCount }}건</span>
+                    </p>
                   </div>
                 </div>
               </article>
 
               <article class="rounded-2xl border border-slate-200 bg-white p-5">
-                <p class="text-[13px] font-extrabold text-slate-900">
+                <p class="text-[15px] font-extrabold text-slate-900">
                   {{ twoMonthsAgoLabel }} / {{ previousMonthLabel }} / {{ currentMonthProgressLabel }} 비교
                 </p>
-                <p class="mt-1 text-[12px] text-slate-500">이번달은 이번 주 화요일 기준 누적만 반영합니다.</p>
+                <p class="mt-1 text-[14px] text-slate-500">이번달은 이번 주 화요일 기준 누적만 반영합니다.</p>
                 <div class="mt-4">
                   <table class="min-w-full table-fixed border-collapse text-sm">
                     <thead class="border-b border-slate-200 text-[12px] font-bold text-slate-600">
@@ -603,7 +716,12 @@ onMounted(async () => {
                         <td class="w-[110px] px-4 py-4 text-left font-bold text-slate-900">
                           <div class="flex items-center gap-2">
                             <span class="h-2.5 w-2.5 rounded-full" :style="{ backgroundColor: item.color }" />
-                            <span>{{ item.label }}</span>
+                            <div class="leading-tight">
+                              <div>{{ item.label }}</div>
+                              <div v-if="getCategorySubLabel(item)" class="text-[10px] font-semibold text-slate-500">
+                                {{ getCategorySubLabel(item) }}
+                              </div>
+                            </div>
                           </div>
                         </td>
                         <td class="px-4 py-4 text-center font-semibold text-slate-500">{{ formatCount(item.twoMonthsAgoValue) }}</td>

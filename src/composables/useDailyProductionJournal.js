@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase'
 
 const PRODUCT_LIST_TABLE = 'product_list'
 const OVERTIME_TABLE = 'production_line_overtime_logs'
-const AVERAGE_STATS_CACHE_KEY = 'stats-weekly-average-v3'
+const AVERAGE_STATS_CACHE_KEY = 'stats-weekly-average-v5'
 const AVERAGE_STATS_CACHE_TTL_MS = 6 * 60 * 60 * 1000
 const AVERAGE_STATS_START_DATE = '2023년 01월 01일'
 const DEFAULT_HEAD_UNIT_SEC = 50
@@ -32,6 +32,8 @@ const formatKoreanDate = (date) => {
 }
 const formatMonthDay = (date) =>
   `${String(date.getMonth() + 1).padStart(2, '0')}월 ${String(date.getDate()).padStart(2, '0')}일`
+const formatYearMonth = (date) =>
+  `${String(date.getFullYear()).padStart(4, '0')}년 ${String(date.getMonth() + 1).padStart(2, '0')}월`
 const addDays = (date, days) => {
   const next = new Date(date)
   next.setDate(next.getDate() + days)
@@ -193,10 +195,11 @@ const serializeStoredNote = ({ overtimeNote, delayMin, delayReason }) => {
   })
 }
 const createEmptyAverageStats = () => ({
-  periodText: '2023.01 ~ 현재',
+  periodText: `${formatYearMonth(new Date(2023, 0, 1))} ~ ${formatYearMonth(new Date())}`,
   weeksCount: 0,
   avgHeadQty: 0,
   avgHoleQty: 0,
+  avgGrooveQty: 0,
   cachedAtText: '',
 })
 const formatCacheStamp = (value) => {
@@ -321,7 +324,7 @@ export function useDailyProductionJournal(session) {
       const to = from + batchSize - 1
       const { data, error: queryError } = await supabase
         .from(PRODUCT_LIST_TABLE)
-        .select('test_date,work_type,head,hole')
+        .select('test_date,work_type,head,hole,groove')
         .gte('test_date', AVERAGE_STATS_START_DATE)
         .order('id', { ascending: true })
         .range(from, to)
@@ -339,9 +342,10 @@ export function useDailyProductionJournal(session) {
       for (const row of rows) {
         const testDate = String(row?.test_date ?? '').trim()
         if (!testDate) continue
-        if (!grouped[testDate]) grouped[testDate] = { headQty: 0, holeQty: 0 }
+        if (!grouped[testDate]) grouped[testDate] = { headQty: 0, holeQty: 0, grooveQty: 0 }
         grouped[testDate].headQty += toNumber(row?.head)
         grouped[testDate].holeQty += toNumber(row?.hole)
+        grouped[testDate].grooveQty += toNumber(row?.groove)
       }
 
       hasMore = rows.length === batchSize
@@ -352,11 +356,13 @@ export function useDailyProductionJournal(session) {
     const weeksCount = weekEntries.length
     const totalHeadQty = weekEntries.reduce((sum, item) => sum + toNumber(item.headQty), 0)
     const totalHoleQty = weekEntries.reduce((sum, item) => sum + toNumber(item.holeQty), 0)
+    const totalGrooveQty = weekEntries.reduce((sum, item) => sum + toNumber(item.grooveQty), 0)
     const nextStats = {
-      periodText: '2023.01 ~ 현재',
+      periodText: `${formatYearMonth(new Date(2023, 0, 1))} ~ ${formatYearMonth(new Date())}`,
       weeksCount,
       avgHeadQty: weeksCount > 0 ? Math.round(totalHeadQty / weeksCount) : 0,
       avgHoleQty: weeksCount > 0 ? Math.round(totalHoleQty / weeksCount) : 0,
+      avgGrooveQty: weeksCount > 0 ? Math.round(totalGrooveQty / weeksCount) : 0,
       cachedAtText: formatCacheStamp(now),
     }
     averageStats.value = nextStats
@@ -525,6 +531,7 @@ export function useDailyProductionJournal(session) {
       weeksCountText: `${Number(averageStats.value.weeksCount || 0).toLocaleString('ko-KR')}주`,
       avgHeadQtyText: formatQty(averageStats.value.avgHeadQty),
       avgHoleQtyText: formatQty(averageStats.value.avgHoleQty),
+      avgGrooveQtyText: formatQty(averageStats.value.avgGrooveQty),
       cachedAtText: averageStats.value.cachedAtText,
     },
     lines: LINE_DEFS.map((line) => {
@@ -536,8 +543,10 @@ export function useDailyProductionJournal(session) {
         accent: line.accent,
         totalQtyText: formatQty(metric.totalQty),
         remainingQtyText: formatQty(metric.remainingQty),
-        distributedQtyText: formatQty(metric.distributedQty),
         completedQtyText: formatQty(metric.completedQty),
+        heroQtyText: `${Number(metric.remainingQty || 0).toLocaleString('ko-KR')} / ${Number(metric.totalQty || 0).toLocaleString('ko-KR')}개`,
+        heroQtyLabel: '남은 / 전체',
+        distributedQtyText: formatQty(metric.distributedQty),
         pendingQtyText: formatQty(metric.pendingQty),
         unitSecText: `${metric.unitSec}초/개`,
         regularDayQtyText: formatQty(metric.plan.regularDayQty),
@@ -609,8 +618,8 @@ export function useDailyProductionJournal(session) {
         return acc
       }, {})
       const delaySummaryParts = []
-      if (lineRows.branch_head.delayText) delaySummaryParts.push(`헤드 ${lineRows.branch_head.delayText}`)
-      if (lineRows.main_hole.delayText) delaySummaryParts.push(`홀 ${lineRows.main_hole.delayText}`)
+      if (lineRows.branch_head.delayText) delaySummaryParts.push(lineRows.branch_head.delayText)
+      if (lineRows.main_hole.delayText) delaySummaryParts.push(lineRows.main_hole.delayText)
       return {
         key: workDateText,
         dateText: `${formatMonthDay(date)} (${WEEKDAY_LABELS[day]})`,
