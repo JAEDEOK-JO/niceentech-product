@@ -2,6 +2,15 @@ export const qtyColumnWidth = 60
 export const statusColumnWidth = 55
 export const areaColumnWidth = 300
 
+const formatDrawingDate = (value) => {
+  if (!value) return ''
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return ''
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  return `${mm}.${dd}`
+}
+
 const formatStatusDate = (value) => {
   const raw = String(value ?? '').trim()
   if (!raw) return ''
@@ -97,8 +106,7 @@ export const getCellText = (row, key) => {
     return getWorkerDisplayInfo(row, key)?.text ?? ''
   }
   if (key === 'design_distributed') {
-    const raw = String(row?.drawing_date ?? '').trim()
-    return raw
+    return formatDrawingDate(row?.drawing_date)
   }
   if (key === 'delivery_due_date') {
     return formatStatusDate(row?.delivery_due_date)
@@ -159,7 +167,7 @@ export const getBodyCellClass = (row, column) => {
     }
   } else if (column.key === 'name' && Boolean(row?.calculation)) {
     classes.push('bg-lime-100')
-  } else if (column.key === 'company' && String(row?.drawing_date ?? '').trim()) {
+  } else if (column.key === 'company' && Boolean(row?.drawing_date)) {
     classes.push('bg-slate-100')
   } else if (column.key === 'design_distributed' && Boolean(row?.ahn)) {
     classes.push('bg-blue-300')

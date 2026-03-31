@@ -199,7 +199,7 @@ const ensureMobileRowEditable = (rowId) => {
   return true
 }
 
-const isActualDistributedRow = (row) => String(row?.drawing_date ?? '').trim().length > 0
+const isActualDistributedRow = (row) => Boolean(row?.drawing_date)
 const isVirtualDistributedRow = (row) =>
   !isActualDistributedRow(row) && Boolean(row?.virtual_drawing_distributed)
 const isRowDisabled = (row) => !isActualDistributedRow(row) && !isVirtualDistributedRow(row)

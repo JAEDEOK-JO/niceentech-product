@@ -52,7 +52,7 @@ const formatQty = (value, unit = '개') => `${Number(value || 0).toLocaleString(
 const normalizeWorkType = (value) => String(value ?? '').replaceAll(' ', '').trim()
 const isIncludedCurrentStatsWorkType = (value) => !EXCLUDED_CURRENT_STATS_WORK_TYPES.has(normalizeWorkType(value))
 const isDistributed = (row) =>
-  String(row?.drawing_date ?? '').trim().length > 0 || Boolean(row?.virtual_drawing_distributed)
+  Boolean(row?.drawing_date) || Boolean(row?.virtual_drawing_distributed)
 const parseMonthDayDate = (value, baseDate = new Date()) => {
   const raw = String(value ?? '').trim()
   const match = raw.match(/^(\d{2})\.(\d{2})$/)
@@ -703,13 +703,14 @@ export function useDailyProductionJournal(session) {
   const selectedDateText = computed(() => selectedWorkDateText.value)
   const selectedWeekday = computed(() => WEEKDAY_LABELS[selectedInputDate.value.getDay()])
   const selectedTestDateLabel = computed(() => selectedTestDateText.value)
+  const maxTestDate = computed(() => resolveTestTuesday(addDays(new Date(), 14)))
   const canMoveNextDay = computed(
-    () => startOfDay(selectedTestDate.value).getTime() < startOfDay(resolveTestTuesday(new Date())).getTime(),
+    () => startOfDay(selectedTestDate.value).getTime() < startOfDay(maxTestDate.value).getTime(),
   )
   const moveDay = (delta) => {
     const next = new Date(selectedTestDate.value)
     next.setDate(next.getDate() + delta * 7)
-    if (startOfDay(next).getTime() > startOfDay(resolveTestTuesday(new Date())).getTime()) return
+    if (startOfDay(next).getTime() > startOfDay(maxTestDate.value).getTime()) return
     selectedTestDate.value = next
   }
   const resetToday = () => {

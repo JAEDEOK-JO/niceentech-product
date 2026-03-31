@@ -115,7 +115,7 @@ const resolveWorkerMainStatus = (row) => {
   return '없음'
 }
 
-const isActualDistributedRow = (row) => String(row?.drawing_date ?? '').trim().length > 0
+const isActualDistributedRow = (row) => Boolean(row?.drawing_date)
 const isVirtualDistributedRow = (row) =>
   !isActualDistributedRow(row) && Boolean(row?.virtual_drawing_distributed)
 const isDistributedRow = (row) => isActualDistributedRow(row) || isVirtualDistributedRow(row)
@@ -253,7 +253,10 @@ export function useProductionPlan(session) {
       for (const term of normalizedSearchTerms.value) {
         query = query.ilike('full_text', `%${term}%`)
       }
-      return query.order('no', { ascending: true })
+      return query
+        .order('company', { ascending: true })
+        .order('place', { ascending: true })
+        .order('area', { ascending: true })
     }
 
     let { data, error } = await runQuery(withVirtualColumns)

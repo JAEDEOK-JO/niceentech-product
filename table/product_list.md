@@ -32,6 +32,7 @@
 - `on_product_list_update`: BEFORE UPDATE -> `update_shipment_timestamps()`
 - `product_list_changes_trigger`: AFTER INSERT/DELETE/UPDATE -> `notify_product_list_changes()`
 - `trigger_drawing_completion`: AFTER UPDATE -> `check_drawing_completion_simple()`
+- `product_list_drawing_telegram_trigger`: AFTER INSERT OR UPDATE OF drawing_date -> `enqueue_drawing_telegram_notification()` (drawing_date timestamptz 변경 감지)
 
 ## 컬럼 목록
 
@@ -54,7 +55,7 @@
 | name | text | N |  | 담당자명 |
 | paper | boolean | N | `false` | 서류 유무 |
 | drawing | boolean | N | `false` | 도면 유무 |
-| drawing_date | text | N |  | 도면배포일자 |
+| drawing_date | timestamp with time zone | N |  | 도면배포일자 (timestamptz, UI에서 YY.MM.DD로 표시) |
 | shipment_date | text | N |  | 출하일자 |
 | delivery_due_date | date | N |  | 현장 납기일 |
 | sales_date | text | N |  | 매출일자 |

@@ -37,11 +37,6 @@ const formatKoreanDate = (value) => {
   const [, year, month, day] = matched
   return `${year}년 ${month}월 ${day}일`
 }
-const formatMonthDay = (date = new Date()) => {
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${month}.${day}`
-}
 const goRegister = () => {
   router.push({
     name: 'main-register',
@@ -130,7 +125,7 @@ const handleCellAction = async ({ row, columnKey }) => {
     await updatePlanRowFields({
       rowId: row.id,
       updates: {
-        drawing_date: String(row?.drawing_date ?? '').trim() ? '' : formatMonthDay(new Date()),
+        drawing_date: row?.drawing_date ? null : new Date().toISOString(),
       },
     })
     return

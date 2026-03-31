@@ -68,6 +68,14 @@ const drawingDeletingId = ref(null)
 const suppressDrawingClickId = ref(null)
 let drawingLongPressTimer = null
 const DRAWING_LONG_PRESS_MS = 700
+const formatDrawingDate = (value) => {
+  if (!value) return ''
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return ''
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  return `${mm}.${dd}`
+}
 const headerLegendBadges = [
   { label: '증지만듦', className: 'border-yellow-300 bg-yellow-200 text-yellow-900' },
   { label: '배포확인', className: 'border-blue-300 bg-blue-300 text-blue-950' },
@@ -684,7 +692,7 @@ const selectDrawingFile = (file) => {
         <div class="mt-4 grid gap-2 text-sm md:grid-cols-3">
           <div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
             <p class="text-xs text-slate-500">배포일</p>
-            <p class="mt-1 font-semibold text-slate-900">{{ activeDialogRow.drawing_date || '-' }}</p>
+            <p class="mt-1 font-semibold text-slate-900">{{ formatDrawingDate(activeDialogRow.drawing_date) || '-' }}</p>
           </div>
           <div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
             <p class="text-xs text-slate-500">도착일</p>

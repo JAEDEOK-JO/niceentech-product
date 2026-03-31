@@ -47,7 +47,7 @@ const rowProcessSec = (row, setting) => {
   return 0
 }
 const isDistributed = (row) =>
-  String(row?.drawing_date ?? '').trim().length > 0 || Boolean(row?.virtual_drawing_distributed)
+  Boolean(row?.drawing_date) || Boolean(row?.virtual_drawing_distributed)
 const countWeekdays = (from, to) => {
   if (from > to) return 0
   let count = 0

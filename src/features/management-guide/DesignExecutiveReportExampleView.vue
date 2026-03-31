@@ -109,13 +109,16 @@ const parseFlexibleDateTime = (value, fallbackYear = new Date().getFullYear()) =
   const native = new Date(raw)
   return Number.isNaN(native.getTime()) ? null : native
 }
-const getDrawingDistributedAt = (row, fallbackYear = new Date().getFullYear()) =>
-  parseFlexibleDateTime(row?.drawing_distributed_at, fallbackYear) ?? parseFlexibleDateTime(row?.drawing_date, fallbackYear)
+const getDrawingDistributedAt = (row) => {
+  if (!row?.drawing_date) return null
+  const d = new Date(row.drawing_date)
+  return Number.isNaN(d.getTime()) ? null : d
+}
 const getShipmentAt = (row, fallbackYear = new Date().getFullYear()) =>
   parseFlexibleDateTime(row?.shipment_date, fallbackYear) ?? parseFlexibleDateTime(row?.updated_at, fallbackYear)
 const isOtherWorkTypeRow = (row) => String(row?.work_type ?? '').trim() === '기타'
 const isDistributed = (row) =>
-  String(row?.drawing_date ?? '').trim().length > 0 || Boolean(row?.virtual_drawing_distributed)
+  Boolean(row?.drawing_date) || Boolean(row?.virtual_drawing_distributed)
 const isDueRiskRow = (row, testDate) => {
   const dueDate = parseFlexibleDateTime(row?.delivery_due_date, testDate.getFullYear())
   if (!dueDate) return false
@@ -314,7 +317,7 @@ const fetchRows = async () => {
   const testDates = targetWeeks.value.map((week) => formatKoreanDate(week.date))
   const { start, end } = monthRange.value
   const baseColumns =
-    'id,no,initial,company,place,area,work_type,head,test_date,drawing_date,drawing_distributed_at,shipment_date,delivery_due_date,is_drawing,calculation,complete,delay_text'
+    'id,no,initial,company,place,area,work_type,head,test_date,drawing_date,shipment_date,delivery_due_date,is_drawing,calculation,complete,delay_text'
   const withVirtualColumns = `${baseColumns},virtual_drawing_distributed`
   const monthColumns = 'id,no,initial,company,place,area,shipment,shipment_date,delivery_due_date,updated_at'
 
@@ -596,7 +599,7 @@ onMounted(async () => {
                     <td colspan="6" class="border border-slate-200 px-3 py-6 text-center text-slate-400">목요일 12시 이후 배포 건이 없습니다.</td>
                   </tr>
                   <tr v-for="row in lateDistributionRows" :key="`late-${row.id}`" class="bg-white">
-                    <td class="border border-slate-200 px-3 py-2 text-center">{{ formatDateTimeText(row.drawing_distributed_at || row.drawing_date) }}</td>
+                    <td class="border border-slate-200 px-3 py-2 text-center">{{ formatDateTimeText(row.drawing_date) }}</td>
                     <td class="border border-slate-200 px-3 py-2 text-center font-semibold text-slate-900">{{ row.initial || '' }}</td>
                     <td class="border border-slate-200 px-3 py-2 text-center">{{ row.company || '' }}</td>
                     <td class="border border-slate-200 px-3 py-2 text-center">{{ row.place || '' }}</td>

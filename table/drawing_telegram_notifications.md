@@ -6,9 +6,9 @@
 - 즉시 전송 실패 시 재시도 함수가 실패 건을 다시 전송합니다.
 
 ## 동작 기준
-- `drawing_date`: 빈값 -> 값 있음
+- `drawing_date`: NULL -> 값 있음 (timestamptz)
   - 메시지: `회사명 현장명 구역명 도면배포`
-- `drawing_date`: 값 있음 -> 빈값
+- `drawing_date`: 값 있음 -> NULL
   - 메시지: `회사명 현장명 구역명 도면배포 취소`
 - `drawing_date`: 값 있음 -> 다른 값
   - 메시지: `회사명 현장명 구역명 도면배포`
@@ -25,8 +25,8 @@
 | company | text | 회사명 |
 | place | text | 현장명 |
 | area | text | 구역명 |
-| drawing_date | text | 변경 후 `drawing_date` |
-| previous_drawing_date | text | 변경 전 `drawing_date` |
+| drawing_date | text | 변경 후 `drawing_date` (YY.MM.DD 포맷 텍스트로 저장) |
+| previous_drawing_date | text | 변경 전 `drawing_date` (YY.MM.DD 포맷 텍스트로 저장) |
 | message | text | 실제 전송 메시지 |
 | request_id | bigint | 초기 비동기 구조 호환용, 현재는 거의 미사용 |
 | delivery_status | text | `queued` / `skipped` / `sent` / `failed` |
@@ -40,7 +40,7 @@
 | updated_at | timestamptz | 마지막 상태 갱신 시각 |
 
 ## 현재 처리 방식
-- 트리거: `product_list.drawing_date` 변경 감지
+- 트리거: `product_list.drawing_date` (timestamptz) 변경 감지 (`IS NOT DISTINCT FROM` 비교)
 - 1차 처리: 알림 이력 insert 후 즉시 텔레그램 전송
 - 실패 시: `retry_drawing_telegram_notifications` 크론 작업이 15초마다 재시도
 - 재시도 최대 횟수: 5회
