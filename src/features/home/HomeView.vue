@@ -206,6 +206,9 @@ const isRowDisabled = (row) => !isActualDistributedRow(row) && !isVirtualDistrib
 const isDistributedRow = (row) => isActualDistributedRow(row) || isVirtualDistributedRow(row)
 
 const isRowCompleted = (row) => Boolean(row?.complete)
+const isBothWorkerCompleted = (row) => row?.worker_t === '작업완료' && row?.worker_main === '작업완료'
+const isOneWorkerCompleted = (row) =>
+  (row?.worker_t === '작업완료' || row?.worker_main === '작업완료') && !isBothWorkerCompleted(row)
 
 const isStageColumn = (key) => Object.hasOwn(stageMeta, key)
 const isCallColumn = (key) => key === 'call_action'
@@ -493,6 +496,42 @@ const toggleRowCompleteFromMenu = (nextComplete) => {
   })
 }
 
+const toggleWorkerTComplete = () => {
+  const row = activeCallRow.value
+  if (!row?.id) return
+  const next = row.worker_t !== '작업완료'
+  emit('save-row-menu', {
+    rowId: row.id,
+    workerTComplete: next,
+    onResult: (result) => {
+      if (!result?.ok) {
+        showSnack(next ? '가지관 작업완료 실패' : '가지관 작업완료 취소 실패')
+        return
+      }
+      showSnack(next ? '가지관 작업완료' : '가지관 작업완료 취소')
+      closeCallDialog()
+    },
+  })
+}
+
+const toggleWorkerMainComplete = () => {
+  const row = activeCallRow.value
+  if (!row?.id) return
+  const next = row.worker_main !== '작업완료'
+  emit('save-row-menu', {
+    rowId: row.id,
+    workerMainComplete: next,
+    onResult: (result) => {
+      if (!result?.ok) {
+        showSnack(next ? '메인관 작업완료 실패' : '메인관 작업완료 취소 실패')
+        return
+      }
+      showSnack(next ? '메인관 작업완료' : '메인관 작업완료 취소')
+      closeCallDialog()
+    },
+  })
+}
+
 const setVirtualDrawingDistribution = (enabled) => {
   const rowId = activeCallRow.value?.id
   if (!rowId) return
@@ -681,13 +720,17 @@ onBeforeUnmount(() => {
                 @dragover="handleDragOver"
                 @drop.prevent="handleDrop(row.id)"
                 :class="
-                  isRowCompleted(row)
-                    ? 'border-orange-200 bg-orange-50/60'
-                    : isVirtualDistributedRow(row)
-                      ? 'border-sky-200 bg-sky-50/70 text-slate-700'
-                      : isRowDisabled(row)
-                        ? 'border-slate-300 bg-slate-100 text-slate-700'
-                      : 'border-slate-200 bg-white'
+                  isBothWorkerCompleted(row)
+                    ? 'border-red-200 bg-red-50/60'
+                    : isOneWorkerCompleted(row)
+                      ? 'border-orange-200 bg-orange-50/60'
+                      : isRowCompleted(row)
+                        ? 'border-orange-200 bg-orange-50/60'
+                        : isVirtualDistributedRow(row)
+                          ? 'border-sky-200 bg-sky-50/70 text-slate-700'
+                          : isRowDisabled(row)
+                            ? 'border-slate-300 bg-slate-100 text-slate-700'
+                          : 'border-slate-200 bg-white'
                 "
               >
                 <div class="flex items-start justify-between gap-2">
@@ -811,13 +854,17 @@ onBeforeUnmount(() => {
                     v-for="row in groupData.rows"
                     :key="`${groupData.group}-${row.id}`"
                     :class="
-                      isRowCompleted(row)
-                        ? 'bg-orange-50 text-slate-700 hover:bg-orange-50'
-                        : isVirtualDistributedRow(row)
-                          ? 'bg-sky-50 text-slate-700 hover:bg-sky-50'
-                          : isRowDisabled(row)
-                            ? 'bg-slate-50 text-slate-400'
-                          : 'hover:bg-slate-50/70'
+                      isBothWorkerCompleted(row)
+                        ? 'bg-red-50 text-slate-700 hover:bg-red-50'
+                        : isOneWorkerCompleted(row)
+                          ? 'bg-orange-50 text-slate-700 hover:bg-orange-50'
+                          : isRowCompleted(row)
+                            ? 'bg-orange-50 text-slate-700 hover:bg-orange-50'
+                            : isVirtualDistributedRow(row)
+                              ? 'bg-sky-50 text-slate-700 hover:bg-sky-50'
+                              : isRowDisabled(row)
+                                ? 'bg-slate-50 text-slate-400'
+                              : 'hover:bg-slate-50/70'
                     "
                     role="button"
                     tabindex="0"
@@ -1056,19 +1103,32 @@ onBeforeUnmount(() => {
           />
           <p class="mt-1 text-[11px] font-semibold text-slate-500">행별 매출 금액을 직접 입력합니다. 예: `1500000`</p>
         </div>
-        <button
-          v-if="canReorderRows"
-          type="button"
-          class="mt-2 w-full rounded-xl border px-4 py-2.5 text-sm font-extrabold transition"
-          :class="
-            activeCallRow?.complete
-              ? 'border-rose-400 bg-rose-50 text-rose-700 hover:bg-rose-100'
-              : 'border-emerald-500 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-          "
-          @click="toggleRowCompleteFromMenu(!activeCallRow?.complete)"
-        >
-          {{ activeCallRow?.complete ? '작업완료 취소' : '작업완료' }}
-        </button>
+        <div v-if="canReorderRows" class="mt-2 grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            class="rounded-xl border px-4 py-2.5 text-sm font-extrabold transition"
+            :class="
+              activeCallRow?.worker_t === '작업완료'
+                ? 'border-rose-400 bg-rose-50 text-rose-700 hover:bg-rose-100'
+                : 'border-emerald-500 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+            "
+            @click="toggleWorkerTComplete"
+          >
+            {{ activeCallRow?.worker_t === '작업완료' ? '가지관 취소' : '가지관 완료' }}
+          </button>
+          <button
+            type="button"
+            class="rounded-xl border px-4 py-2.5 text-sm font-extrabold transition"
+            :class="
+              activeCallRow?.worker_main === '작업완료'
+                ? 'border-rose-400 bg-rose-50 text-rose-700 hover:bg-rose-100'
+                : 'border-indigo-500 bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
+            "
+            @click="toggleWorkerMainComplete"
+          >
+            {{ activeCallRow?.worker_main === '작업완료' ? '메인관 취소' : '메인관 완료' }}
+          </button>
+        </div>
         <button
           type="button"
           class="mt-4 w-full rounded-xl border border-blue-600 bg-blue-600 px-4 py-3 text-base font-extrabold text-white shadow-md transition hover:bg-blue-700"

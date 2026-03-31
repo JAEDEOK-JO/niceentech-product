@@ -29,6 +29,8 @@ const emit = defineEmits([
   'load-drawing-files',
   'upload-drawing-files',
   'delete-drawing-file',
+  'save-worker-status',
+  'shipment-complete',
 ])
 
 const overallTotals = computed(() =>
@@ -76,6 +78,79 @@ const formatDrawingDate = (value) => {
   const dd = String(d.getDate()).padStart(2, '0')
   return `${mm}.${dd}`
 }
+const WORKER_STATUS_OPTIONS = ['없음', '작업전', '작업중', '용접중', '작업완료']
+const normalizeWorkerStatus = (value) => {
+  const raw = String(value ?? '').trim()
+  if (!raw || raw === '없음') return '없음'
+  if (raw === '작업지시') return '작업전'
+  if (raw === 'T작업중') return '용접중'
+  if (raw === '출하완료') return '작업완료'
+  if (WORKER_STATUS_OPTIONS.includes(raw)) return raw
+  return '없음'
+}
+const isWorkerDialogOpen = ref(false)
+const workerDialogRow = ref(null)
+const workerT = ref('없음')
+const workerNasa = ref('없음')
+const workerMain = ref('없음')
+const workerWelding = ref('없음')
+const workerSaving = ref(false)
+const workerColumns = ['worker_t', 'worker_nasa', 'worker_main', 'worker_welding']
+
+const isAllCompleteOrNone = computed(() => {
+  const states = [workerT.value, workerNasa.value, workerMain.value, workerWelding.value]
+  return states.every((s) => s === '없음' || s === '작업완료')
+})
+
+const isCurrentlyComplete = computed(() => {
+  if (!workerDialogRow.value) return false
+  return Boolean(workerDialogRow.value.complete) && !Boolean(workerDialogRow.value.shipment)
+})
+
+const openWorkerDialog = (row) => {
+  workerDialogRow.value = row
+  workerT.value = normalizeWorkerStatus(row.worker_t)
+  workerNasa.value = normalizeWorkerStatus(row.worker_nasa)
+  workerMain.value = normalizeWorkerStatus(row.worker_main)
+  workerWelding.value = normalizeWorkerStatus(row.worker_welding)
+  workerSaving.value = false
+  isWorkerDialogOpen.value = true
+}
+
+const closeWorkerDialog = () => {
+  if (workerSaving.value) return
+  isWorkerDialogOpen.value = false
+  workerDialogRow.value = null
+}
+
+const handleSaveWorkerStatus = () => {
+  if (!workerDialogRow.value || workerSaving.value) return
+  workerSaving.value = true
+  emit('save-worker-status', {
+    row: workerDialogRow.value,
+    workerT: workerT.value,
+    workerNasa: workerNasa.value,
+    workerMain: workerMain.value,
+    workerWelding: workerWelding.value,
+    onResult: (result) => {
+      workerSaving.value = false
+      if (result?.ok) closeWorkerDialog()
+    },
+  })
+}
+
+const handleShipmentComplete = () => {
+  if (!workerDialogRow.value || workerSaving.value) return
+  workerSaving.value = true
+  emit('shipment-complete', {
+    row: workerDialogRow.value,
+    onResult: (result) => {
+      workerSaving.value = false
+      if (result?.ok) closeWorkerDialog()
+    },
+  })
+}
+
 const headerLegendBadges = [
   { label: '증지만듦', className: 'border-yellow-300 bg-yellow-200 text-yellow-900' },
   { label: '배포확인', className: 'border-blue-300 bg-blue-300 text-blue-950' },
@@ -258,6 +333,10 @@ const handleDeleteRow = () => {
 
 const handleCellClick = ({ row, columnKey }) => {
   if (!row?.id || !columnKey) return
+  if (workerColumns.includes(columnKey)) {
+    openWorkerDialog(row)
+    return
+  }
   if (columnKey === 'memo') {
     openRowMenu(row)
     return
@@ -735,6 +814,67 @@ const selectDrawingFile = (file) => {
         <div class="mt-6 flex justify-end gap-2">
           <Button class="h-10 px-4 text-sm" variant="outline" @click="closeDeleteConfirm">취소</Button>
           <Button class="h-10 bg-rose-600 px-4 text-sm text-white hover:bg-rose-700" @click="handleDeleteRow">삭제</Button>
+        </div>
+      </div>
+    </div>
+    <div
+      v-if="isWorkerDialogOpen && workerDialogRow"
+      class="print-hide fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 px-4 py-6"
+      @click.self="closeWorkerDialog"
+    >
+      <div class="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+        <div class="flex items-start justify-between gap-4">
+          <div class="min-w-0">
+            <h2 class="truncate text-lg font-bold text-slate-900">{{ workerDialogRow.company || '-' }}</h2>
+            <p class="mt-1 text-sm text-slate-600">{{ workerDialogRow.place || '-' }}</p>
+            <p class="text-sm text-slate-500">{{ workerDialogRow.area || '-' }}</p>
+          </div>
+          <button type="button" class="text-sm text-slate-500 hover:text-slate-700" @click="closeWorkerDialog">닫기</button>
+        </div>
+
+        <div class="mt-5 grid grid-cols-4 gap-2">
+          <div class="flex flex-col items-center gap-1">
+            <label class="text-xs font-bold text-slate-700">생산</label>
+            <select v-model="workerT" class="h-10 w-full rounded-lg border border-slate-300 bg-white px-1 text-center text-xs text-slate-900 focus:border-slate-500 focus:ring-1 focus:ring-slate-500 focus:outline-none">
+              <option v-for="opt in WORKER_STATUS_OPTIONS" :key="`t-${opt}`" :value="opt">{{ opt }}</option>
+            </select>
+          </div>
+          <div class="flex flex-col items-center gap-1">
+            <label class="text-xs font-bold text-slate-700">나사</label>
+            <select v-model="workerNasa" class="h-10 w-full rounded-lg border border-slate-300 bg-white px-1 text-center text-xs text-slate-900 focus:border-slate-500 focus:ring-1 focus:ring-slate-500 focus:outline-none">
+              <option v-for="opt in WORKER_STATUS_OPTIONS" :key="`nasa-${opt}`" :value="opt">{{ opt }}</option>
+            </select>
+          </div>
+          <div class="flex flex-col items-center gap-1">
+            <label class="text-xs font-bold text-slate-700">메인</label>
+            <select v-model="workerMain" class="h-10 w-full rounded-lg border border-slate-300 bg-white px-1 text-center text-xs text-slate-900 focus:border-slate-500 focus:ring-1 focus:ring-slate-500 focus:outline-none">
+              <option v-for="opt in WORKER_STATUS_OPTIONS" :key="`main-${opt}`" :value="opt">{{ opt }}</option>
+            </select>
+          </div>
+          <div class="flex flex-col items-center gap-1">
+            <label class="text-xs font-bold text-slate-700">용접</label>
+            <select v-model="workerWelding" class="h-10 w-full rounded-lg border border-slate-300 bg-white px-1 text-center text-xs text-slate-900 focus:border-slate-500 focus:ring-1 focus:ring-slate-500 focus:outline-none">
+              <option v-for="opt in WORKER_STATUS_OPTIONS" :key="`welding-${opt}`" :value="opt">{{ opt }}</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="mt-6 flex items-center gap-2">
+          <Button
+            class="h-10 flex-1 bg-slate-900 text-sm font-bold text-white hover:bg-slate-800"
+            :disabled="workerSaving"
+            @click="handleSaveWorkerStatus"
+          >
+            {{ workerSaving ? '저장 중...' : '저장' }}
+          </Button>
+          <Button
+            v-if="isCurrentlyComplete"
+            class="h-10 flex-1 bg-red-600 text-sm font-bold text-white hover:bg-red-700"
+            :disabled="workerSaving"
+            @click="handleShipmentComplete"
+          >
+            출하완료
+          </Button>
         </div>
       </div>
     </div>

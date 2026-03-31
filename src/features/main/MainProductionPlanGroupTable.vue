@@ -16,7 +16,8 @@ defineProps({
   overallTotals: { type: Object, required: true },
 })
 
-const clickableColumns = ['initial', 'design_distributed', 'name', 'company', 'place', 'area', 'drawing']
+const workerColumns = ['worker_t', 'worker_nasa', 'worker_main', 'worker_welding']
+const clickableColumns = ['initial', 'design_distributed', 'name', 'company', 'place', 'area', 'drawing', ...workerColumns]
 const tableBorderStyle = {
   borderColor: 'rgba(0, 0, 0, 0.28)',
   borderWidth: '0.1px',
@@ -64,15 +65,17 @@ const emit = defineEmits(['open-row-menu', 'cell-click'])
           </div>
         </div>
         <div class="mt-3 grid grid-cols-4 gap-1.5">
-          <div
+          <button
             v-for="column in tableColumns.filter((column) => ['worker_t', 'worker_nasa', 'worker_main', 'worker_welding'].includes(column.key))"
             :key="`${row.id}-${column.key}`"
+            type="button"
             class="min-w-0 rounded-lg border border-slate-200 px-1.5 py-2 text-center text-[10px] font-bold leading-tight sm:px-2 sm:py-3 sm:text-[11px]"
             :class="statusClass(getStatusTone(row, column.key, getCellText(row, column.key)))"
+            @click="emit('cell-click', { row, columnKey: column.key })"
           >
             <p class="whitespace-nowrap">{{ column.label }}</p>
             <p class="mt-1 whitespace-nowrap">{{ getCellText(row, column.key) }}</p>
-          </div>
+          </button>
         </div>
         <div class="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-slate-700">
           <p class="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 font-semibold whitespace-nowrap">
@@ -167,6 +170,7 @@ const emit = defineEmits(['open-row-menu', 'cell-click'])
                 v-else-if="clickableColumns.includes(column.key)"
                 type="button"
                 class="flex h-full w-full items-center justify-center bg-transparent p-0 text-inherit"
+                :class="workerColumns.includes(column.key) ? 'text-[11px] font-bold' : ''"
                 @click="emit('cell-click', { row, columnKey: column.key })"
               >
                 <span class="cell-fixed-text block w-full">{{ getCellText(row, column.key) }}</span>

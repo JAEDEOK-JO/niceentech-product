@@ -161,6 +161,92 @@ const handleDeleteDrawingFile = async ({ fileId, onResult }) => {
   onResult?.(result)
 }
 
+const formatWorkerTime = () => {
+  const now = new Date()
+  const mm = String(now.getMonth() + 1).padStart(2, '0')
+  const dd = String(now.getDate()).padStart(2, '0')
+  return `${mm}.${dd}`
+}
+
+const formatShipmentTime = () => {
+  const now = new Date()
+  const yy = String(now.getFullYear()).slice(2)
+  const m = String(now.getMonth() + 1)
+  const d = String(now.getDate())
+  return `${yy}.${m}.${d}`
+}
+
+const handleSaveWorkerStatus = async ({ row, workerT, workerNasa, workerMain, workerWelding, onResult }) => {
+  if (!row?.id) { onResult?.({ ok: false }); return }
+
+  const allDoneOrNone = [workerT, workerNasa, workerMain, workerWelding].every(
+    (s) => s === '없음' || s === '작업완료',
+  )
+  const todayText = formatWorkerTime()
+  const updates = {
+    worker_t: workerT,
+    worker_nasa: workerNasa,
+    worker_main: workerMain,
+    worker_welding: workerWelding,
+    complete: allDoneOrNone,
+    shipment: false,
+  }
+
+  if (workerT === '작업완료' && row.worker_t !== '작업완료') {
+    updates.worker_t_time = todayText
+  }
+  if (workerT !== '작업완료' && row.worker_t === '작업완료') {
+    updates.worker_t_time = ''
+  }
+  if (workerNasa === '작업완료' && row.worker_nasa !== '작업완료') {
+    updates.worker_nasa_time = todayText
+  }
+  if (workerNasa !== '작업완료' && row.worker_nasa === '작업완료') {
+    updates.worker_nasa_time = ''
+  }
+  if (workerMain === '작업완료' && row.worker_main !== '작업완료') {
+    updates.worker_main_time = todayText
+  }
+  if (workerMain !== '작업완료' && row.worker_main === '작업완료') {
+    updates.worker_main_time = ''
+  }
+  if (workerWelding === '작업완료' && row.worker_welding !== '작업완료') {
+    updates.worker_welding_time = todayText
+  }
+  if (workerWelding !== '작업완료' && row.worker_welding === '작업완료') {
+    updates.worker_welding_time = ''
+  }
+
+  const result = await updatePlanRowFields({ rowId: row.id, updates })
+  onResult?.(result)
+}
+
+const handleShipmentComplete = async ({ row, onResult }) => {
+  if (!row?.id) { onResult?.({ ok: false }); return }
+
+  const shipmentDate = formatShipmentTime()
+  const updates = {
+    complete: false,
+    shipment: true,
+  }
+
+  const workerFields = [
+    { field: 'worker_t', finalField: 'worker_t_time_final' },
+    { field: 'worker_nasa', finalField: 'worker_nasa_time_final' },
+    { field: 'worker_main', finalField: 'worker_main_time_final' },
+    { field: 'worker_welding', finalField: 'worker_welding_time_final' },
+  ]
+  for (const { field, finalField } of workerFields) {
+    if (row[field] === '작업완료') {
+      updates[field] = '출하완료'
+      updates[finalField] = shipmentDate
+    }
+  }
+
+  const result = await updatePlanRowFields({ rowId: row.id, updates })
+  onResult?.(result)
+}
+
 watch(
   () => [route.query.date, route.query.q],
   ([dateQuery, searchQuery]) => {
@@ -220,5 +306,7 @@ watch(
     @load-drawing-files="handleLoadDrawingFiles"
     @upload-drawing-files="handleUploadDrawingFiles"
     @delete-drawing-file="handleDeleteDrawingFile"
+    @save-worker-status="handleSaveWorkerStatus"
+    @shipment-complete="handleShipmentComplete"
   />
 </template>

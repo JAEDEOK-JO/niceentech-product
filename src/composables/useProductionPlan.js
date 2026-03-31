@@ -561,6 +561,8 @@ export function useProductionPlan(session) {
     callType,
     requester,
     complete,
+    workerTComplete,
+    workerMainComplete,
     virtualDrawingDistributed,
   }) => {
     const updatePayload = {}
@@ -595,6 +597,36 @@ export function useProductionPlan(session) {
         updatePayload.worker_t = '작업중'
         updatePayload.worker_t_time = ''
       }
+    }
+    if (typeof workerTComplete === 'boolean') {
+      const todayText = formatMonthDay(new Date())
+      if (workerTComplete) {
+        updatePayload.worker_t = '작업완료'
+        if (row?.worker_t !== '작업완료') updatePayload.worker_t_time = todayText
+      } else {
+        updatePayload.worker_t = '작업중'
+        updatePayload.worker_t_time = ''
+      }
+      const mainDone = typeof workerMainComplete === 'boolean' ? workerMainComplete : row?.worker_main === '작업완료'
+      const tDone = workerTComplete
+      const allDone = tDone && mainDone
+      updatePayload.complete = allDone
+      updatePayload.complete_date = allDone ? todayText : ''
+    }
+    if (typeof workerMainComplete === 'boolean') {
+      const todayText = formatMonthDay(new Date())
+      if (workerMainComplete) {
+        updatePayload.worker_main = '작업완료'
+        if (row?.worker_main !== '작업완료') updatePayload.worker_main_time = todayText
+      } else {
+        updatePayload.worker_main = '작업중'
+        updatePayload.worker_main_time = ''
+      }
+      const tDone = typeof workerTComplete === 'boolean' ? workerTComplete : row?.worker_t === '작업완료'
+      const mainDone = workerMainComplete
+      const allDone = tDone && mainDone
+      updatePayload.complete = allDone
+      updatePayload.complete_date = allDone ? todayText : ''
     }
 
     if (Object.keys(updatePayload).length === 0) {
@@ -634,6 +666,16 @@ export function useProductionPlan(session) {
         ...(typeof complete === 'boolean' ? { complete_date: updatePayload.complete_date } : {}),
         ...(typeof complete === 'boolean' ? { worker_t: updatePayload.worker_t } : {}),
         ...(typeof complete === 'boolean' ? { worker_t_time: updatePayload.worker_t_time } : {}),
+        ...(typeof workerTComplete === 'boolean' || typeof workerMainComplete === 'boolean'
+          ? {
+              ...(updatePayload.worker_t !== undefined ? { worker_t: updatePayload.worker_t } : {}),
+              ...(updatePayload.worker_t_time !== undefined ? { worker_t_time: updatePayload.worker_t_time } : {}),
+              ...(updatePayload.worker_main !== undefined ? { worker_main: updatePayload.worker_main } : {}),
+              ...(updatePayload.worker_main_time !== undefined ? { worker_main_time: updatePayload.worker_main_time } : {}),
+              ...(updatePayload.complete !== undefined ? { complete: updatePayload.complete } : {}),
+              ...(updatePayload.complete_date !== undefined ? { complete_date: updatePayload.complete_date } : {}),
+            }
+          : {}),
       }
       targetRow = nextRows[idx]
       planRows.value = nextRows

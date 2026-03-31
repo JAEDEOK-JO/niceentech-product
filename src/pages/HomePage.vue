@@ -76,6 +76,8 @@ const handleSaveRowMenu = async ({
   salesAmount,
   callType,
   complete,
+  workerTComplete,
+  workerMainComplete,
   virtualDrawingDistributed,
   onResult,
 }) => {
@@ -86,6 +88,8 @@ const handleSaveRowMenu = async ({
     salesAmount,
     callType,
     complete,
+    workerTComplete,
+    workerMainComplete,
     virtualDrawingDistributed,
     requester: {
       id: profile.value?.id ?? session.value?.user?.id ?? null,
