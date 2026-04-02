@@ -35,17 +35,37 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: pwsh
         run: |
-          $version = "${{ github.ref_name }}".TrimStart('v')
-          $exe = "release/NICEENTECH Setup $version.exe"
-          $blockmap = "release/NICEENTECH Setup $version.exe.blockmap"
-          $latest = "release/latest.yml"
+          $tag = "${{ github.ref_name }}"
+          $version = $tag.TrimStart('v')
+          $packageJson = Get-Content "package.json" -Raw | ConvertFrom-Json
+          $packageVersion = "$($packageJson.version)"
+          if ($packageVersion -ne $version) {
+            throw "Tag version ($version) and package.json version ($packageVersion) do not match."
+          }
+
+          $exe = Get-ChildItem "release" -Filter "*.exe" | Where-Object { $_.Name -like "NICEENTECH Setup *.exe" } | Select-Object -First 1
+          $blockmap = Get-ChildItem "release" -Filter "*.exe.blockmap" | Where-Object { $_.Name -like "NICEENTECH Setup *.exe.blockmap" } | Select-Object -First 1
+          $latest = Get-Item "release/latest.yml"
+
+          if (-not $exe) {
+            throw "Installer exe not found in release folder."
+          }
+          if (-not $blockmap) {
+            throw "Blockmap file not found in release folder."
+          }
+
           $publishDir = "release/publish-assets"
           New-Item -ItemType Directory -Force -Path $publishDir | Out-Null
 
           $publishExe = Join-Path $publishDir "NICEENTECH-Setup-$version.exe"
           $publishBlockmap = Join-Path $publishDir "NICEENTECH-Setup-$version.exe.blockmap"
 
-          Copy-Item $exe $publishExe -Force
-          Copy-Item $blockmap $publishBlockmap -Force
+          Copy-Item $exe.FullName $publishExe -Force
+          Copy-Item $blockmap.FullName $publishBlockmap -Force
 
-          gh release create "${{ github.ref_name }}" "$publishExe" "$publishBlockmap" "$latest" --repo JAEDEOK-JO/niceentech-product --title "${{ github.ref_name }}" --notes ""
+          gh release view "$tag" --repo JAEDEOK-JO/niceentech-product *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload "$tag" "$publishExe" "$publishBlockmap" "$($latest.FullName)" --repo JAEDEOK-JO/niceentech-product --clobber
+          } else {
+            gh release create "$tag" "$publishExe" "$publishBlockmap" "$($latest.FullName)" --repo JAEDEOK-JO/niceentech-product --title "$tag" --notes ""
+          }

@@ -33,4 +33,4 @@ builder-debug.yml
 *.sln
 *.sw?
 
-업데이트 방법.node_modules
+업데이트 방법.md
