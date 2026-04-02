@@ -37,11 +37,30 @@ const formatStatusDate = (value) => {
   return raw
 }
 
+const formatShortFullDate = (value) => {
+  const raw = String(value ?? '').trim()
+  if (!raw) return ''
+
+  const isoMatched = raw.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (isoMatched) {
+    const [, year, month, day] = isoMatched
+    return `${year.slice(2)}.${month}.${day}`
+  }
+
+  const dotMatched = raw.match(/^(\d{2})\.(\d{1,2})\.(\d{1,2})$/)
+  if (dotMatched) {
+    const [, year, month, day] = dotMatched
+    return `${year}.${String(month).padStart(2, '0')}.${String(day).padStart(2, '0')}`
+  }
+
+  return raw
+}
+
 export const tableColumns = [
   { label: '도번', key: 'initial', align: 'center', width: 80 },
-  { label: '배포일', key: 'design_distributed', align: 'center', width: 60 },
-  { label: '도착일', key: 'delivery_due_date', align: 'center', width: 60 },
-  { label: '담당', key: 'name', align: 'center', width: 60 },
+  { label: '배포일', key: 'design_distributed', align: 'center', width: 65 },
+  { label: '도착일', key: 'delivery_due_date', align: 'center', width: 65 },
+  { label: '담당', key: 'name', align: 'center', width: 55 },
   { label: '회사명', key: 'company', align: 'center', width: 120 },
   { label: '현장명', key: 'place', align: 'center', width: 170 },
   { label: '구역명', key: 'area', align: 'center', width: areaColumnWidth },
@@ -127,7 +146,7 @@ export const getCellText = (row, key) => {
     return formatDrawingDate(row?.drawing_date)
   }
   if (key === 'delivery_due_date') {
-    return formatStatusDate(row?.delivery_due_date)
+    return formatShortFullDate(row?.delivery_due_date)
   }
   if (key === 'drawing') {
     if (Boolean(row?.is_drawing)) return '있음'
@@ -170,7 +189,7 @@ export const getColumnStyle = (column) => ({
 })
 
 export const getBodyCellClass = (row, column) => {
-  const classes = ['border', 'border-slate-200', 'h-[50px]', 'align-middle', 'text-[13px]', 'font-medium', 'text-slate-700']
+  const classes = ['border', 'border-slate-200', 'h-[50px]', 'align-middle', 'text-[12px]', 'font-medium', 'text-slate-700']
   classes.push(column.align === 'center' ? 'text-center' : 'text-left')
 
   if (Boolean(row?.hold)) {
