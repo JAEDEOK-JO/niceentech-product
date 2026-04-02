@@ -26,11 +26,17 @@ const workerTStageFields = [
   'marking_weld_a_status',
   'marking_weld_b_status',
   'marking_laser_1_status',
-  'marking_laser_2_status',
   'beveling_status',
   'nasa_status',
 ]
-const mainStageField = 'main_status'
+const workerMainStageFields = ['marking_laser_2_status', 'main_status']
+const homeWorkerTShortcutFields = [
+  'marking_weld_a_status',
+  'marking_weld_b_status',
+  'marking_laser_1_status',
+  'beveling_status',
+]
+const homeWorkerMainShortcutFields = ['marking_laser_2_status', 'main_status']
 const workManRoleToStages = {
   마킹1: ['marking_weld_a'],
   마킹2: ['marking_weld_b'],
@@ -59,6 +65,12 @@ const formatMonthDay = (date = new Date()) => {
   const day = String(date.getDate()).padStart(2, '0')
   return `${month}.${day}`
 }
+const formatWorkerDate = (date = new Date()) => {
+  const year = String(date.getFullYear()).slice(2)
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}.${month}.${day}`
+}
 const formatIsoDate = (date = new Date()) => {
   const y = String(date.getFullYear()).padStart(4, '0')
   const m = String(date.getMonth() + 1).padStart(2, '0')
@@ -73,6 +85,7 @@ const sanitizeStorageFileName = (name) =>
 const getRowsTotals = (rows) =>
   rows.reduce(
     (acc, row) => {
+      if (Boolean(row?.hold)) return acc
       acc.hole += toNumber(row.hole)
       acc.head += toNumber(row.head)
       acc.groove += toNumber(row.groove)
@@ -109,11 +122,13 @@ const resolveWorkerTStatus = (row) => {
   return '없음'
 }
 const resolveWorkerMainStatus = (row) => {
-  const status = normalizeProgressState(row?.[mainStageField])
-  if (status === '작업중') return '작업중'
-  if (status === '작업완료') return '작업완료'
+  const statuses = workerMainStageFields.map((field) => normalizeProgressState(row?.[field]))
+  if (statuses.some((status) => status === '작업중')) return '작업중'
+  if (statuses.some((status) => status === '작업완료')) return '작업중'
   return '없음'
 }
+const areAllStatusesNone = (row, fields) =>
+  fields.every((field) => normalizeStatus(row?.[field]) === '없음')
 
 const isActualDistributedRow = (row) => Boolean(row?.drawing_date)
 const isVirtualDistributedRow = (row) =>
@@ -124,23 +139,29 @@ const isCompletedRow = (row) => Boolean(row?.complete)
 const sortRowsByPriority = (rows) => {
   return [...rows].sort((a, b) => {
     const rank = (row) => {
-      const distributed = isActualDistributedRow(row)
-      const virtualDistributed = isVirtualDistributedRow(row)
+      const distributed = isDistributedRow(row)
       const completed = isCompletedRow(row)
-      // 0: 실배포 도면, 1: 가상배포 도면, 2: 완료 도면, 3: 미배포 도면
+      // 0: 배포, 1: 작업완료, 2: 미배포
       if (distributed && !completed) return 0
-      if (virtualDistributed && !completed) return 1
-      if (completed) return 2
-      return 3
+      if (completed) return 1
+      return 2
     }
+
+    const compareText = (left, right) =>
+      String(left ?? '')
+        .trim()
+        .localeCompare(String(right ?? '').trim(), 'ko')
 
     const aRank = rank(a)
     const bRank = rank(b)
     if (aRank !== bRank) return aRank - bRank
-
-    const aNo = Number(a?.no ?? 1000)
-    const bNo = Number(b?.no ?? 1000)
-    return aNo - bNo
+    const companyCompare = compareText(a?.company, b?.company)
+    if (companyCompare !== 0) return companyCompare
+    const placeCompare = compareText(a?.place, b?.place)
+    if (placeCompare !== 0) return placeCompare
+    const areaCompare = compareText(a?.area, b?.area)
+    if (areaCompare !== 0) return areaCompare
+    return compareText(a?.initial, b?.initial)
   })
 }
 
@@ -355,7 +376,7 @@ export function useProductionPlan(session) {
     const worker_t = resolveWorkerTStatus(nextRow)
     const worker_main = resolveWorkerMainStatus(nextRow)
     const updatePayload = { [field]: next, worker_t, worker_main }
-    const todayText = formatMonthDay(new Date())
+    const todayText = formatWorkerDate(new Date())
     const todayDate = formatIsoDate(new Date())
     if (dateFields) {
       if (next === '작업중') {
@@ -592,19 +613,20 @@ export function useProductionPlan(session) {
       updatePayload.complete_date = complete ? formatMonthDay(new Date()) : ''
       if (complete) {
         updatePayload.worker_t = '작업완료'
-        updatePayload.worker_t_time = formatMonthDay(new Date())
+        updatePayload.worker_t_time = formatWorkerDate(new Date())
       } else {
         updatePayload.worker_t = '작업중'
         updatePayload.worker_t_time = ''
       }
     }
     if (typeof workerTComplete === 'boolean') {
-      const todayText = formatMonthDay(new Date())
+      const todayText = formatWorkerDate(new Date())
+      const isWorkerTSourceEmpty = areAllStatusesNone(row, homeWorkerTShortcutFields)
       if (workerTComplete) {
         updatePayload.worker_t = '작업완료'
-        if (row?.worker_t !== '작업완료') updatePayload.worker_t_time = todayText
+        updatePayload.worker_t_time = isWorkerTSourceEmpty ? '' : row?.worker_t !== '작업완료' ? todayText : row?.worker_t_time ?? ''
       } else {
-        updatePayload.worker_t = '작업중'
+        updatePayload.worker_t = isWorkerTSourceEmpty ? '없음' : '작업중'
         updatePayload.worker_t_time = ''
       }
       const mainDone = typeof workerMainComplete === 'boolean' ? workerMainComplete : row?.worker_main === '작업완료'
@@ -614,12 +636,13 @@ export function useProductionPlan(session) {
       updatePayload.complete_date = allDone ? todayText : ''
     }
     if (typeof workerMainComplete === 'boolean') {
-      const todayText = formatMonthDay(new Date())
+      const todayText = formatWorkerDate(new Date())
+      const isWorkerMainSourceEmpty = areAllStatusesNone(row, homeWorkerMainShortcutFields)
       if (workerMainComplete) {
         updatePayload.worker_main = '작업완료'
-        if (row?.worker_main !== '작업완료') updatePayload.worker_main_time = todayText
+        updatePayload.worker_main_time = isWorkerMainSourceEmpty ? '' : row?.worker_main !== '작업완료' ? todayText : row?.worker_main_time ?? ''
       } else {
-        updatePayload.worker_main = '작업중'
+        updatePayload.worker_main = isWorkerMainSourceEmpty ? '없음' : '작업중'
         updatePayload.worker_main_time = ''
       }
       const tDone = typeof workerTComplete === 'boolean' ? workerTComplete : row?.worker_t === '작업완료'

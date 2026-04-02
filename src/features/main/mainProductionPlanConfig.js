@@ -6,9 +6,10 @@ const formatDrawingDate = (value) => {
   if (!value) return ''
   const d = new Date(value)
   if (Number.isNaN(d.getTime())) return ''
+  const yy = String(d.getFullYear()).slice(2)
   const mm = String(d.getMonth() + 1).padStart(2, '0')
   const dd = String(d.getDate()).padStart(2, '0')
-  return `${mm}.${dd}`
+  return `${yy}.${mm}.${dd}`
 }
 
 const formatStatusDate = (value) => {
@@ -18,7 +19,7 @@ const formatStatusDate = (value) => {
   const shipmentMatched = raw.match(/^(\d{2})\.(\d{1,2})\.(\d{1,2})$/)
   if (shipmentMatched) {
     const [, yy, month, day] = shipmentMatched
-    return `${yy}.${month}.${day}`
+    return `${yy}.${String(month).padStart(2, '0')}.${String(day).padStart(2, '0')}`
   }
 
   const isoMatched = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/)
@@ -80,6 +81,19 @@ const workerColumnMeta = {
   worker_main: { statusField: 'worker_main', timeField: 'worker_main_time', finalTimeField: 'worker_main_time_final' },
   worker_welding: { statusField: 'worker_welding', timeField: 'worker_welding_time', finalTimeField: 'worker_welding_time_final' },
 }
+const workerEmptySourceFields = {
+  worker_t: ['marking_weld_a_status', 'marking_weld_b_status', 'marking_laser_1_status', 'beveling_status'],
+  worker_main: ['marking_laser_2_status', 'main_status'],
+}
+const isNoneLikeStatus = (value) => {
+  const raw = String(value ?? '').trim()
+  return !raw || raw === '없음' || raw === '작업전' || raw === '작업지시'
+}
+const hasAllWorkerSourcesNone = (row, key) => {
+  const fields = workerEmptySourceFields[key]
+  if (!fields) return false
+  return fields.every((field) => isNoneLikeStatus(row?.[field]))
+}
 
 const getWorkerDisplayInfo = (row, key) => {
   const meta = workerColumnMeta[key]
@@ -90,8 +104,12 @@ const getWorkerDisplayInfo = (row, key) => {
   const finalTime = String(row?.[meta.finalTimeField] ?? '').trim()
   const completedTime = String(row?.[meta.timeField] ?? '').trim()
 
+  if (hasAllWorkerSourcesNone(row, key)) {
+    return { text: '없음', tone: '없음' }
+  }
+
   if (rawStatus === '출하완료' && finalTime) {
-    return { text: finalTime, tone: '출하완료' }
+    return { text: formatStatusDate(finalTime), tone: '출하완료' }
   }
   if (status === '작업완료' && completedTime) {
     return { text: formatStatusDate(completedTime), tone: '작업완료' }

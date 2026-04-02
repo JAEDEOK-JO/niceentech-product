@@ -186,11 +186,20 @@ export function useHomeScheduleCard({ session, selectedTuesday }) {
     return {
       todayTargetQty,
       todayOvertimeSec,
-      todayOvertimeText: formatHourMinute(todayOvertimeSec),
-      distributedHeadSum,
-      distributedHoleSum,
-      totalHeadSum,
-      totalHoleSum,
+      branch: {
+        title: '가지관',
+        unit: '헤드',
+        distributedQty: distributedHeadSum,
+        totalQty: totalHeadSum,
+        remainingQty: Math.max(0, totalHeadSum - distributedHeadSum),
+      },
+      main: {
+        title: '메인관',
+        unit: '홀',
+        distributedQty: distributedHoleSum,
+        totalQty: totalHoleSum,
+        remainingQty: Math.max(0, totalHoleSum - distributedHoleSum),
+      },
     }
   })
 

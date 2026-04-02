@@ -35,7 +35,6 @@ const {
   groupedRows,
   totals,
   toggleWorkStatus,
-  reorderByNo,
   updateRowMenu,
   fetchDrawingFiles,
 } = useProductionPlan(session)
@@ -55,16 +54,6 @@ const handleToggleWorkStatus = async ({ rowId, stageKey, longPressMs, onResult }
     workMan: profile.value?.work_man ?? '',
     role: profile.value?.role ?? '',
     longPressMs,
-  })
-  onResult?.(result)
-}
-
-const handleReorderRows = async ({ sourceRowId, targetRowId, onResult }) => {
-  const result = await reorderByNo({
-    sourceRowId,
-    targetRowId,
-    workMan: profile.value?.work_man ?? '',
-    role: profile.value?.role ?? '',
   })
   onResult?.(result)
 }
@@ -163,7 +152,6 @@ const handleRequestAlertCompleted = async ({ requestId, message, onResult }) => 
     @go-notifications="goNotifications"
     @go-stats="goStats"
     @toggle-work-status="handleToggleWorkStatus"
-    @reorder-rows="handleReorderRows"
     @save-row-menu="handleSaveRowMenu"
     @load-drawing-files="handleLoadDrawingFiles"
     @search-change="handleSearchChange"

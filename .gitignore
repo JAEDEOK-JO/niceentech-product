@@ -32,4 +32,5 @@ builder-debug.yml
 *.njsproj
 *.sln
 *.sw?
-업데이트방법.md
+
+업데이트 방법.node_modules

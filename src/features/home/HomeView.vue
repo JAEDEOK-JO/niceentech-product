@@ -29,7 +29,6 @@ const emit = defineEmits([
   'go-notifications',
   'go-stats',
   'toggle-work-status',
-  'reorder-rows',
   'save-row-menu',
   'load-drawing-files',
   'search-change',
@@ -71,7 +70,6 @@ const pressStartedAt = ref({})
 const longPressTimers = new Map()
 const longPressTriggered = new Set()
 const ignoreNextClick = new Set()
-const draggedRowId = ref(null)
 const isCallDialogOpen = ref(false)
 const selectedCallType = ref('')
 const callOptions = ['도면 없음', '증지 없음', '확인요망']
@@ -339,42 +337,6 @@ const handleStageClick = (row, stageKey, currentWorkMan) => {
   const pressMs = resolvePressMs(pressKey)
   clearPressState(pressKey)
   emitToggleWorkStatus(row, stageKey, pressMs)
-}
-
-const handleDragStart = (event, rowId) => {
-  if (!canReorderRows.value) {
-    event.preventDefault()
-    return
-  }
-  draggedRowId.value = rowId
-}
-
-const handleDragOver = (event) => {
-  if (!canReorderRows.value) return
-  event.preventDefault()
-}
-
-const handleDrop = (targetRowId) => {
-  if (!canReorderRows.value) {
-    draggedRowId.value = null
-    showSnack('관리자만 행 순서를 변경할 수 있습니다')
-    return
-  }
-  if (!draggedRowId.value || draggedRowId.value === targetRowId) return
-  emit('reorder-rows', {
-    sourceRowId: draggedRowId.value,
-    targetRowId: targetRowId,
-    onResult: (result) => {
-      if (!result?.ok && result?.reason === 'cross_group_not_allowed') {
-        showSnack('같은 작업유형 내에서만 순서를 변경할 수 있습니다')
-        return
-      }
-      if (!result?.ok && result?.reason === 'unauthorized') {
-        showSnack('관리자만 행 순서를 변경할 수 있습니다')
-      }
-    },
-  })
-  draggedRowId.value = null
 }
 
 const openCallDialog = (row) => {
@@ -661,46 +623,53 @@ onBeforeUnmount(() => {
       <div v-if="planLoading" class="p-8 text-center text-sm text-slate-500">데이터 로딩 중...</div>
       <div v-else-if="planError" class="p-8 text-center text-sm text-red-600">{{ planError }}</div>
       <div v-else>
-        <div class="mb-6 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-          <div class="grid w-full grid-cols-2 gap-2 md:w-auto md:grid-cols-4">
-            <div class="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2">
-              <p class="text-[11px] font-bold text-indigo-700 md:text-xs">오늘 목표 수량</p>
-              <p class="mt-1 text-sm font-extrabold text-slate-900 md:text-base">{{ scheduleCard.todayTargetQty }}</p>
-            </div>
-            <div class="rounded-lg border border-fuchsia-200 bg-fuchsia-50 px-3 py-2">
-              <p class="text-[11px] font-bold text-fuchsia-700 md:text-xs">오늘 야근</p>
-              <p class="mt-1 text-sm font-extrabold text-slate-900 md:text-base">{{ scheduleCard.todayOvertimeText }}</p>
-            </div>
-            <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
-              <p class="text-[11px] font-bold text-emerald-700 md:text-xs">배포 합계 (헤드/홀)</p>
-              <p class="mt-1 text-sm font-extrabold text-slate-900 md:text-base">
-                {{ scheduleCard.distributedHeadSum }} / {{ scheduleCard.distributedHoleSum }}
-              </p>
-            </div>
-            <div class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
-              <p class="text-[11px] font-bold text-amber-700 md:text-xs">전체 합계 (헤드/홀)</p>
-              <p class="mt-1 text-sm font-extrabold text-slate-900 md:text-base">
-                {{ scheduleCard.totalHeadSum }} / {{ scheduleCard.totalHoleSum }}
-              </p>
-            </div>
+        <div class="mb-3 flex h-[80px] items-stretch gap-2 rounded-xl border border-slate-200 bg-white px-2.5 shadow-sm">
+          <div class="flex shrink-0 basis-[18%] items-center justify-center gap-2.5 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 px-4 my-2">
+            <span class="text-xs font-bold leading-tight text-indigo-100">오늘<br/>목표</span>
+            <span class="text-2xl font-black tabular-nums text-white">{{ scheduleCard.todayTargetQty }}</span>
           </div>
-          <div class="ml-auto flex w-full flex-col gap-2 md:w-auto md:flex-row md:items-center md:gap-3">
+
+          <div class="flex shrink-0 basis-[25%] flex-col justify-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50/60 px-3 my-2">
+            <div class="flex items-center justify-between">
+              <span class="text-sm font-bold text-emerald-700">{{ scheduleCard.branch.title }}</span>
+              <span class="text-sm font-extrabold tabular-nums text-slate-900">{{ scheduleCard.branch.distributedQty }}<span class="text-xs font-medium text-slate-400"> / {{ scheduleCard.branch.totalQty }}</span></span>
+            </div>
+            <div class="h-2 w-full overflow-hidden rounded-full bg-emerald-200/60">
+              <div class="h-full rounded-full bg-emerald-500 transition-all duration-500" :style="{ width: scheduleCard.branch.totalQty > 0 ? `${Math.min(100, (scheduleCard.branch.distributedQty / scheduleCard.branch.totalQty) * 100)}%` : '0%' }" />
+            </div>
+            <span class="text-[11px] font-semibold text-amber-600">미배포 {{ scheduleCard.branch.remainingQty }}</span>
+          </div>
+
+          <div class="flex shrink-0 basis-[25%] flex-col justify-center gap-1 rounded-xl border border-cyan-200 bg-cyan-50/60 px-3 my-2">
+            <div class="flex items-center justify-between">
+              <span class="text-sm font-bold text-cyan-700">{{ scheduleCard.main.title }}</span>
+              <span class="text-sm font-extrabold tabular-nums text-slate-900">{{ scheduleCard.main.distributedQty }}<span class="text-xs font-medium text-slate-400"> / {{ scheduleCard.main.totalQty }}</span></span>
+            </div>
+            <div class="h-2 w-full overflow-hidden rounded-full bg-cyan-200/60">
+              <div class="h-full rounded-full bg-cyan-500 transition-all duration-500" :style="{ width: scheduleCard.main.totalQty > 0 ? `${Math.min(100, (scheduleCard.main.distributedQty / scheduleCard.main.totalQty) * 100)}%` : '0%' }" />
+            </div>
+            <span class="text-[11px] font-semibold text-amber-600">미배포 {{ scheduleCard.main.remainingQty }}</span>
+          </div>
+
+          <div class="mx-0.5 w-px self-stretch bg-slate-200" />
+
+          <div class="flex min-w-0 basis-[20%] items-center gap-2">
+            <svg viewBox="0 0 24 24" class="h-4 w-4 shrink-0 text-slate-400" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" /></svg>
             <input
               v-model="localSearchText"
               type="text"
-              class="h-9 w-full rounded-md border border-slate-300 px-3 text-sm md:w-64"
-              placeholder="검색어 입력"
+              class="h-8 min-w-0 flex-1 border-0 bg-transparent text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none"
+              placeholder="검색..."
               @keydown.enter.prevent="emitSearchChange"
             />
-            <label class="flex select-none items-center gap-2 text-sm font-semibold text-slate-700">
-              <input
-                v-model="localSearchAllDates"
-                type="checkbox"
-                class="h-4 w-4"
-                @change="emitSearchChange"
-              />
+            <label class="flex shrink-0 cursor-pointer select-none items-center gap-1.5 rounded-lg border px-2 py-1 text-xs font-semibold transition hover:bg-slate-50" :class="localSearchAllDates ? 'border-indigo-300 bg-indigo-50 text-indigo-700' : 'border-slate-200 text-slate-500'">
+              <input v-model="localSearchAllDates" type="checkbox" class="sr-only" @change="emitSearchChange" />
+              <span class="inline-flex h-4 w-4 items-center justify-center rounded border transition" :class="localSearchAllDates ? 'border-indigo-500 bg-indigo-500 text-white' : 'border-slate-300 bg-white'">
+                <svg v-if="localSearchAllDates" viewBox="0 0 24 24" class="h-2.5 w-2.5" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7" /></svg>
+              </span>
               전체
             </label>
+            <button type="button" class="shrink-0 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-indigo-700 active:scale-95" @click="emitSearchChange">검색</button>
           </div>
         </div>
 
@@ -715,10 +684,6 @@ onBeforeUnmount(() => {
                 v-for="row in groupData.rows"
                 :key="`mobile-${groupData.group}-${row.id}`"
                 class="home-list-mobile-card rounded-xl border p-2 shadow-sm select-none"
-                :draggable="canReorderRows"
-                @dragstart="handleDragStart($event, row.id)"
-                @dragover="handleDragOver"
-                @drop.prevent="handleDrop(row.id)"
                 :class="
                   isBothWorkerCompleted(row)
                     ? 'border-red-200 bg-red-50/60'
@@ -874,8 +839,6 @@ onBeforeUnmount(() => {
                     @touchstart="handleRowPressStart(row, props.currentWorkMan)"
                     @touchend="endLongPress(row.id, 'row')"
                     @touchcancel="endLongPress(row.id, 'row')"
-                    @dragover="handleDragOver"
-                    @drop.prevent="handleDrop(row.id)"
                     @click="handleRowClick(row, props.currentWorkMan)"
                     @keyup.enter="handleRowClick(row, props.currentWorkMan)"
                     class="select-none"
@@ -894,13 +857,7 @@ onBeforeUnmount(() => {
                         v-if="col.key === 'no'"
                         class="inline-flex items-center justify-center gap-1"
                       >
-                        <span
-                          class="inline-flex cursor-grab items-center rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-600 active:cursor-grabbing"
-                          :draggable="canReorderRows"
-                          @mousedown.stop
-                          @touchstart.stop
-                          @dragstart.stop="handleDragStart($event, row.id)"
-                        >
+                        <span class="inline-flex items-center rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-600">
                           {{ getCellText(row, col.key) }}
                         </span>
                       </span>

@@ -74,9 +74,10 @@ const formatDrawingDate = (value) => {
   if (!value) return ''
   const d = new Date(value)
   if (Number.isNaN(d.getTime())) return ''
+  const yy = String(d.getFullYear()).slice(2)
   const mm = String(d.getMonth() + 1).padStart(2, '0')
   const dd = String(d.getDate()).padStart(2, '0')
-  return `${mm}.${dd}`
+  return `${yy}.${mm}.${dd}`
 }
 const WORKER_STATUS_OPTIONS = ['없음', '작업전', '작업중', '용접중', '작업완료']
 const normalizeWorkerStatus = (value) => {
