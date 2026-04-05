@@ -30,6 +30,21 @@ const normalizeDesktopVersion = (value) => {
   return matched ? matched[1] : ''
 }
 
+const compareDesktopVersion = (left, right) => {
+  const leftParts = normalizeDesktopVersion(left)
+    .split('.')
+    .map((part) => Number(part) || 0)
+  const rightParts = normalizeDesktopVersion(right)
+    .split('.')
+    .map((part) => Number(part) || 0)
+
+  for (let index = 0; index < 3; index += 1) {
+    const diff = (leftParts[index] ?? 0) - (rightParts[index] ?? 0)
+    if (diff !== 0) return diff
+  }
+  return 0
+}
+
 const resolveTargetVersion = (row) => {
   return normalizeDesktopVersion(row?.version_desktop)
 }
@@ -40,7 +55,7 @@ const shouldShowForceUpdateDialog = computed(() => {
   if (!desktopSupported.value) return false
   if (!appVersion.value) return false
   if (!remoteVersion.value) return false
-  return normalizeDesktopVersion(appVersion.value) !== normalizeDesktopVersion(remoteVersion.value)
+  return compareDesktopVersion(remoteVersion.value, appVersion.value) > 0
 })
 
 const forceUpdateTitle = computed(() => {
