@@ -14,6 +14,7 @@ const loading = ref(false)
 const errorMessage = ref('')
 const rows = ref([])
 const monthRows = ref([])
+const distributionRows = ref([])
 const isPrinting = ref(false)
 
 const startOfDay = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate())
@@ -57,6 +58,8 @@ const toNumber = (value) => {
   return Number.isFinite(n) ? n : 0
 }
 const formatHeadQty = (value) => Number(value || 0).toLocaleString('ko-KR')
+const WEEKDAY_LABELS = ['월', '화', '수', '목', '금', '토', '일']
+const WORK_WEEK_DAY_OFFSETS = [0, 1, 2, 3, 4, 5, 6]
 const getTuesdayOfCurrentWeek = (baseDate) => {
   const safe = startOfDay(baseDate)
   const day = safe.getDay()
@@ -130,27 +133,15 @@ const isOnTimeShipment = (row) => {
   if (!shipmentDate || !dueDate) return null
   return startOfDay(shipmentDate).getTime() <= startOfDay(dueDate).getTime()
 }
-const getShipmentStatusMeta = (row) => {
-  const isOnTime = isOnTimeShipment(row)
-  if (isOnTime === true) {
-    return {
-      label: '정상',
-      className: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
-    }
-  }
-  if (isOnTime === false) {
-    return {
-      label: '지연',
-      className: 'bg-rose-50 text-rose-700 border border-rose-200',
-    }
-  }
-  return {
-    label: '비교불가',
-    className: 'bg-slate-50 text-slate-600 border border-slate-200',
-  }
-}
 const getWeekTone = (index) =>
   index === 0 ? 'bg-slate-900 text-white' : 'bg-white text-slate-900 border border-slate-200'
+const getWeekdayIndex = (date) => {
+  const day = date.getDay()
+  return day === 0 ? 6 : day - 1
+}
+const getPreviousWorkWeekStart = (date) => addDays(startOfDay(date), -7)
+const formatMonthDayWeekday = (date) =>
+  `${date.getMonth() + 1}/${date.getDate()}(${WEEKDAY_LABELS[getWeekdayIndex(date)]})`
 
 const thisWeekTuesday = computed(() => getUpcomingTuesday(new Date()))
 const monthRange = computed(() => {
@@ -183,19 +174,44 @@ const monthlyDeliveryStats = computed(() => {
     delayedCount: Math.max(0, displayedMeasuredCount - displayedOnTimeCount),
   }
 })
-const recentShipmentRows = computed(() =>
-  monthRows.value
-    .filter((row) => Boolean(row?.shipment) || Boolean(getShipmentAt(row)))
-    .map((row) => ({
-      ...row,
-      _shipmentAt: getShipmentAt(row),
-    }))
-    .sort((a, b) => {
-      const aTime = a._shipmentAt?.getTime() ?? 0
-      const bTime = b._shipmentAt?.getTime() ?? 0
-      return bTime - aTime || Number(b.id ?? 0) - Number(a.id ?? 0)
+const weeklyDistributionCharts = computed(() =>
+  targetWeeks.value.map((week) => {
+    const startDate = getPreviousWorkWeekStart(week.date)
+    const endDate = addDays(startDate, 6)
+    const headSums = Array.from({ length: 7 }, () => 0)
+    for (const row of distributionRows.value) {
+      const drawingDate = getDrawingDistributedAt(row)
+      if (!drawingDate) continue
+      const drawingDay = startOfDay(drawingDate)
+      if (drawingDay.getTime() < startDate.getTime() || drawingDay.getTime() > endDate.getTime()) continue
+      const diffDays = Math.floor((drawingDay.getTime() - startDate.getTime()) / (24 * 60 * 60 * 1000))
+      if (diffDays < 0 || diffDays > 6) continue
+      headSums[diffDays] += toNumber(row?.head)
+    }
+    const dailyCounts = WORK_WEEK_DAY_OFFSETS.map((offset) => {
+      const targetDate = addDays(startDate, offset)
+      return {
+        label: WEEKDAY_LABELS[getWeekdayIndex(targetDate)],
+        dateLabel: formatMonthDayWeekday(targetDate),
+        headQty: headSums[offset],
+      }
     })
-    .slice(0, 6),
+    const maxHeadQty = Math.max(...dailyCounts.map((item) => item.headQty), 0)
+    const totalHeadQty = dailyCounts.reduce((sum, item) => sum + item.headQty, 0)
+    return {
+      key: week.key,
+      title: formatKoreanDate(week.date),
+      totalHeadQty,
+      maxHeadQty,
+      days: dailyCounts.map((item) => ({
+        ...item,
+        ratioByMax:
+          maxHeadQty > 0 && item.headQty > 0 ? Math.max(6, Math.round((item.headQty / maxHeadQty) * 100)) : 0,
+        percentOfWeek: totalHeadQty > 0 ? Math.round((item.headQty / totalHeadQty) * 100) : 0,
+        isPeak: maxHeadQty > 0 && item.headQty === maxHeadQty,
+      })),
+    }
+  }),
 )
 
 const buildWeekSummary = (week) => {
@@ -316,10 +332,13 @@ const fetchRows = async () => {
 
   const testDates = targetWeeks.value.map((week) => formatKoreanDate(week.date))
   const { start, end } = monthRange.value
+  const distributionWeekStart = getPreviousWorkWeekStart(targetWeeks.value[0]?.date ?? thisWeekTuesday.value)
+  const distributionWeekEnd = addDays(distributionWeekStart, 7)
   const baseColumns =
     'id,no,initial,company,place,area,work_type,head,test_date,drawing_date,shipment_date,delivery_due_date,is_drawing,calculation,complete,delay_text'
   const withVirtualColumns = `${baseColumns},virtual_drawing_distributed`
   const monthColumns = 'id,no,initial,company,place,area,shipment,shipment_date,delivery_due_date,updated_at'
+  const distributionColumns = 'id,head,drawing_date'
 
   let query = supabase.from(PRODUCT_LIST_TABLE).select(withVirtualColumns).in('test_date', testDates).order('test_date').order('no')
   let { data, error } = await query
@@ -329,6 +348,12 @@ const fetchRows = async () => {
     .gte('updated_at', `${formatIsoDate(start)}T00:00:00`)
     .lt('updated_at', `${formatIsoDate(addDays(end, 1))}T00:00:00`)
     .order('updated_at')
+  const { data: distributionData, error: distributionError } = await supabase
+    .from(PRODUCT_LIST_TABLE)
+    .select(distributionColumns)
+    .gte('drawing_date', `${formatIsoDate(distributionWeekStart)}T00:00:00`)
+    .lt('drawing_date', `${formatIsoDate(distributionWeekEnd)}T00:00:00`)
+    .order('drawing_date')
 
   if (error && String(error.message ?? '').includes('virtual_drawing_distributed')) {
     ;({ data, error } = await supabase
@@ -339,9 +364,10 @@ const fetchRows = async () => {
       .order('no'))
   }
 
-  if (error || monthError) {
+  if (error || monthError || distributionError) {
     rows.value = []
     monthRows.value = []
+    distributionRows.value = []
     errorMessage.value = 'product_list 데이터를 불러오지 못했습니다.'
     loading.value = false
     return
@@ -349,6 +375,7 @@ const fetchRows = async () => {
 
   rows.value = data ?? []
   monthRows.value = monthData ?? []
+  distributionRows.value = distributionData ?? []
   loading.value = false
 }
 
@@ -438,10 +465,10 @@ onMounted(async () => {
             <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
                 <p class="text-[12px] font-bold text-slate-500">주간 현황</p>
-                <h2 class="mt-1 text-base font-extrabold text-slate-900">{{ formatKoreanDate(week.date) }}</h2>
-              </div>
-              <div class="rounded-2xl px-4 py-2 text-[12px] font-bold" :class="getWeekTone(week.index)">
-                {{ formatKoreanDate(week.date) }}
+                <h2 class="mt-1 text-base font-extrabold text-slate-900">
+                  {{ formatKoreanDate(week.date) }}
+                  <span class="ml-2 text-base font-extrabold text-orange-700">검수일 기준</span>
+                </h2>
               </div>
             </div>
 
@@ -456,44 +483,56 @@ onMounted(async () => {
 
           <section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
             <div class="flex items-center justify-between gap-3">
-              <div>
-                <p class="text-[13px] font-extrabold text-slate-900">최근 출하된 목록</p>
-                <p class="mt-1 text-[12px] text-slate-500">당월 출하 이력 기준 최근 6건</p>
-              </div>
-              <span class="rounded-full bg-sky-100 px-3 py-1 text-[11px] font-bold text-sky-700">{{ recentShipmentRows.length }}건</span>
+              <p class="text-[13px] font-extrabold text-slate-900">요일별 배포 도면 수량</p>
             </div>
-            <div class="mt-4 overflow-x-auto">
-              <table class="min-w-full border-separate border-spacing-0 text-sm">
-                <thead>
-                  <tr class="bg-slate-50 text-slate-600">
-                    <th class="border border-slate-200 px-3 py-2 text-center">출하일시</th>
-                    <th class="border border-slate-200 px-3 py-2 text-center">도번</th>
-                    <th class="border border-slate-200 px-3 py-2 text-center">회사</th>
-                    <th class="border border-slate-200 px-3 py-2 text-center">현장</th>
-                    <th class="border border-slate-200 px-3 py-2 text-center">구역</th>
-                    <th class="border border-slate-200 px-3 py-2 text-center">납기일</th>
-                    <th class="border border-slate-200 px-3 py-2 text-center">지연여부</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-if="!recentShipmentRows.length">
-                    <td colspan="7" class="border border-slate-200 px-3 py-6 text-center text-slate-400">최근 출하 내역이 없습니다.</td>
-                  </tr>
-                  <tr v-for="row in recentShipmentRows" :key="`shipment-${row.id}`" class="bg-white">
-                    <td class="border border-slate-200 px-3 py-2 text-center">{{ formatShortDate(row.shipment_date || row.updated_at) }}</td>
-                    <td class="border border-slate-200 px-3 py-2 text-center font-semibold text-slate-900">{{ row.initial || row.no || '' }}</td>
-                    <td class="border border-slate-200 px-3 py-2 text-center">{{ row.company || '' }}</td>
-                    <td class="border border-slate-200 px-3 py-2 text-center">{{ row.place || '' }}</td>
-                    <td class="border border-slate-200 px-3 py-2 text-center">{{ row.area || '' }}</td>
-                    <td class="border border-slate-200 px-3 py-2 text-center">{{ formatShortDate(row.delivery_due_date) }}</td>
-                    <td class="border border-slate-200 px-3 py-2 text-center">
-                      <span class="inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold" :class="getShipmentStatusMeta(row).className">
-                        {{ getShipmentStatusMeta(row).label }}
-                      </span>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+            <div class="mt-4 space-y-4">
+              <article
+                v-for="chart in weeklyDistributionCharts"
+                :key="`distribution-${chart.key}`"
+                class="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm"
+              >
+                <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                  <div class="flex items-center gap-2">
+                    <span class="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold text-slate-600">
+                      최대 {{ formatHeadQty(chart.maxHeadQty) }} 헤드
+                    </span>
+                    <span class="rounded-full bg-sky-100 px-2.5 py-1 text-[10px] font-bold text-sky-700">
+                      총 {{ formatHeadQty(chart.totalHeadQty) }} 헤드
+                    </span>
+                  </div>
+                </div>
+                <div class="mt-3 grid gap-2 md:grid-cols-7">
+                  <div
+                    v-for="day in chart.days"
+                    :key="`${chart.key}-${day.label}`"
+                    class="rounded-2xl border px-3 py-3 transition"
+                    :class="
+                      day.isPeak
+                        ? 'border-orange-300 bg-orange-50/80 shadow-[0_0_0_1px_rgba(249,115,22,0.12)]'
+                        : 'border-slate-200 bg-slate-50/80'
+                    "
+                  >
+                    <div class="flex items-center justify-between">
+                      <p class="text-[12px] font-bold" :class="day.isPeak ? 'text-orange-700' : 'text-slate-700'">{{ day.dateLabel }}</p>
+                      <p class="text-[11px] font-bold" :class="day.isPeak ? 'text-orange-700' : 'text-slate-600'">{{ day.percentOfWeek }}%</p>
+                    </div>
+                    <p class="mt-2 text-lg font-extrabold text-slate-900">{{ formatHeadQty(day.headQty) }}</p>
+                    <p class="mt-0.5 text-[10px] font-semibold text-slate-500">헤드</p>
+                    <div class="mt-3 h-2.5 overflow-hidden rounded-full" :class="day.ratioByMax > 0 ? 'bg-slate-200' : 'bg-transparent'">
+                      <div
+                        v-if="day.ratioByMax > 0"
+                        class="distribution-bar h-full rounded-full transition-all"
+                        :class="
+                          day.isPeak
+                            ? 'bg-gradient-to-r from-orange-500 via-orange-500 to-amber-500 shadow-[0_0_10px_rgba(249,115,22,0.35)]'
+                            : 'bg-gradient-to-r from-cyan-500 via-sky-500 to-indigo-500'
+                        "
+                        :style="{ width: `${day.ratioByMax}%` }"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </article>
             </div>
           </section>
         </div>

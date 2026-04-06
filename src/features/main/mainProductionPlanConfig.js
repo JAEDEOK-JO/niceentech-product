@@ -16,7 +16,7 @@ const formatStatusDate = (value) => {
   const raw = String(value ?? '').trim()
   if (!raw) return ''
 
-  const shipmentMatched = raw.match(/^(\d{2})\.(\d{1,2})\.(\d{1,2})$/)
+  const shipmentMatched = raw.match(/^(\d{2})\.(\d{1,2})\.(\d{1,2})(?:\s+\d{2}:\d{2})?$/)
   if (shipmentMatched) {
     const [, yy, month, day] = shipmentMatched
     return `${yy}.${String(month).padStart(2, '0')}.${String(day).padStart(2, '0')}`

@@ -62,11 +62,9 @@ const handleSaveRowMenu = async ({
   rowId,
   delayText,
   delayTime,
-  salesAmount,
-  callType,
   complete,
-  workerTComplete,
-  workerMainComplete,
+  workerTDate,
+  workerMainDate,
   virtualDrawingDistributed,
   onResult,
 }) => {
@@ -74,18 +72,10 @@ const handleSaveRowMenu = async ({
     rowId,
     delayText,
     delayTime,
-    salesAmount,
-    callType,
     complete,
-    workerTComplete,
-    workerMainComplete,
+    workerTDate,
+    workerMainDate,
     virtualDrawingDistributed,
-    requester: {
-      id: profile.value?.id ?? session.value?.user?.id ?? null,
-      name: profile.value?.name ?? '',
-      position: profile.value?.position ?? '',
-      workMan: profile.value?.work_man ?? '',
-    },
   })
   onResult?.(result)
 }

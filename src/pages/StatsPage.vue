@@ -120,7 +120,13 @@ function parseIsoDate(value) {
 
 function parseMonthDayDate(value, referenceDate = selectedWeekStart.value) {
   const raw = String(value ?? '').trim()
-  const yearMatched = raw.match(/^(\d{2})\.(\d{2})\.(\d{2})$/)
+  const isoMatched = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:T.*)?$/)
+  if (isoMatched) {
+    const [, year, month, day] = isoMatched
+    const parsed = new Date(Number(year), Number(month) - 1, Number(day))
+    return Number.isNaN(parsed.getTime()) ? null : startOfDay(parsed)
+  }
+  const yearMatched = raw.match(/^(\d{2})\.(\d{2})\.(\d{2})(?:\s+\d{2}:\d{2})?$/)
   if (yearMatched) {
     const [, year, month, day] = yearMatched
     const parsed = new Date(2000 + Number(year), Number(month) - 1, Number(day))
@@ -160,17 +166,21 @@ function getStageCompletedDate(row, lineType) {
     : parseMonthDayDate(row?.worker_main_time)
 }
 
-function isDistributedRow(row) {
-  return Boolean(row?.drawing_date) || Boolean(row?.virtual_drawing_distributed)
+function normalizeWorkType(value) {
+  return String(value ?? '').replaceAll(' ', '').trim()
+}
+
+function isNasaWorkType(row) {
+  return normalizeWorkType(row?.work_type) === '나사'
+}
+
+function isStageCompletedByStatus(row, lineType) {
+  const raw = String(lineType === 'branch_head' ? row?.worker_t : row?.worker_main).trim()
+  return raw === '작업완료' || raw === '출하완료'
 }
 
 function hasStageCompleted(row, lineType) {
   return Boolean(getStageCompletedDate(row, lineType))
-}
-
-function isDistributedOnDate(row, targetDate) {
-  const drawingDate = parseIsoDate(row?.drawing_date)
-  return drawingDate ? isSameDay(drawingDate, targetDate) : false
 }
 
 function isCompletedOnDate(row, lineType, targetDate) {
@@ -191,65 +201,36 @@ function isWeekdayWorkDate(date) {
   return day >= 1 && day <= 5
 }
 
-function buildCalculatedPlanMap({ backlogQty, unitSec, dates, planningStartDate, isCurrentWeek }) {
+function buildCalculatedPlanMap({ backlogQty, unitSec, dates }) {
   const map = {}
   let remainingSec = Math.max(0, backlogQty * unitSec)
-  const candidateDates = dates.filter((date) => {
-    if (!isCurrentWeek) return true
-    return startOfDay(date).getTime() >= planningStartDate.getTime()
-  })
-  const weekdayDates = candidateDates.filter((date) => isWeekdayWorkDate(date))
-  const weekendDates = candidateDates.filter((date) => !isWeekdayWorkDate(date))
-
-  // Production week is Tue~Mon for a Tuesday inspection date.
-  // Use all remaining weekdays first (Tue~Fri, Mon), then weekend only if still short.
-  const planningOrder = [...weekdayDates, ...weekendDates]
-  const planMap = new Map()
-
-  for (const date of planningOrder) {
+  for (const date of dates) {
     const key = formatKoreanDate(date)
     const day = date.getDay()
 
     if (day >= 1 && day <= 5) {
       if (remainingSec <= 0) {
-        planMap.set(key, '정시 작업 가능')
+        map[key] = '정시 작업 가능'
         continue
       }
       const todayWorkSec = Math.min(remainingSec, REGULAR_WORK_SEC + MAX_WEEKDAY_OVERTIME_SEC)
       const overtimeSec = Math.max(0, todayWorkSec - REGULAR_WORK_SEC)
-      planMap.set(key, overtimeSec > 0 ? formatHourMinuteFromSeconds(overtimeSec) : '정시 작업 가능')
+      map[key] = overtimeSec > 0 ? formatHourMinuteFromSeconds(overtimeSec) : '정시 작업 가능'
       remainingSec = Math.max(0, remainingSec - todayWorkSec)
       continue
     }
 
     if (remainingSec <= 0) {
-      planMap.set(key, '작업 불필요')
+      map[key] = '작업 불필요'
       continue
     }
 
-    const remainingWeekendDates = weekendDates.filter(
-      (weekendDate) => startOfDay(weekendDate).getTime() >= startOfDay(date).getTime(),
-    )
-    const isLastWeekendDate = remainingWeekendDates.length <= 1
-    const todayRequiredSec = isLastWeekendDate
-      ? remainingSec
-      : Math.min(remainingSec, REGULAR_WORK_SEC)
-    planMap.set(
-      key,
+    const todayRequiredSec = Math.min(remainingSec, REGULAR_WORK_SEC)
+    map[key] =
       todayRequiredSec <= REGULAR_WORK_SEC
         ? `작업필요(정시 ${formatHourMinuteFromSeconds(todayRequiredSec)})`
-        : `정시 + ${formatHourMinuteFromSeconds(todayRequiredSec - REGULAR_WORK_SEC)}`,
-    )
+        : `정시 + ${formatHourMinuteFromSeconds(todayRequiredSec - REGULAR_WORK_SEC)}`
     remainingSec = Math.max(0, remainingSec - todayRequiredSec)
-  }
-
-  for (const date of dates) {
-    const key = formatKoreanDate(date)
-    if (isCurrentWeek && startOfDay(date).getTime() < planningStartDate.getTime()) {
-      map[key] = ''
-      continue
-    }
-    map[key] = planMap.get(key) ?? '작업 불필요'
   }
 
   return map
@@ -287,19 +268,12 @@ async function fetchRows() {
     return
   }
 
-  const baseColumns = 'id,head,hole,drawing_date,worker_t_time,worker_main_time'
-  const withVirtualColumns = `${baseColumns},virtual_drawing_distributed`
-  const runQuery = (columns) =>
-    supabase
-      .from(PRODUCT_LIST_TABLE)
-      .select(columns)
-      .eq('test_date', weekTestDateText.value)
-      .order('drawing_date', { ascending: true })
-
-  let { data, error: queryError } = await runQuery(withVirtualColumns)
-  if (queryError && String(queryError.message ?? '').includes('virtual_drawing_distributed')) {
-    ;({ data, error: queryError } = await runQuery(baseColumns))
-  }
+  const columns = 'id,work_type,head,hole,worker_t,worker_t_time,worker_main,worker_main_time'
+  const { data, error: queryError } = await supabase
+    .from(PRODUCT_LIST_TABLE)
+    .select(columns)
+    .eq('test_date', weekTestDateText.value)
+    .order('id', { ascending: true })
 
   if (queryError) {
     rows.value = []
@@ -307,7 +281,7 @@ async function fetchRows() {
     return
   }
 
-  rows.value = data ?? []
+  rows.value = (data ?? []).filter((row) => !isNasaWorkType(row))
 }
 
 async function fetchOvertimeLogs() {
@@ -347,7 +321,6 @@ const dailyBranchRows = computed(() =>
   weekDates.value.map((date) => ({
     key: formatKoreanDate(date),
     dateLabel: formatDayLabel(date),
-    distributedQty: sumHead(rows.value.filter((row) => isDistributedOnDate(row, date))),
     completedQty: sumHead(rows.value.filter((row) => isCompletedOnDate(row, 'branch_head', date))),
     isToday: isSameDay(date, new Date()),
   })),
@@ -357,36 +330,34 @@ const dailyMainRows = computed(() =>
   weekDates.value.map((date) => ({
     key: formatKoreanDate(date),
     dateLabel: formatDayLabel(date),
-    distributedQty: sumHole(rows.value.filter((row) => isDistributedOnDate(row, date))),
     completedQty: sumHole(rows.value.filter((row) => isCompletedOnDate(row, 'main_hole', date))),
     isToday: isSameDay(date, new Date()),
   })),
 )
 
 const lineCards = computed(() => {
-  const distributedRows = rows.value.filter(isDistributedRow)
-  const branchDistributedQty = sumHead(distributedRows)
-  const branchCompletedQty = sumHead(distributedRows.filter((row) => hasStageCompleted(row, 'branch_head')))
-  const mainDistributedQty = sumHole(distributedRows)
-  const mainCompletedQty = sumHole(distributedRows.filter((row) => hasStageCompleted(row, 'main_hole')))
+  const branchTotalQty = sumHead(rows.value)
+  const branchCompletedQty = sumHead(rows.value.filter((row) => isStageCompletedByStatus(row, 'branch_head')))
+  const mainTotalQty = sumHole(rows.value)
+  const mainCompletedQty = sumHole(rows.value.filter((row) => isStageCompletedByStatus(row, 'main_hole')))
 
   return [
     {
       key: 'branch_head',
       title: '가지관',
       accent: 'emerald',
-      distributedQty: branchDistributedQty,
+      totalQty: branchTotalQty,
       completedQty: branchCompletedQty,
-      remainingQty: Math.max(0, branchDistributedQty - branchCompletedQty),
+      remainingQty: Math.max(0, branchTotalQty - branchCompletedQty),
       unitText: `${setting.value.weldingHeadTimeSec}초/개`,
     },
     {
       key: 'main_hole',
       title: '메인관',
       accent: 'cyan',
-      distributedQty: mainDistributedQty,
+      totalQty: mainTotalQty,
       completedQty: mainCompletedQty,
-      remainingQty: Math.max(0, mainDistributedQty - mainCompletedQty),
+      remainingQty: Math.max(0, mainTotalQty - mainCompletedQty),
       unitText: `${setting.value.holeTimeSec}초/개`,
     },
   ]
@@ -441,49 +412,50 @@ function formatActualText(actualMin) {
 }
 
 const weekRows = computed(() => {
-  const weekEnd = startOfDay(addDays(selectedWeekStart.value, 6))
-  const todayDate = startOfDay(new Date())
-  const isCurrentWeek =
-    todayDate.getTime() >= startOfDay(selectedWeekStart.value).getTime() &&
-    todayDate.getTime() <= weekEnd.getTime()
-  const planningStartDate = isCurrentWeek ? todayDate : startOfDay(selectedWeekStart.value)
-  const branchPlanMap = buildCalculatedPlanMap({
-    backlogQty: lineCards.value.find((card) => card.key === 'branch_head')?.remainingQty ?? 0,
-    unitSec: setting.value.weldingHeadTimeSec,
-    dates: weekDates.value,
-    planningStartDate,
-    isCurrentWeek,
-  })
-  const mainPlanMap = buildCalculatedPlanMap({
-    backlogQty: lineCards.value.find((card) => card.key === 'main_hole')?.remainingQty ?? 0,
-    unitSec: setting.value.holeTimeSec,
-    dates: weekDates.value,
-    planningStartDate,
-    isCurrentWeek,
-  })
+  const branchTotalQty = lineCards.value.find((card) => card.key === 'branch_head')?.totalQty ?? 0
+  const mainTotalQty = lineCards.value.find((card) => card.key === 'main_hole')?.totalQty ?? 0
+  let branchCompletedBefore = 0
+  let mainCompletedBefore = 0
 
-  return weekDates.value.map((date) => {
+  return weekDates.value.map((date, index) => {
     const key = formatKoreanDate(date)
-    const canShowActuals = !isCurrentWeek || startOfDay(date).getTime() <= todayDate.getTime()
+    const branchCompletedQty = dailyBranchRows.value.find((row) => row.key === key)?.completedQty ?? 0
+    const mainCompletedQty = dailyMainRows.value.find((row) => row.key === key)?.completedQty ?? 0
+    const branchRemainingQty = Math.max(0, branchTotalQty - branchCompletedBefore)
+    const mainRemainingQty = Math.max(0, mainTotalQty - mainCompletedBefore)
+    const branchCalculatedText =
+      buildCalculatedPlanMap({
+        backlogQty: branchRemainingQty,
+        unitSec: setting.value.weldingHeadTimeSec,
+        dates: weekDates.value.slice(index),
+      })[key] ?? ''
+    const mainCalculatedText =
+      buildCalculatedPlanMap({
+        backlogQty: mainRemainingQty,
+        unitSec: setting.value.holeTimeSec,
+        dates: weekDates.value.slice(index),
+      })[key] ?? ''
     const overtimeEntry = overtimeByDate.value[key] ?? {
       branch_head: { actualMin: null, delayTexts: [] },
       main_hole: { actualMin: null, delayTexts: [] },
     }
 
-    return {
+    const result = {
       key,
       dateLabel: formatDayLabel(date),
       isToday: isSameDay(date, new Date()),
-      branchDistributedQty: canShowActuals ? dailyBranchRows.value.find((row) => row.key === key)?.distributedQty ?? 0 : null,
-      branchCompletedQty: canShowActuals ? dailyBranchRows.value.find((row) => row.key === key)?.completedQty ?? 0 : null,
-      branchCalculatedText: branchPlanMap[key] ?? '',
-      branchActualText: canShowActuals ? formatActualText(overtimeEntry.branch_head.actualMin) : '',
-      mainDistributedQty: canShowActuals ? dailyMainRows.value.find((row) => row.key === key)?.distributedQty ?? 0 : null,
-      mainCompletedQty: canShowActuals ? dailyMainRows.value.find((row) => row.key === key)?.completedQty ?? 0 : null,
-      mainCalculatedText: mainPlanMap[key] ?? '',
-      mainActualText: canShowActuals ? formatActualText(overtimeEntry.main_hole.actualMin) : '',
-      delayReasonText: canShowActuals ? [...overtimeEntry.branch_head.delayTexts, ...overtimeEntry.main_hole.delayTexts].join(' / ') : '',
+      branchCompletedQty,
+      branchCalculatedText,
+      branchActualText: formatActualText(overtimeEntry.branch_head.actualMin),
+      mainCompletedQty,
+      mainCalculatedText,
+      mainActualText: formatActualText(overtimeEntry.main_hole.actualMin),
+      delayReasonText: [...overtimeEntry.branch_head.delayTexts, ...overtimeEntry.main_hole.delayTexts].join(' / '),
     }
+
+    branchCompletedBefore += branchCompletedQty
+    mainCompletedBefore += mainCompletedQty
+    return result
   })
 })
 
@@ -715,8 +687,8 @@ watch(
 
           <div class='mt-4 grid grid-cols-3 gap-3'>
             <div class='rounded-2xl bg-slate-50 p-4'>
-              <p class='text-xs font-semibold text-slate-500'>검수분 배포</p>
-              <p class='mt-1 text-2xl font-extrabold text-slate-900'>{{ card.distributedQty.toLocaleString('ko-KR') }}</p>
+              <p class='text-xs font-semibold text-slate-500'>검수분 전체</p>
+              <p class='mt-1 text-2xl font-extrabold text-slate-900'>{{ card.totalQty.toLocaleString('ko-KR') }}</p>
             </div>
             <div class='rounded-2xl bg-slate-50 p-4'>
               <p class='text-xs font-semibold text-slate-500'>검수분 완료</p>
@@ -748,7 +720,6 @@ watch(
                 <thead class='bg-emerald-50'>
                   <tr>
                     <th class='border border-emerald-200 px-3 py-2 text-center text-xs font-bold text-emerald-800'>날짜</th>
-                    <th class='border border-emerald-200 px-3 py-2 text-center text-xs font-bold text-emerald-800'>배포헤드</th>
                     <th class='border border-emerald-200 px-3 py-2 text-center text-xs font-bold text-emerald-800'>완료헤드</th>
                     <th class='border border-emerald-200 px-3 py-2 text-center text-xs font-bold text-emerald-800'>계산야근</th>
                     <th class='border border-emerald-200 px-3 py-2 text-center text-xs font-bold text-emerald-800'>실제야근</th>
@@ -757,7 +728,6 @@ watch(
                 <tbody>
                   <tr v-for='row in weekRows' :key='`${row.key}-branch`' :class='row.isToday ? "bg-orange-50" : "bg-white"'>
                     <td class='border border-slate-200 px-3 py-3 text-center text-sm font-semibold text-slate-900'>{{ row.dateLabel }}</td>
-                    <td class='border border-slate-200 px-3 py-3 text-center text-sm font-semibold text-slate-900'>{{ formatQtyCell(row.branchDistributedQty) }}</td>
                     <td class='border border-slate-200 px-3 py-3 text-center text-sm font-semibold text-slate-900'>{{ formatQtyCell(row.branchCompletedQty) }}</td>
                     <td class='border border-slate-200 px-3 py-3 text-center text-sm font-semibold text-emerald-700'>{{ row.branchCalculatedText }}</td>
                     <td class='border border-slate-200 px-3 py-3 text-center text-sm font-semibold text-emerald-700'>{{ row.branchActualText }}</td>
@@ -771,7 +741,6 @@ watch(
                 <thead class='bg-cyan-50'>
                   <tr>
                     <th class='border border-cyan-200 px-3 py-2 text-center text-xs font-bold text-cyan-800'>날짜</th>
-                    <th class='border border-cyan-200 px-3 py-2 text-center text-xs font-bold text-cyan-800'>배포홀</th>
                     <th class='border border-cyan-200 px-3 py-2 text-center text-xs font-bold text-cyan-800'>완료홀</th>
                     <th class='border border-cyan-200 px-3 py-2 text-center text-xs font-bold text-cyan-800'>계산야근</th>
                     <th class='border border-cyan-200 px-3 py-2 text-center text-xs font-bold text-cyan-800'>실제야근</th>
@@ -780,7 +749,6 @@ watch(
                 <tbody>
                   <tr v-for='row in weekRows' :key='`${row.key}-main`' :class='row.isToday ? "bg-orange-50" : "bg-white"'>
                     <td class='border border-slate-200 px-3 py-3 text-center text-sm font-semibold text-slate-900'>{{ row.dateLabel }}</td>
-                    <td class='border border-slate-200 px-3 py-3 text-center text-sm font-semibold text-slate-900'>{{ formatQtyCell(row.mainDistributedQty) }}</td>
                     <td class='border border-slate-200 px-3 py-3 text-center text-sm font-semibold text-slate-900'>{{ formatQtyCell(row.mainCompletedQty) }}</td>
                     <td class='border border-slate-200 px-3 py-3 text-center text-sm font-semibold text-cyan-700'>{{ row.mainCalculatedText }}</td>
                     <td class='border border-slate-200 px-3 py-3 text-center text-sm font-semibold text-cyan-700'>{{ row.mainActualText }}</td>

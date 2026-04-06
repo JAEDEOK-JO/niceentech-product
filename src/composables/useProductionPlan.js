@@ -77,6 +77,44 @@ const formatIsoDate = (date = new Date()) => {
   const d = String(date.getDate()).padStart(2, '0')
   return `${y}-${m}-${d}`
 }
+const parseWorkerDateValue = (value) => {
+  const raw = String(value ?? '').trim()
+  if (!raw) return null
+
+  const isoMatched = raw.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (isoMatched) {
+    const [, year, month, day] = isoMatched
+    const parsed = new Date(Number(year), Number(month) - 1, Number(day))
+    return Number.isNaN(parsed.getTime()) ? null : parsed
+  }
+
+  const dotMatched = raw.match(/^(\d{2})\.(\d{1,2})\.(\d{1,2})/)
+  if (dotMatched) {
+    const [, year, month, day] = dotMatched
+    const parsed = new Date(2000 + Number(year), Number(month) - 1, Number(day))
+    return Number.isNaN(parsed.getTime()) ? null : parsed
+  }
+
+  return null
+}
+const formatWorkerDateTime = (value, now = new Date()) => {
+  const baseDate = parseWorkerDateValue(value)
+  if (!baseDate) return ''
+
+  const yy = String(baseDate.getFullYear()).slice(2)
+  const mm = String(baseDate.getMonth() + 1).padStart(2, '0')
+  const dd = String(baseDate.getDate()).padStart(2, '0')
+  const hh = String(now.getHours()).padStart(2, '0')
+  const min = String(now.getMinutes()).padStart(2, '0')
+  return `${yy}.${mm}.${dd} ${hh}:${min}`
+}
+const resolveCompleteDateFromWorkerTimes = (workerTTime, workerMainTime) => {
+  const dates = [parseWorkerDateValue(workerTTime), parseWorkerDateValue(workerMainTime)].filter(Boolean)
+  if (dates.length === 0) return ''
+
+  const latest = dates.sort((left, right) => left.getTime() - right.getTime())[dates.length - 1]
+  return formatMonthDay(latest)
+}
 const sanitizeStorageFileName = (name) =>
   String(name ?? '')
     .trim()
@@ -165,14 +203,6 @@ const sortRowsByPriority = (rows) => {
   })
 }
 
-const normalizeCallType = (value) => String(value ?? '').replaceAll(' ', '').trim()
-const resolveIssueRequestType = (callType) => {
-  const normalized = normalizeCallType(callType)
-  if (!normalized) return null
-  if (normalized.includes('도면없음')) return '도면없음'
-  if (normalized.includes('증지없음')) return '증지없음'
-  return '확인요망'
-}
 const canControlStage = (workMan, stageKey) => {
   const normalized = normalizeWorkMan(workMan)
   if (!normalized || normalized === '없음') return false
@@ -198,7 +228,6 @@ export function useProductionPlan(session) {
 
   const selectedTuesday = ref(baseTuesday())
   const planRows = ref([])
-  const assigneeUsers = ref([])
   const planLoading = ref(false)
   const planError = ref('')
   const searchText = ref('')
@@ -264,7 +293,7 @@ export function useProductionPlan(session) {
     planError.value = ''
 
     const baseColumns =
-      'id,no,company_info,uid,initial,company,place,area,memo,full_text,work_type,hole,head,groove,weight,name,test_date,drawing,is_drawing,drawing_date,delivery_due_date,delay_time,delay_text,sales_amount,complete,complete_date,shipment,not_test,hold,outsourcing,paper,calculation,ahn,stamp,worker_t,worker_t_time,worker_t_time_final,worker_main,worker_main_time,worker_main_time_final,worker_nasa,worker_nasa_time,worker_nasa_time_final,worker_welding,worker_welding_time,worker_welding_time_final,marking_weld_a_status,marking_weld_a_started_on,marking_weld_a_completed_on,marking_weld_b_status,marking_weld_b_started_on,marking_weld_b_completed_on,marking_laser_1_status,marking_laser_1_started_on,marking_laser_1_completed_on,marking_laser_2_status,marking_laser_2_started_on,marking_laser_2_completed_on,cutting_status,beveling_status,beveling_started_on,beveling_completed_on,main_status,main_started_on,main_completed_on,nasa_status,nasa_started_on,nasa_completed_on'
+      'id,no,company_info,uid,initial,company,place,area,memo,full_text,work_type,hole,head,groove,weight,name,test_date,drawing,is_drawing,drawing_date,delivery_due_date,delay_time,delay_text,complete,complete_date,shipment,not_test,hold,outsourcing,paper,calculation,ahn,stamp,worker_t,worker_t_time,worker_t_time_final,worker_main,worker_main_time,worker_main_time_final,worker_nasa,worker_nasa_time,worker_nasa_time_final,worker_welding,worker_welding_time,worker_welding_time_final,marking_weld_a_status,marking_weld_a_started_on,marking_weld_a_completed_on,marking_weld_b_status,marking_weld_b_started_on,marking_weld_b_completed_on,marking_laser_1_status,marking_laser_1_started_on,marking_laser_1_completed_on,marking_laser_2_status,marking_laser_2_started_on,marking_laser_2_completed_on,cutting_status,beveling_status,beveling_started_on,beveling_completed_on,main_status,main_started_on,main_completed_on,nasa_status,nasa_started_on,nasa_completed_on'
     const withVirtualColumns = `${baseColumns},virtual_drawing_distributed`
     const runQuery = (columns) => {
       let query = supabase.from(PRODUCT_LIST_TABLE).select(columns)
@@ -294,34 +323,6 @@ export function useProductionPlan(session) {
     }
 
     planRows.value = data ?? []
-  }
-
-  const fetchAssigneeUsers = async () => {
-    if (!session.value) {
-      assigneeUsers.value = []
-      return
-    }
-
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('id,name,position,role,work_man,activate')
-      .eq('activate', true)
-      .order('name', { ascending: true })
-
-    if (error) {
-      assigneeUsers.value = []
-      return
-    }
-
-    assigneeUsers.value = (data ?? [])
-      .map((user) => ({
-        id: user.id,
-        name: String(user.name ?? '').trim() || '이름없음',
-        position: String(user.position ?? '').trim() || '-',
-        role: String(user.role ?? '').trim(),
-        workMan: String(user.work_man ?? '').trim() || '없음',
-      }))
-      .filter((user) => !!user.id)
   }
 
   const groupedRows = computed(() => {
@@ -477,113 +478,13 @@ export function useProductionPlan(session) {
     return { ok: true }
   }
 
-  const createIssueRequestFromMenu = async ({ row, callType, delayText, requester }) => {
-    const requestType = resolveIssueRequestType(callType)
-    if (!requestType) return { ok: true, skipped: true }
-    if (assigneeUsers.value.length === 0) {
-      await fetchAssigneeUsers()
-    }
-
-    const requesterUserId = requester?.id ?? session.value?.user?.id ?? null
-    const requesterName = String(requester?.name ?? '').trim()
-    const requesterPosition = String(requester?.position ?? '').trim()
-    const requesterLine = String(requester?.workMan ?? '').trim()
-    const requesterLabel = requesterPosition || requesterLine || '-'
-    const company = String(row?.company ?? '').trim()
-    const place = String(row?.place ?? '').trim()
-    const area = String(row?.area ?? '').trim()
-    const testDate = String(row?.test_date ?? '').trim()
-    const reason = String(delayText ?? '').trim()
-
-    const rowAssigneeName = String(row?.name ?? '').trim()
-    const assignedUser = assigneeUsers.value.find((user) => user.name === rowAssigneeName)
-    if (!assignedUser?.id) return { ok: false, reason: 'assignee_not_found' }
-
-    const assignedLabel = String(assignedUser.position ?? '').trim() || String(assignedUser.workMan ?? '').trim() || '-'
-    const targetWorkMans = [String(assignedUser.workMan ?? '').trim() || assignedLabel]
-
-    const requestMessage = reason || `${callType} 요청`
-    const { data: insertedRequest, error: requestError } = await supabase
-      .from('process_issue_requests')
-      .insert({
-        product_list_id: row.id,
-        request_type: requestType,
-        request_status: '요청',
-        request_message: requestMessage,
-        requester_user_id: requesterUserId,
-        requester_name: requesterName,
-        requester_work_man: requesterLabel,
-        assigned_user_id: assignedUser.id,
-        assigned_name: assignedUser.name,
-        assigned_work_man: assignedLabel,
-        target_work_mans: targetWorkMans,
-        company,
-        place,
-        area,
-        test_date: testDate,
-        is_urgent: false,
-      })
-      .select('id')
-      .single()
-
-    if (requestError) {
-      planError.value = `요청 저장 실패: ${requestError.message}`
-      return { ok: false, reason: 'db_error' }
-    }
-
-    const title = `[${requestType}] ${company || '-'} / ${place || '-'} / ${area || '-'}`
-    const detailParts = [`${requesterName}(${requesterLabel}) 요청`, `검수날짜 ${testDate || '-'}`, `요청유형 ${requestType}`]
-    if (reason) detailParts.push(`사유 ${reason}`)
-    const message = detailParts.join(' · ')
-
-    const notifications = [
-      {
-        request_id: insertedRequest.id,
-        recipient_user_id: assignedUser.id,
-        recipient_work_man: assignedLabel,
-        title,
-        message,
-        notification_kind: 'request',
-        is_read: false,
-      },
-    ]
-
-    const adminRecipients = assigneeUsers.value.filter((user) => isAdminRole(user.role))
-    for (const admin of adminRecipients) {
-      if (notifications.some((item) => item.recipient_user_id === admin.id)) continue
-      notifications.push({
-        request_id: insertedRequest.id,
-        recipient_user_id: admin.id,
-        recipient_work_man: admin.workMan,
-        title: `[관리자확인] ${title}`,
-        message,
-        notification_kind: 'request',
-        is_read: false,
-      })
-    }
-
-    const { error: notifyError } = await supabase
-      .from('process_issue_request_notifications')
-      .upsert(notifications, { onConflict: 'request_id,recipient_user_id,notification_kind' })
-
-    if (notifyError) {
-      planError.value = `알림 생성 실패: ${notifyError.message}`
-      return { ok: false, reason: 'db_error' }
-    }
-
-    return { ok: true, requestId: insertedRequest.id }
-  }
-
   const updateRowMenu = async ({
     rowId,
     delayText,
     delayTime,
-    salesAmount,
-    callType,
-    requester,
     complete,
-    workerTComplete,
-    workerMainComplete,
+    workerTDate,
+    workerMainDate,
     virtualDrawingDistributed,
   }) => {
     const updatePayload = {}
@@ -600,11 +501,6 @@ export function useProductionPlan(session) {
       updatePayload.delay_time = Math.floor(safeDelayMinutes * 60)
     }
 
-    if (salesAmount !== undefined) {
-      const rawSalesAmount = String(salesAmount ?? '').replaceAll(',', '').trim()
-      updatePayload.sales_amount = rawSalesAmount === '' ? null : rawSalesAmount
-    }
-
     if (typeof virtualDrawingDistributed === 'boolean') {
       updatePayload.virtual_drawing_distributed = virtualDrawingDistributed
     }
@@ -619,37 +515,40 @@ export function useProductionPlan(session) {
         updatePayload.worker_t_time = ''
       }
     }
-    if (typeof workerTComplete === 'boolean') {
-      const todayText = formatWorkerDate(new Date())
+    if (workerTDate !== undefined) {
       const isWorkerTSourceEmpty = areAllStatusesNone(row, homeWorkerTShortcutFields)
-      if (workerTComplete) {
+      const safeWorkerTDate = String(workerTDate ?? '').trim()
+      if (safeWorkerTDate) {
         updatePayload.worker_t = '작업완료'
-        updatePayload.worker_t_time = isWorkerTSourceEmpty ? '' : row?.worker_t !== '작업완료' ? todayText : row?.worker_t_time ?? ''
+        updatePayload.worker_t_time = formatWorkerDateTime(safeWorkerTDate)
       } else {
         updatePayload.worker_t = isWorkerTSourceEmpty ? '없음' : '작업중'
         updatePayload.worker_t_time = ''
       }
-      const mainDone = typeof workerMainComplete === 'boolean' ? workerMainComplete : row?.worker_main === '작업완료'
-      const tDone = workerTComplete
-      const allDone = tDone && mainDone
-      updatePayload.complete = allDone
-      updatePayload.complete_date = allDone ? todayText : ''
     }
-    if (typeof workerMainComplete === 'boolean') {
-      const todayText = formatWorkerDate(new Date())
+    if (workerMainDate !== undefined) {
       const isWorkerMainSourceEmpty = areAllStatusesNone(row, homeWorkerMainShortcutFields)
-      if (workerMainComplete) {
+      const safeWorkerMainDate = String(workerMainDate ?? '').trim()
+      if (safeWorkerMainDate) {
         updatePayload.worker_main = '작업완료'
-        updatePayload.worker_main_time = isWorkerMainSourceEmpty ? '' : row?.worker_main !== '작업완료' ? todayText : row?.worker_main_time ?? ''
+        updatePayload.worker_main_time = formatWorkerDateTime(safeWorkerMainDate)
       } else {
         updatePayload.worker_main = isWorkerMainSourceEmpty ? '없음' : '작업중'
         updatePayload.worker_main_time = ''
       }
-      const tDone = typeof workerTComplete === 'boolean' ? workerTComplete : row?.worker_t === '작업완료'
-      const mainDone = workerMainComplete
-      const allDone = tDone && mainDone
+    }
+    if (workerTDate !== undefined || workerMainDate !== undefined) {
+      const nextWorkerTDone = (updatePayload.worker_t ?? row?.worker_t) === '작업완료'
+      const nextWorkerMainDone = (updatePayload.worker_main ?? row?.worker_main) === '작업완료'
+      const nextWorkerTTime =
+        updatePayload.worker_t_time !== undefined ? updatePayload.worker_t_time : row?.worker_t_time ?? ''
+      const nextWorkerMainTime =
+        updatePayload.worker_main_time !== undefined ? updatePayload.worker_main_time : row?.worker_main_time ?? ''
+      const allDone = nextWorkerTDone && nextWorkerMainDone
       updatePayload.complete = allDone
-      updatePayload.complete_date = allDone ? todayText : ''
+      updatePayload.complete_date = allDone
+        ? resolveCompleteDateFromWorkerTimes(nextWorkerTTime, nextWorkerMainTime)
+        : ''
     }
 
     if (Object.keys(updatePayload).length === 0) {
@@ -681,7 +580,6 @@ export function useProductionPlan(session) {
         ...nextRows[idx],
         ...(delayText !== undefined ? { delay_text: updatePayload.delay_text } : {}),
         ...(delayTime !== undefined ? { delay_time: updatePayload.delay_time } : {}),
-        ...(salesAmount !== undefined ? { sales_amount: updatePayload.sales_amount } : {}),
         ...(typeof virtualDrawingDistributed === 'boolean'
           ? { virtual_drawing_distributed: virtualDrawingDistributed }
           : {}),
@@ -689,7 +587,7 @@ export function useProductionPlan(session) {
         ...(typeof complete === 'boolean' ? { complete_date: updatePayload.complete_date } : {}),
         ...(typeof complete === 'boolean' ? { worker_t: updatePayload.worker_t } : {}),
         ...(typeof complete === 'boolean' ? { worker_t_time: updatePayload.worker_t_time } : {}),
-        ...(typeof workerTComplete === 'boolean' || typeof workerMainComplete === 'boolean'
+        ...(workerTDate !== undefined || workerMainDate !== undefined
           ? {
               ...(updatePayload.worker_t !== undefined ? { worker_t: updatePayload.worker_t } : {}),
               ...(updatePayload.worker_t_time !== undefined ? { worker_t_time: updatePayload.worker_t_time } : {}),
@@ -704,20 +602,7 @@ export function useProductionPlan(session) {
       planRows.value = nextRows
     }
 
-    if (targetRow && callType) {
-      const issueResult = await createIssueRequestFromMenu({
-        row: targetRow,
-        callType,
-        delayText:
-          delayText !== undefined
-            ? safeDelayText
-            : String(targetRow?.delay_text ?? '').trim(),
-        requester,
-      })
-      if (!issueResult.ok) return issueResult
-    }
-
-    return { ok: true }
+    return { ok: true, row: targetRow }
   }
 
   const fetchDrawingFiles = async ({ rowId }) => {
@@ -953,7 +838,6 @@ export function useProductionPlan(session) {
   watch(
     session,
     async () => {
-      await fetchAssigneeUsers()
       setupRealtime()
     },
     { immediate: true },
@@ -968,7 +852,6 @@ export function useProductionPlan(session) {
     selectedTuesday,
     selectedTuesdayIso,
     planRows,
-    assigneeUsers,
     planLoading,
     planError,
     searchText,

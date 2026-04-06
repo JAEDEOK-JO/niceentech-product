@@ -71,12 +71,11 @@ const longPressTimers = new Map()
 const longPressTriggered = new Set()
 const ignoreNextClick = new Set()
 const isCallDialogOpen = ref(false)
-const selectedCallType = ref('')
-const callOptions = ['도면 없음', '증지 없음', '확인요망']
 const activeCallRow = ref(null)
 const delayTextInput = ref('')
 const delayTimeInput = ref(0)
-const salesAmountInput = ref('')
+const workerTDateInput = ref('')
+const workerMainDateInput = ref('')
 const isDrawingDialogOpen = ref(false)
 const drawingFiles = ref([])
 const drawingLoading = ref(false)
@@ -149,6 +148,41 @@ const formatKoreanDateText = (value) => {
   const [, y, m, d] = matched
   return `${y}년 ${String(m).padStart(2, '0')}월 ${String(d).padStart(2, '0')}일`
 }
+const formatTodayInputDate = () => {
+  const now = new Date()
+  const year = String(now.getFullYear()).padStart(4, '0')
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+const parseWorkerDateToInputValue = (value) => {
+  const raw = String(value ?? '').trim()
+  if (!raw) return ''
+
+  const isoMatched = raw.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (isoMatched) {
+    const [, year, month, day] = isoMatched
+    return `${year}-${month}-${day}`
+  }
+
+  const dotMatched = raw.match(/^(\d{2})\.(\d{1,2})\.(\d{1,2})/)
+  if (dotMatched) {
+    const [, year, month, day] = dotMatched
+    return `20${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+  }
+
+  return ''
+}
+const syncWorkerDateInputs = (row) => {
+  workerTDateInput.value = parseWorkerDateToInputValue(row?.worker_t_time) || formatTodayInputDate()
+  workerMainDateInput.value = parseWorkerDateToInputValue(row?.worker_main_time) || formatTodayInputDate()
+}
+const hasWorkerCompletionDate = (lineType) =>
+  lineType === 'branch_head' ? Boolean(activeCallRow.value?.worker_t_time) : Boolean(activeCallRow.value?.worker_main_time)
+const getWorkerSavedDateText = (lineType) =>
+  lineType === 'branch_head'
+    ? formatKoreanDateText(activeCallRow.value?.worker_t_time)
+    : formatKoreanDateText(activeCallRow.value?.worker_main_time)
 
 const resolveStageKeyFromWorkMan = (currentWorkMan) => {
   if (isAdminRole(props.currentRole)) return 'all'
@@ -341,15 +375,10 @@ const handleStageClick = (row, stageKey, currentWorkMan) => {
 
 const openCallDialog = (row) => {
   activeCallRow.value = row
-  selectedCallType.value = ''
   delayTextInput.value = String(row?.delay_text ?? '')
   const delaySec = Math.max(0, Number(row?.delay_time) || 0)
   delayTimeInput.value = Math.round(delaySec / 60)
-  const rawSalesAmount = row?.sales_amount
-  salesAmountInput.value =
-    rawSalesAmount === null || rawSalesAmount === undefined || rawSalesAmount === ''
-      ? ''
-      : formatSalesAmountInput(rawSalesAmount)
+  syncWorkerDateInputs(row)
   isCallDialogOpen.value = true
 }
 
@@ -387,7 +416,8 @@ const closeCallDialog = () => {
   activeCallRow.value = null
   delayTextInput.value = ''
   delayTimeInput.value = 0
-  salesAmountInput.value = ''
+  workerTDateInput.value = formatTodayInputDate()
+  workerMainDateInput.value = formatTodayInputDate()
 }
 
 const closeDrawingDialog = () => {
@@ -404,14 +434,8 @@ const confirmCallDialog = () => {
     rowId: activeCallRow.value?.id,
     delayText: delayTextInput.value,
     delayTime: delayTimeInput.value,
-    salesAmount: salesAmountInput.value,
-    callType: selectedCallType.value,
     onResult: (result) => {
       if (!result?.ok) {
-        if (result?.reason === 'assignee_not_found') {
-          showSnack('행의 담당자 정보와 일치하는 프로필이 없습니다')
-          return
-        }
         if (result?.reason === 'virtual_column_missing') {
           showSnack('DB에 가상도면배포 컬럼이 없습니다')
           return
@@ -419,77 +443,64 @@ const confirmCallDialog = () => {
         showSnack('메뉴 저장 실패')
         return
       }
-      const selectedText = selectedCallType.value ? ` (${selectedCallType.value})` : ''
-      showSnack(`메뉴 저장 완료${selectedText}`)
+      showSnack('메뉴 저장 완료')
       closeCallDialog()
     },
   })
 }
 
-const formatSalesAmountText = (value) => {
-  if (value === null || value === undefined || value === '') return '-'
-  const num = Number(String(value).replaceAll(',', '').trim())
-  if (!Number.isFinite(num)) return String(value)
-  return `${Math.round(num).toLocaleString('ko-KR')}원`
-}
-const formatSalesAmountInput = (value) => {
-  const digits = String(value ?? '').replaceAll(',', '').replace(/\D/g, '')
-  if (!digits) return ''
-  return Number(digits).toLocaleString('ko-KR')
-}
-const handleSalesAmountInput = (event) => {
-  salesAmountInput.value = formatSalesAmountInput(event?.target?.value)
-}
-
-const toggleRowCompleteFromMenu = (nextComplete) => {
-  const rowId = activeCallRow.value?.id
-  if (!rowId) return
-  emit('save-row-menu', {
-    rowId,
-    complete: nextComplete,
-    onResult: (result) => {
-      if (!result?.ok) {
-        showSnack(nextComplete ? '작업완료 처리 실패' : '작업완료 취소 실패')
-        return
-      }
-      showSnack(nextComplete ? '작업완료 처리됨' : '작업완료 취소됨')
-      closeCallDialog()
-    },
-  })
-}
-
-const toggleWorkerTComplete = () => {
+const saveWorkerCompletionDate = (lineType) => {
   const row = activeCallRow.value
   if (!row?.id) return
-  const next = row.worker_t !== '작업완료'
+  const isBranch = lineType === 'branch_head'
+  const selectedDate = isBranch ? workerTDateInput.value : workerMainDateInput.value
+  if (!selectedDate) {
+    showSnack(`${isBranch ? '가지관' : '메인관'} 날짜를 선택해주세요`)
+    return
+  }
+
   emit('save-row-menu', {
     rowId: row.id,
-    workerTComplete: next,
+    ...(isBranch ? { workerTDate: selectedDate } : { workerMainDate: selectedDate }),
     onResult: (result) => {
       if (!result?.ok) {
-        showSnack(next ? '가지관 작업완료 실패' : '가지관 작업완료 취소 실패')
+        showSnack(`${isBranch ? '가지관' : '메인관'} 날짜 저장 실패`)
         return
       }
-      showSnack(next ? '가지관 작업완료' : '가지관 작업완료 취소')
-      closeCallDialog()
+      if (result.row) {
+        activeCallRow.value = result.row
+        syncWorkerDateInputs(result.row)
+      }
+      showSnack(`${isBranch ? '가지관' : '메인관'} 날짜 저장 완료`)
     },
   })
 }
+const completeWorkerToday = (lineType) => {
+  if (lineType === 'branch_head') {
+    workerTDateInput.value = formatTodayInputDate()
+  } else {
+    workerMainDateInput.value = formatTodayInputDate()
+  }
+  saveWorkerCompletionDate(lineType)
+}
 
-const toggleWorkerMainComplete = () => {
+const clearWorkerCompletionDate = (lineType) => {
   const row = activeCallRow.value
   if (!row?.id) return
-  const next = row.worker_main !== '작업완료'
+  const isBranch = lineType === 'branch_head'
   emit('save-row-menu', {
     rowId: row.id,
-    workerMainComplete: next,
+    ...(isBranch ? { workerTDate: '' } : { workerMainDate: '' }),
     onResult: (result) => {
       if (!result?.ok) {
-        showSnack(next ? '메인관 작업완료 실패' : '메인관 작업완료 취소 실패')
+        showSnack(`${isBranch ? '가지관' : '메인관'} 완료 취소 실패`)
         return
       }
-      showSnack(next ? '메인관 작업완료' : '메인관 작업완료 취소')
-      closeCallDialog()
+      if (result.row) {
+        activeCallRow.value = result.row
+        syncWorkerDateInputs(result.row)
+      }
+      showSnack(`${isBranch ? '가지관' : '메인관'} 완료 취소`)
     },
   })
 }
@@ -1008,26 +1019,9 @@ onBeforeUnmount(() => {
           <p class="mt-1 font-semibold text-slate-800">현장명: {{ activeCallRow?.place || '-' }}</p>
           <p class="mt-1 font-semibold text-slate-800">구역명: {{ activeCallRow?.area || '-' }}</p>
           <p class="mt-1 font-semibold text-slate-800">비고: {{ activeCallRow?.memo || '-' }}</p>
-          <p class="mt-1 font-semibold text-slate-800">현재 매출: {{ formatSalesAmountText(activeCallRow?.sales_amount) }}</p>
           <p class="mt-2 rounded-md bg-amber-100 px-2 py-1 text-sm font-extrabold text-amber-900">
             검수날짜: {{ formatKoreanDateText(activeCallRow?.test_date) }}
           </p>
-        </div>
-        <div class="space-y-2">
-          <label
-            v-for="option in callOptions"
-            :key="option"
-            class="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 px-3 py-2 hover:bg-slate-50"
-          >
-            <input
-              v-model="selectedCallType"
-              class="h-4 w-4"
-              type="radio"
-              name="call-type"
-              :value="option"
-            />
-            <span class="text-sm font-semibold text-slate-800">{{ option }}</span>
-          </label>
         </div>
         <div class="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
           <p class="mb-2 text-sm font-bold text-slate-800">지연시간 입력</p>
@@ -1048,47 +1042,67 @@ onBeforeUnmount(() => {
             />
           </div>
         </div>
-        <div class="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
-          <p class="mb-2 text-sm font-bold text-slate-800">매출 입력</p>
-          <input
-            :value="salesAmountInput"
-            class="w-full rounded-md border border-slate-300 px-2 py-2 text-sm text-right"
-            type="text"
-            inputmode="numeric"
-            placeholder="매출 금액 입력"
-            @input="handleSalesAmountInput"
-          />
-          <p class="mt-1 text-[11px] font-semibold text-slate-500">행별 매출 금액을 직접 입력합니다. 예: `1500000`</p>
-        </div>
-        <div v-if="canReorderRows" class="mt-2 grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            class="rounded-xl border px-4 py-2.5 text-sm font-extrabold transition"
-            :class="
-              activeCallRow?.worker_t === '작업완료'
-                ? 'border-rose-400 bg-rose-50 text-rose-700 hover:bg-rose-100'
-                : 'border-emerald-500 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-            "
-            @click="toggleWorkerTComplete"
-          >
-            {{ activeCallRow?.worker_t === '작업완료' ? '가지관 취소' : '가지관 완료' }}
-          </button>
-          <button
-            type="button"
-            class="rounded-xl border px-4 py-2.5 text-sm font-extrabold transition"
-            :class="
-              activeCallRow?.worker_main === '작업완료'
-                ? 'border-rose-400 bg-rose-50 text-rose-700 hover:bg-rose-100'
-                : 'border-indigo-500 bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
-            "
-            @click="toggleWorkerMainComplete"
-          >
-            {{ activeCallRow?.worker_main === '작업완료' ? '메인관 취소' : '메인관 완료' }}
-          </button>
+        <div v-if="canReorderRows" class="mt-4 space-y-3">
+          <div class="rounded-lg border border-emerald-200 bg-emerald-50/40 p-3">
+            <p class="text-sm font-bold text-emerald-800">가지관 완료일</p>
+            <div v-if="hasWorkerCompletionDate('branch_head')" class="mt-2 space-y-2">
+              <p class="text-xs font-semibold text-emerald-700">
+                저장된 날짜: {{ getWorkerSavedDateText('branch_head') }}
+              </p>
+              <div class="flex items-center gap-2">
+                <input
+                  v-model="workerTDateInput"
+                  type="date"
+                  class="h-10 flex-1 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-700"
+                />
+                <Button class="h-10 px-3 text-xs" @click="saveWorkerCompletionDate('branch_head')">수정</Button>
+                <Button
+                  class="h-10 px-3 text-xs"
+                  variant="outline"
+                  @click="clearWorkerCompletionDate('branch_head')"
+                >
+                  취소
+                </Button>
+              </div>
+            </div>
+            <div v-else class="mt-2">
+              <Button class="h-10 w-full border-emerald-500 bg-emerald-600 px-3 text-sm text-white hover:bg-emerald-700" @click="completeWorkerToday('branch_head')">
+                가지관 완료
+              </Button>
+            </div>
+          </div>
+          <div class="rounded-lg border border-cyan-200 bg-cyan-50/40 p-3">
+            <p class="text-sm font-bold text-cyan-800">메인관 완료일</p>
+            <div v-if="hasWorkerCompletionDate('main_hole')" class="mt-2 space-y-2">
+              <p class="text-xs font-semibold text-cyan-700">
+                저장된 날짜: {{ getWorkerSavedDateText('main_hole') }}
+              </p>
+              <div class="flex items-center gap-2">
+                <input
+                  v-model="workerMainDateInput"
+                  type="date"
+                  class="h-10 flex-1 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-700"
+                />
+                <Button class="h-10 px-3 text-xs" @click="saveWorkerCompletionDate('main_hole')">수정</Button>
+                <Button
+                  class="h-10 px-3 text-xs"
+                  variant="outline"
+                  @click="clearWorkerCompletionDate('main_hole')"
+                >
+                  취소
+                </Button>
+              </div>
+            </div>
+            <div v-else class="mt-2">
+              <Button class="h-10 w-full border-cyan-500 bg-cyan-600 px-3 text-sm text-white hover:bg-cyan-700" @click="completeWorkerToday('main_hole')">
+                메인관 완료
+              </Button>
+            </div>
+          </div>
         </div>
         <button
           type="button"
-          class="mt-4 w-full rounded-xl border border-blue-600 bg-blue-600 px-4 py-3 text-base font-extrabold text-white shadow-md transition hover:bg-blue-700"
+          class="mt-4 w-full rounded-xl border border-slate-300 bg-slate-100 px-4 py-3 text-base font-extrabold text-slate-700 shadow-sm transition hover:bg-slate-200"
           @click="openDrawingFromMenu"
         >
           🖼️ 도면보기
