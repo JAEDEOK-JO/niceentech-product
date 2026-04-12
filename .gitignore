@@ -34,3 +34,6 @@ builder-debug.yml
 *.sw?
 
 업데이트 방법.md
+
+# Claude Code worktrees
+.claude/worktrees/
