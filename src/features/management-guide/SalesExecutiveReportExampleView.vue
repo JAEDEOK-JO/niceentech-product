@@ -51,6 +51,7 @@ const asForm = ref({
   place: '',
   reportedAt: '',
   issue: '',
+  cost: '',
 })
 
 const now = new Date()
@@ -125,7 +126,7 @@ const revokeAsPreviewUrls = () => {
 
 const resetAsForm = () => {
   editingAsId.value = null
-  asForm.value = { companyListId: null, company: '', place: '', reportedAt: '', issue: '' }
+  asForm.value = { companyListId: null, company: '', place: '', reportedAt: '', issue: '', cost: '' }
   asCompanySearchText.value = ''
   asCompanySearchResults.value = []
   asImageFiles.value = []
@@ -147,7 +148,7 @@ const fetchReportData = async () => {
       .lte('target_month', reportMonthValue)
       .order('target_month', { ascending: true })
       .order('week_index', { ascending: true }),
-    supabase.from(SALES_AS_TABLE).select('id,target_month,reported_at,company_list_id,company,place,issue,image_urls').eq('target_month', reportMonthValue).order('reported_at', { ascending: false }),
+    supabase.from(SALES_AS_TABLE).select('id,target_month,reported_at,company_list_id,company,place,issue,cost,image_urls').eq('target_month', reportMonthValue).order('reported_at', { ascending: false }),
   ])
 
   if (companyResult.error || weeklyResult.error || yearlyResult.error || asResult.error) {
@@ -291,6 +292,7 @@ const saveAsEntry = async () => {
     company: normalizeText(asForm.value.company),
     place: normalizeText(asForm.value.place),
     issue: normalizeText(asForm.value.issue),
+    cost: toNumber(String(asForm.value.cost ?? '').replace(/[^\d]/g, '')),
   }
 
   if (!payload.company_list_id || !payload.company || !payload.place) {
@@ -320,7 +322,7 @@ const saveAsEntry = async () => {
           .update({ ...payload, image_urls: imageUrls })
           .eq('id', editingAsId.value)
       : supabase.from(SALES_AS_TABLE).insert({ ...payload, target_month: reportMonthValue, created_by: createdBy, image_urls: imageUrls })
-    const { data, error } = await query.select('id,target_month,reported_at,company_list_id,company,place,issue,image_urls').single()
+    const { data, error } = await query.select('id,target_month,reported_at,company_list_id,company,place,issue,cost,image_urls').single()
     savingAsEntry.value = false
 
     if (error) {
@@ -367,6 +369,14 @@ const expectedRows = computed(() => salesBaselineRows.value.filter((row) => !Boo
 const weeklySalesTotal = computed(() => weeklySalesRows.value.reduce((sum, row) => sum + toNumber(row.sales_amount), 0))
 const salesProgress = computed(() => (!MONTHLY_TARGET ? 0 : Math.round((weeklySalesTotal.value / MONTHLY_TARGET) * 100)))
 const salesProgressWidth = computed(() => Math.min(100, Math.max(0, salesProgress.value)))
+const currentSalesWeekRow = computed(() =>
+  [...weeklySalesRows.value]
+    .sort((a, b) => toNumber(b?.week_index) - toNumber(a?.week_index))
+    .find((row) => toNumber(row?.sales_amount) > 0) ?? null,
+)
+const currentSalesWeekIndex = computed(() => toNumber(currentSalesWeekRow.value?.week_index) || 1)
+const currentSalesWeekLabel = computed(() => `${reportMonthLabel} ${currentSalesWeekIndex.value}주차`)
+const currentSalesWeekAmount = computed(() => toNumber(currentSalesWeekRow.value?.sales_amount))
 const confirmedHeadTotal = computed(() => confirmedRows.value.reduce((sum, row) => sum + toNumber(row?.total_head_count), 0))
 const expectedHeadTotal = computed(() => expectedRows.value.reduce((sum, row) => sum + toNumber(row?.total_head_count), 0))
 const yearlyMonthlySales = computed(() =>
@@ -423,11 +433,12 @@ const targetSummary = computed(() => ({
   confirmedHead: formatHead(confirmedHeadTotal.value),
   expectedHead: formatHead(expectedHeadTotal.value),
 }))
+const asTotalCost = computed(() => asRows.value.reduce((sum, row) => sum + toNumber(row?.cost), 0))
 const summaryCards = computed(() => [
-  { label: '현재 매출', value: formatCurrency(weeklySalesTotal.value), note: `${reportMonthLabel} 주차 입력 합계`, tone: 'bg-slate-50 border-slate-200 text-slate-800', clickable: false },
   { label: '신규 수주', value: formatHead(confirmedHeadTotal.value), note: `${reportMonthLabel} 확정 헤드수`, tone: 'bg-emerald-50 border-emerald-200 text-emerald-800', clickable: false },
   { label: '신규 수주 예정', value: formatHead(expectedHeadTotal.value), note: '2026년 1월 이후 예정 헤드수', tone: 'bg-indigo-50 border-indigo-200 text-indigo-800', clickable: false },
   { label: 'AS 발생 건수', value: `${asRows.value.length}건`, note: `${reportMonthLabel} 접수 누계`, tone: 'bg-rose-50 border-rose-200 text-rose-800', clickable: true },
+  { label: 'AS 발생 비용', value: formatCurrency(asTotalCost.value), note: `${reportMonthLabel} 접수 비용 합계`, tone: 'bg-amber-50 border-amber-200 text-amber-800', clickable: false },
 ])
 const hasSalesDialogData = computed(() => weeklySalesInputs.value.some((row) => toNumber(row.salesAmount) > 0))
 
@@ -482,6 +493,7 @@ const openAsDialog = (row = null) => {
       place: row.place ?? '',
       reportedAt: row.reported_at ?? '',
       issue: row.issue ?? '',
+      cost: row.cost != null ? String(toNumber(row.cost)) : '',
     }
     asCompanySearchText.value = `${row.company ?? ''} ${row.place ?? ''}`.trim()
     asExistingImageUrls.value = Array.isArray(row.image_urls) ? [...row.image_urls] : []
@@ -560,10 +572,6 @@ onBeforeUnmount(revokeAsPreviewUrls)
                     <span class="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-center text-sky-700">달성률 {{ targetSummary.achievementRate }}</span>
                     <span class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-center text-slate-700">비아파트 비중 {{ targetSummary.nonApartmentRatio }}</span>
                   </div>
-                  <div class="sales-print-grid-2 grid gap-2 sm:grid-cols-2">
-                    <span class="rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-center text-indigo-700">확정 수주 {{ targetSummary.confirmedHead }}</span>
-                    <span class="rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-center text-violet-700">수주 예정 {{ targetSummary.expectedHead }}</span>
-                  </div>
                   <div v-if="buildingTypeSummaryItems.length" class="flex flex-wrap gap-2">
                     <span
                       v-for="item in buildingTypeSummaryItems"
@@ -577,12 +585,12 @@ onBeforeUnmount(revokeAsPreviewUrls)
                 </div>
               </div>
               <div class="rounded-3xl border border-white bg-white px-5 py-4 text-center shadow-sm md:w-[380px] lg:w-[420px] md:self-stretch">
-                <p class="text-[12px] font-bold text-emerald-700">현재 매출</p>
-                <p class="mt-2 text-3xl font-extrabold text-slate-900">{{ summaryCards[0].value }}</p>
+                <p class="text-[12px] font-bold text-emerald-700">매출 진행률 {{ currentSalesWeekLabel }}</p>
+                <p class="mt-2 text-3xl font-extrabold text-slate-900">{{ formatCurrency(currentSalesWeekAmount) }}</p>
                 <div class="mt-4 w-full text-left">
-                  <div class="mb-2 flex items-center justify-between text-[12px] font-semibold text-slate-700"><span>매출 진행률</span><span>{{ targetSummary.achievementRate }}</span></div>
+                  <div class="mb-2 flex items-center justify-between text-[12px] font-semibold text-slate-700"><span>현재 매출</span><span>{{ formatCurrency(weeklySalesTotal) }}</span></div>
                   <div class="h-4 rounded-full bg-slate-200"><div class="h-4 rounded-full bg-emerald-500" :style="{ width: `${salesProgressWidth}%` }" /></div>
-                  <div class="mt-2 flex items-center justify-between text-[11px] text-slate-500"><span>현재 {{ summaryCards[0].value }}</span><span>목표 {{ targetSummary.monthlyTarget }}</span></div>
+                  <div class="mt-2 flex items-center justify-between text-[11px] text-slate-500"><span>현재 {{ formatCurrency(weeklySalesTotal) }}</span><span>목표 {{ targetSummary.monthlyTarget }}</span></div>
                 </div>
               </div>
             </div>
@@ -788,6 +796,7 @@ onBeforeUnmount(revokeAsPreviewUrls)
           <div><p class="mb-2 text-sm font-bold text-slate-700">회사명</p><Input :model-value="asForm.company" readonly placeholder="검색 후 선택" /></div>
           <div><p class="mb-2 text-sm font-bold text-slate-700">현장명</p><Input :model-value="asForm.place" readonly placeholder="검색 후 선택" /></div>
           <div><p class="mb-2 text-sm font-bold text-slate-700">접수일</p><input v-model="asForm.reportedAt" type="date" class="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2" /></div>
+          <div><p class="mb-2 text-sm font-bold text-slate-700">AS 비용</p><input :value="Number(asForm.cost || 0).toLocaleString('ko-KR')" type="text" inputmode="numeric" class="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-right text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2" placeholder="0" @input="asForm.cost = sanitizeMoneyInput($event.target.value)" /></div>
           <div class="md:col-span-2"><p class="mb-2 text-sm font-bold text-slate-700">AS 내용</p><textarea v-model="asForm.issue" class="min-h-[96px] w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2" rows="3" placeholder="AS 내용을 입력해주세요" /></div>
           <div class="md:col-span-2">
             <p class="mb-2 text-sm font-bold text-slate-700">이미지 첨부</p>

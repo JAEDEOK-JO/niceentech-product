@@ -14,11 +14,13 @@ const props = defineProps({
   showExpectedOnly: { type: Boolean, default: false },
   totalCount: { type: Number, default: 0 },
   savingIds: { type: Array, default: () => [] },
+  deletingIds: { type: Array, default: () => [] },
 })
 
-const emit = defineEmits(['go-back', 'refresh', 'update-search', 'toggle-expected-only', 'update-row', 'save-row'])
+const emit = defineEmits(['go-back', 'refresh', 'update-search', 'toggle-expected-only', 'update-row', 'save-row', 'delete-row'])
 
 const isSaving = (rowId) => props.savingIds.includes(rowId)
+const isDeleting = (rowId) => props.deletingIds.includes(rowId)
 
 const INITIAL_CONSONANTS = ['ㄱ','ㄲ','ㄴ','ㄷ','ㄸ','ㄹ','ㅁ','ㅂ','ㅃ','ㅅ','ㅆ','ㅇ','ㅈ','ㅉ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ']
 const CONSONANT_GROUP_MAP = { ㄲ: 'ㄱ', ㄸ: 'ㄷ', ㅃ: 'ㅂ', ㅆ: 'ㅅ', ㅉ: 'ㅈ' }
@@ -195,9 +197,19 @@ const groupedByConsonant = computed(() => {
                   <p class="text-lg font-extrabold text-slate-900">{{ selectedRow.company }} {{ selectedRow.place }}</p>
                   <p class="mt-1 text-xs text-slate-500">ID {{ selectedRow.id }}</p>
                 </div>
-                <Button class="h-9 px-4 text-sm" :disabled="isSaving(selectedRow.id)" @click="emit('save-row', selectedRow.id)">
-                  {{ isSaving(selectedRow.id) ? '저장 중...' : '저장' }}
-                </Button>
+                <div class="flex items-center gap-2">
+                  <Button
+                    class="h-9 px-4 text-sm border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100"
+                    variant="outline"
+                    :disabled="isDeleting(selectedRow.id)"
+                    @click="emit('delete-row', selectedRow.id)"
+                  >
+                    {{ isDeleting(selectedRow.id) ? '삭제 중...' : '삭제' }}
+                  </Button>
+                  <Button class="h-9 px-4 text-sm" :disabled="isSaving(selectedRow.id)" @click="emit('save-row', selectedRow.id)">
+                    {{ isSaving(selectedRow.id) ? '저장 중...' : '저장' }}
+                  </Button>
+                </div>
               </div>
 
               <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">

@@ -10,6 +10,7 @@ const stageToField = {
   marking_laser_1: 'marking_laser_1_status',
   marking_laser_2: 'marking_laser_2_status',
   nasa: 'nasa_status',
+  welding: 'welding_status',
   beveling: 'beveling_status',
   main_work: 'main_status',
 }
@@ -21,6 +22,7 @@ const stageToDateFields = {
   beveling: { started: 'beveling_started_on', completed: 'beveling_completed_on' },
   main_work: { started: 'main_started_on', completed: 'main_completed_on' },
   nasa: { started: 'nasa_started_on', completed: 'nasa_completed_on' },
+  welding: { started: 'welding_started_on', completed: 'welding_completed_on' },
 }
 const workerTStageFields = [
   'marking_weld_a_status',
@@ -43,6 +45,7 @@ const workManRoleToStages = {
   레이저1: ['marking_laser_1'],
   레이저2: ['marking_laser_2'],
   무용접: ['nasa'],
+  용접: ['welding'],
   '티&면치': ['beveling'],
   메인: ['main_work'],
   관리자: ['*'],
@@ -163,6 +166,12 @@ const resolveWorkerMainStatus = (row) => {
   const statuses = workerMainStageFields.map((field) => normalizeProgressState(row?.[field]))
   if (statuses.some((status) => status === '작업중')) return '작업중'
   if (statuses.some((status) => status === '작업완료')) return '작업중'
+  return '없음'
+}
+const resolveWorkerWeldingStatus = (row) => {
+  const status = normalizeProgressState(row?.welding_status)
+  if (status === '작업완료') return '작업완료'
+  if (status === '작업중') return '작업중'
   return '없음'
 }
 const areAllStatusesNone = (row, fields) =>
@@ -293,7 +302,7 @@ export function useProductionPlan(session) {
     planError.value = ''
 
     const baseColumns =
-      'id,no,company_info,uid,initial,company,place,area,memo,full_text,work_type,hole,head,groove,weight,name,test_date,drawing,is_drawing,drawing_date,delivery_due_date,delay_time,delay_text,complete,complete_date,shipment,not_test,hold,outsourcing,paper,calculation,ahn,stamp,worker_t,worker_t_time,worker_t_time_final,worker_main,worker_main_time,worker_main_time_final,worker_nasa,worker_nasa_time,worker_nasa_time_final,worker_welding,worker_welding_time,worker_welding_time_final,marking_weld_a_status,marking_weld_a_started_on,marking_weld_a_completed_on,marking_weld_b_status,marking_weld_b_started_on,marking_weld_b_completed_on,marking_laser_1_status,marking_laser_1_started_on,marking_laser_1_completed_on,marking_laser_2_status,marking_laser_2_started_on,marking_laser_2_completed_on,cutting_status,beveling_status,beveling_started_on,beveling_completed_on,main_status,main_started_on,main_completed_on,nasa_status,nasa_started_on,nasa_completed_on'
+      'id,no,company_info,uid,initial,company,place,area,memo,full_text,work_type,hole,head,groove,weight,name,test_date,drawing,is_drawing,drawing_date,delivery_due_date,delay_time,delay_text,complete,complete_date,shipment,not_test,hold,outsourcing,paper,calculation,ahn,stamp,worker_t,worker_t_time,worker_t_time_final,worker_main,worker_main_time,worker_main_time_final,worker_nasa,worker_nasa_time,worker_nasa_time_final,worker_welding,worker_welding_time,worker_welding_time_final,marking_weld_a_status,marking_weld_a_started_on,marking_weld_a_completed_on,marking_weld_b_status,marking_weld_b_started_on,marking_weld_b_completed_on,marking_laser_1_status,marking_laser_1_started_on,marking_laser_1_completed_on,marking_laser_2_status,marking_laser_2_started_on,marking_laser_2_completed_on,cutting_status,beveling_status,beveling_started_on,beveling_completed_on,main_status,main_started_on,main_completed_on,nasa_status,nasa_started_on,nasa_completed_on,welding_status,welding_started_on,welding_completed_on'
     const withVirtualColumns = `${baseColumns},virtual_drawing_distributed`
     const runQuery = (columns) => {
       let query = supabase.from(PRODUCT_LIST_TABLE).select(columns)
@@ -376,7 +385,8 @@ export function useProductionPlan(session) {
     const nextRow = { ...row, [field]: next }
     const worker_t = resolveWorkerTStatus(nextRow)
     const worker_main = resolveWorkerMainStatus(nextRow)
-    const updatePayload = { [field]: next, worker_t, worker_main }
+    const worker_welding = resolveWorkerWeldingStatus(nextRow)
+    const updatePayload = { [field]: next, worker_t, worker_main, worker_welding }
     const todayText = formatWorkerDate(new Date())
     const todayDate = formatIsoDate(new Date())
     if (dateFields) {
@@ -413,6 +423,12 @@ export function useProductionPlan(session) {
       updatePayload.worker_welding_time = todayText
     }
     if ((field === 'marking_weld_a_status' || field === 'marking_weld_b_status') && next !== '작업완료' && row.worker_welding === '작업완료') {
+      updatePayload.worker_welding_time = ''
+    }
+    if (field === 'welding_status' && next === '작업완료' && row.worker_welding !== '작업완료') {
+      updatePayload.worker_welding_time = todayText
+    }
+    if (field === 'welding_status' && next !== '작업완료' && row.worker_welding === '작업완료') {
       updatePayload.worker_welding_time = ''
     }
 

@@ -293,6 +293,7 @@ watch(
     :plan-loading="planLoading"
     :plan-error="planError"
     :grouped-rows="groupedRows"
+    :current-work-man="profile?.work_man || ''"
     @move-week="moveWeek"
     @reset-week="resetWeek"
     @go-register="goRegister"

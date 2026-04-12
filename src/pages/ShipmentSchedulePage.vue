@@ -1,0 +1,632 @@
+<script setup>
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import Button from '@/components/ui/button/Button.vue'
+import { useAuth } from '@/composables/useAuth'
+import { supabase } from '@/lib/supabase'
+
+const SHIPMENT_SCHEDULE_TABLE = 'shipment_schedule'
+const COMPANY_LIST_TABLE = 'company_list'
+const SCHEDULE_TYPE_OPTIONS = [
+  { value: 'day', label: '당착' },
+  { value: 'night', label: '야상' },
+]
+const FLOAT_STATUS_OPTIONS = [
+  { value: 'O', label: 'O' },
+  { value: 'X', label: 'X' },
+]
+
+const normalizeText = (value) => String(value ?? '').trim()
+const formatIsoDate = (date = new Date()) => {
+  const year = String(date.getFullYear()).padStart(4, '0')
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+const { session } = useAuth()
+
+const rows = ref([])
+const companyOptions = ref([])
+const managerNameMap = ref({})
+const loading = ref(false)
+const loadingCompanyOptions = ref(false)
+const saving = ref(false)
+const errorMessage = ref('')
+const saveError = ref('')
+const isDialogOpen = ref(false)
+const listSearchText = ref('')
+const currentViewDate = ref(formatIsoDate())
+const companyPlaceSearchText = ref('')
+const companyPlaceResults = ref([])
+
+const form = reactive({
+  id: null,
+  company: '',
+  place: '',
+  area: '',
+  shipmentDate: '',
+  scheduleType: 'day',
+  arrivalTime: '',
+  hasPlot: false,
+  floatStatus: 'O',
+})
+
+const addDays = (value, days) => {
+  const base = value ? new Date(value) : new Date()
+  if (Number.isNaN(base.getTime())) return formatIsoDate()
+  base.setDate(base.getDate() + days)
+  return formatIsoDate(base)
+}
+const formatKoreanDate = (value) => {
+  const raw = normalizeText(value)
+  const matched = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!matched) return raw || '-'
+  const [, year, month, day] = matched
+  return `${year}년 ${month}월 ${day}일`
+}
+const compareIsoDate = (left, right) => normalizeText(left).localeCompare(normalizeText(right))
+const formatShipmentTitle = (value) => `${formatKoreanDate(value)} 출하일정`
+const getScheduleTypeLabel = (value) =>
+  SCHEDULE_TYPE_OPTIONS.find((item) => item.value === value)?.label ?? (normalizeText(value) || '-')
+const getFloatStatusLabel = (value) =>
+  FLOAT_STATUS_OPTIONS.find((item) => item.value === value)?.label ?? (normalizeText(value) || '-')
+const normalizeRow = (row) => ({
+  id: row.id,
+  company: normalizeText(row.company),
+  place: normalizeText(row.place),
+  area: normalizeText(row.area),
+  shipmentDate: normalizeText(row.shipment_date),
+  scheduleType: normalizeText(row.schedule_type),
+  arrivalTime: normalizeText(row.arrival_time),
+  floatStatus: normalizeText(row.float_status),
+  managerId: row.manager_id ? String(row.manager_id) : '',
+  createdAt: normalizeText(row.created_at),
+})
+
+const filteredRows = computed(() => {
+  const keyword = normalizeText(listSearchText.value).toLowerCase()
+  const baseRows = rows.value
+    .filter((row) => compareIsoDate(row.shipmentDate, currentViewDate.value) === 0)
+    .map((row) => ({
+      ...row,
+      managerName: managerNameMap.value[row.managerId] ?? '',
+    }))
+    .sort((left, right) => {
+      const byCompany = left.company.localeCompare(right.company, 'ko')
+      if (byCompany !== 0) return byCompany
+      const byPlace = left.place.localeCompare(right.place, 'ko')
+      if (byPlace !== 0) return byPlace
+      return left.area.localeCompare(right.area, 'ko')
+    })
+  if (!keyword) return baseRows
+  return baseRows.filter((row) => {
+    const target = `${row.managerName} ${row.company} ${row.place} ${row.area}`.toLowerCase()
+    return target.includes(keyword)
+  })
+})
+const dialogTitle = computed(() => (form.id ? '출하일정 수정' : '출하일정 등록'))
+
+const resetForm = () => {
+  form.id = null
+  form.company = ''
+  form.place = ''
+  form.area = ''
+  form.shipmentDate = currentViewDate.value || formatIsoDate()
+  form.scheduleType = 'day'
+  form.arrivalTime = ''
+  form.hasPlot = false
+  form.floatStatus = 'O'
+  companyPlaceSearchText.value = ''
+  companyPlaceResults.value = []
+}
+
+const openCreateDialog = () => {
+  saveError.value = ''
+  resetForm()
+  isDialogOpen.value = true
+}
+
+const openEditDialog = (row) => {
+  saveError.value = ''
+  form.id = row.id
+  form.company = row.company
+  form.place = row.place
+  form.area = row.area
+  form.shipmentDate = row.shipmentDate
+  form.scheduleType = row.scheduleType || 'day'
+  form.arrivalTime = row.arrivalTime || ''
+  form.hasPlot = Boolean(row.floatStatus)
+  form.floatStatus = row.floatStatus || 'O'
+  companyPlaceSearchText.value = [row.company, row.place].filter(Boolean).join(' / ')
+  companyPlaceResults.value = []
+  isDialogOpen.value = true
+}
+
+const closeDialog = () => {
+  isDialogOpen.value = false
+  saveError.value = ''
+  resetForm()
+}
+
+const printScheduleTable = async () => {
+  if (typeof window === 'undefined') return
+  await nextTick()
+  window.print()
+}
+
+const moveViewDate = (days) => {
+  currentViewDate.value = addDays(currentViewDate.value, days)
+}
+
+const resetViewDate = () => {
+  currentViewDate.value = formatIsoDate()
+}
+
+const isCompanyPlaceLocked = computed(() => Boolean(normalizeText(form.company)) && Boolean(normalizeText(form.place)))
+const companyPlaceResultItems = computed(() => companyPlaceResults.value.slice(0, 5))
+
+const runCompanyPlaceSearch = () => {
+  const keyword = normalizeText(companyPlaceSearchText.value).toLowerCase()
+  if (!keyword || isCompanyPlaceLocked.value) {
+    companyPlaceResults.value = []
+    return
+  }
+
+  const matched = companyOptions.value.filter((item) => {
+    const target = `${item.company} ${item.place}`.toLowerCase()
+    return target.includes(keyword)
+  })
+
+  companyPlaceResults.value = matched.slice(0, 5)
+}
+
+const selectCompanyPlace = (item) => {
+  form.company = item.company
+  form.place = item.place
+  companyPlaceSearchText.value = `${item.company} / ${item.place}`
+  companyPlaceResults.value = []
+}
+
+const clearCompanyPlaceSelection = () => {
+  form.company = ''
+  form.place = ''
+  companyPlaceSearchText.value = ''
+  companyPlaceResults.value = []
+}
+
+const fetchShipmentSchedules = async () => {
+  if (!session.value) {
+    rows.value = []
+    return
+  }
+
+  loading.value = true
+  errorMessage.value = ''
+  const { data, error } = await supabase
+    .from(SHIPMENT_SCHEDULE_TABLE)
+    .select('id,company,place,manager_id,area,shipment_date,schedule_type,arrival_time,float_status,created_at')
+    .order('shipment_date', { ascending: true })
+    .order('created_at', { ascending: false })
+
+  loading.value = false
+  if (error) {
+    rows.value = []
+    errorMessage.value = `출하일정 조회 실패: ${error.message}`
+    return
+  }
+
+  rows.value = (data ?? []).map(normalizeRow)
+}
+
+const fetchCompanyOptions = async () => {
+  if (!session.value) {
+    companyOptions.value = []
+    return
+  }
+
+  loadingCompanyOptions.value = true
+  const { data, error } = await supabase
+    .from(COMPANY_LIST_TABLE)
+    .select('company,place,manager_id')
+    .order('company', { ascending: true })
+    .order('place', { ascending: true })
+  loadingCompanyOptions.value = false
+
+  if (error) {
+    companyOptions.value = []
+    errorMessage.value = `회사/현장 조회 실패: ${error.message}`
+    return
+  }
+
+  companyOptions.value = (data ?? []).map((item) => ({
+    company: normalizeText(item.company),
+    place: normalizeText(item.place),
+    managerId: item.manager_id ? String(item.manager_id) : '',
+  }))
+
+  const managerIds = [...new Set(companyOptions.value.map((item) => item.managerId).filter(Boolean))]
+  if (managerIds.length === 0) {
+    managerNameMap.value = {}
+    return
+  }
+
+  const { data: managerRows, error: managerError } = await supabase
+    .from('profiles')
+    .select('id,name')
+    .in('id', managerIds)
+
+  if (managerError) {
+    managerNameMap.value = {}
+    return
+  }
+
+  managerNameMap.value = Object.fromEntries(
+    (managerRows ?? []).map((item) => [String(item.id), normalizeText(item.name) || '-']),
+  )
+}
+
+const resolveManagerId = async ({ company, place }) => {
+  const { data, error } = await supabase
+    .from(COMPANY_LIST_TABLE)
+    .select('manager_id')
+    .eq('company', company)
+    .eq('place', place)
+    .limit(1)
+    .maybeSingle()
+
+  if (error) {
+    return { ok: false, message: error.message, managerId: null }
+  }
+
+  return { ok: true, managerId: data?.manager_id ?? null }
+}
+
+const submit = async () => {
+  saveError.value = ''
+
+  const company = normalizeText(form.company)
+  const place = normalizeText(form.place)
+  const area = normalizeText(form.area)
+  const shipmentDate = normalizeText(form.shipmentDate)
+  const scheduleType = normalizeText(form.scheduleType)
+  const arrivalTime = normalizeText(form.arrivalTime)
+  const floatStatus = form.hasPlot ? normalizeText(form.floatStatus || 'O') : ''
+
+  if (!company) {
+    saveError.value = '회사명을 입력해주세요.'
+    return
+  }
+  if (!place) {
+    saveError.value = '현장명을 입력해주세요.'
+    return
+  }
+  if (!shipmentDate) {
+    saveError.value = '출하일을 선택해주세요.'
+    return
+  }
+  if (!['day', 'night'].includes(scheduleType)) {
+    saveError.value = '일정 구분을 선택해주세요.'
+    return
+  }
+  if (form.hasPlot && !['O', 'X'].includes(floatStatus)) {
+    saveError.value = '플롯 상태를 선택해주세요.'
+    return
+  }
+
+  saving.value = true
+  const managerResult = await resolveManagerId({ company, place })
+  if (!managerResult.ok) {
+    saving.value = false
+    saveError.value = `담당자 조회 실패: ${managerResult.message}`
+    return
+  }
+
+  const payload = {
+    company,
+    place,
+    manager_id: managerResult.managerId,
+    area: area || null,
+    shipment_date: shipmentDate,
+    schedule_type: scheduleType,
+    arrival_time: arrivalTime || null,
+    float_status: form.hasPlot ? floatStatus : null,
+  }
+
+  const query = form.id
+    ? supabase.from(SHIPMENT_SCHEDULE_TABLE).update(payload).eq('id', form.id)
+    : supabase.from(SHIPMENT_SCHEDULE_TABLE).insert(payload)
+
+  const { error } = await query
+  saving.value = false
+
+  if (error) {
+    saveError.value = `출하일정 저장 실패: ${error.message}`
+    return
+  }
+
+  await fetchShipmentSchedules()
+  closeDialog()
+}
+
+watch(
+  () => session.value,
+  async (nextSession) => {
+    if (!nextSession) {
+      rows.value = []
+      companyOptions.value = []
+      return
+    }
+    await Promise.all([fetchShipmentSchedules(), fetchCompanyOptions()])
+  },
+  { immediate: true },
+)
+
+onMounted(async () => {
+  if (!session.value) return
+  await Promise.all([fetchShipmentSchedules(), fetchCompanyOptions()])
+})
+</script>
+
+<template>
+  <main class="min-h-[calc(100vh-72px)] bg-slate-50 px-4 py-6 md:px-6">
+    <div class="mx-auto flex w-full max-w-7xl flex-col gap-5">
+      <section class="shipment-print-hide rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div>
+            <p class="text-sm font-bold text-slate-500">출하일정</p>
+            <h1 class="mt-1 text-2xl font-extrabold text-slate-900">출하일정</h1>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <Button variant="outline" @click="fetchShipmentSchedules">새로고침</Button>
+            <Button @click="openCreateDialog">출하일정 등록</Button>
+            <Button variant="outline" @click="printScheduleTable">인쇄</Button>
+          </div>
+        </div>
+      </section>
+
+      <section class="shipment-print-shell rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div class="shipment-print-hide flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div class="flex flex-wrap items-center gap-2">
+            <Button
+              class="h-10 px-4 text-sm"
+              variant="outline"
+              @click="moveViewDate(-1)"
+            >
+              지난일
+            </Button>
+            <Button
+              class="h-10 px-4 text-sm"
+              :variant="compareIsoDate(currentViewDate, formatIsoDate()) === 0 ? 'default' : 'outline'"
+              @click="resetViewDate"
+            >
+              오늘
+            </Button>
+            <Button
+              class="h-10 px-4 text-sm"
+              variant="outline"
+              @click="moveViewDate(1)"
+            >
+              다음일
+            </Button>
+            <input
+              v-model="listSearchText"
+              type="text"
+              class="h-10 w-full min-w-[240px] rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-700 md:w-[280px]"
+              placeholder="담당자, 회사명, 현장명, 구역 검색"
+            />
+            <span class="rounded-full bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">{{ filteredRows.length }}건</span>
+          </div>
+          <p v-if="loadingCompanyOptions" class="text-xs font-semibold text-slate-500">회사/현장 목록을 불러오는 중...</p>
+        </div>
+
+        <div v-if="loading" class="py-10 text-center text-sm text-slate-500">출하일정을 불러오는 중입니다.</div>
+        <div v-else-if="errorMessage" class="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">
+          {{ errorMessage }}
+        </div>
+        <div v-else class="shipment-print-table-wrap mt-4 overflow-x-auto rounded-2xl border border-slate-200">
+          <div class="shipment-print-title-bar border-b border-slate-200 bg-slate-50 px-4 py-3 text-center text-lg font-extrabold text-slate-900">
+            {{ formatShipmentTitle(currentViewDate) }}
+          </div>
+          <table class="shipment-print-table w-full border-collapse text-sm">
+            <colgroup>
+              
+              <col style="width: 5%" />
+              <col style="width: 10%" />
+              <col style="width: 17%" />
+              <col style="width: 35%" />
+              <col style="width: 12%" />
+              <col style="width: 12%" />
+              <col style="width: 9%" />
+            </colgroup>
+            <thead class="bg-slate-50 text-slate-600">
+              <tr>
+                <th class="border border-slate-200 px-3 py-3 text-center font-bold">담당자</th>
+                <th class="border border-slate-200 px-3 py-3 text-center font-bold">회사명</th>
+                <th class="border border-slate-200 px-3 py-3 text-center font-bold">현장명</th>
+                <th class="border border-slate-200 px-3 py-3 text-center font-bold">구역명</th>
+                <th class="border border-slate-200 px-3 py-3 text-center font-bold">당착</th>
+                <th class="border border-slate-200 px-3 py-3 text-center font-bold">야상</th>
+                <th class="border border-slate-200 px-3 py-3 text-center font-bold">플롯</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-if="filteredRows.length === 0">
+                <td colspan="9" class="border border-slate-200 px-3 py-8 text-center text-slate-400">등록된 출하일정이 없습니다.</td>
+              </tr>
+              <tr
+                v-for="(row, index) in filteredRows"
+                :key="row.id"
+                class="cursor-pointer bg-white hover:bg-slate-50"
+                @click="openEditDialog(row)"
+              >
+                <td class="border border-slate-200 px-3 py-3 text-center text-slate-700">{{ row.managerName || '' }}</td>
+                <td class="border border-slate-200 px-3 py-3 text-center text-slate-700">{{ row.company || '' }}</td>
+                <td class="border border-slate-200 px-3 py-3 text-center text-slate-700">{{ row.place || '' }}</td>
+                <td class="border border-slate-200 px-3 py-3 text-center text-slate-700">{{ row.area || '' }}</td>
+                <td class="border border-slate-200 px-3 py-3 text-center text-slate-700">{{ row.scheduleType === 'day' ? (row.arrivalTime || 'O') : '' }}</td>
+                <td class="border border-slate-200 px-3 py-3 text-center text-slate-700">{{ row.scheduleType === 'night' ? (row.arrivalTime || 'O') : '' }}</td>
+                <td class="border border-slate-200 px-3 py-3 text-center text-slate-700">{{ row.floatStatus || '' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <div
+      v-if="isDialogOpen"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 px-4"
+      @click.self="closeDialog"
+    >
+      <section class="w-full max-w-2xl rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <p class="text-sm font-bold text-slate-500">출하일정</p>
+            <h2 class="mt-1 text-2xl font-extrabold text-slate-900">{{ dialogTitle }}</h2>
+          </div>
+          <Button variant="outline" @click="closeDialog">닫기</Button>
+        </div>
+
+        <div v-if="saveError" class="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">
+          {{ saveError }}
+        </div>
+
+        <div class="mt-5 grid gap-4 md:grid-cols-2">
+          <div class="space-y-2 md:col-span-2">
+            <label class="text-sm font-bold text-slate-700">회사명 / 현장명 검색</label>
+            <div class="flex gap-2">
+              <input
+                v-model="companyPlaceSearchText"
+                :disabled="isCompanyPlaceLocked"
+                type="text"
+                class="h-11 flex-1 rounded-xl border border-slate-300 px-4 text-sm text-slate-700 disabled:bg-slate-100 disabled:text-slate-500"
+                placeholder="회사명 또는 현장명을 입력하세요"
+                @keydown.enter.prevent="runCompanyPlaceSearch"
+              />
+              <Button class="h-11 px-4 text-sm" variant="outline" :disabled="isCompanyPlaceLocked" @click="runCompanyPlaceSearch">검색</Button>
+              <Button v-if="isCompanyPlaceLocked" class="h-11 px-4 text-sm" variant="outline" @click="clearCompanyPlaceSelection">해제</Button>
+            </div>
+            <div v-if="companyPlaceResultItems.length > 0" class="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+              <button
+                v-for="item in companyPlaceResultItems"
+                :key="`${item.company}-${item.place}`"
+                type="button"
+                class="flex w-full items-center justify-between border-t border-slate-100 px-4 py-3 text-left text-sm text-slate-700 first:border-t-0 hover:bg-slate-50"
+                @click="selectCompanyPlace(item)"
+              >
+                <span class="font-semibold text-slate-900">{{ item.company }}</span>
+                <span class="text-slate-500">{{ item.place }}</span>
+              </button>
+            </div>
+          </div>
+          <div class="space-y-2">
+            <label class="text-sm font-bold text-slate-700">구역명</label>
+            <input v-model="form.area" type="text" class="h-11 w-full rounded-xl border border-slate-300 px-4 text-sm text-slate-700" />
+          </div>
+          <div class="space-y-2">
+            <label class="text-sm font-bold text-slate-700">출하일</label>
+            <input v-model="form.shipmentDate" type="date" class="h-11 w-full rounded-xl border border-slate-300 px-4 text-sm text-slate-700" />
+          </div>
+          <div class="space-y-2 md:col-span-2">
+            <label class="text-sm font-bold text-slate-700">일정 구분</label>
+            <div class="flex flex-wrap gap-2">
+              <label
+                v-for="option in SCHEDULE_TYPE_OPTIONS"
+                :key="option.value"
+                class="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700"
+              >
+                <input v-model="form.scheduleType" type="radio" :value="option.value" />
+                <span>{{ option.label }}</span>
+              </label>
+              <label class="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700">
+                <input v-model="form.hasPlot" type="checkbox" />
+                <span>플롯</span>
+              </label>
+            </div>
+          </div>
+          <div class="space-y-2">
+            <label class="text-sm font-bold text-slate-700">상차시간</label>
+            <input
+              v-model="form.arrivalTime"
+              type="text"
+              placeholder="예: 08:30"
+              class="h-11 w-full rounded-xl border border-slate-300 px-4 text-sm text-slate-700"
+            />
+          </div>
+          <div v-if="form.hasPlot" class="space-y-2">
+            <label class="text-sm font-bold text-slate-700">플롯 상태</label>
+            <div class="flex gap-2">
+              <label
+                v-for="option in FLOAT_STATUS_OPTIONS"
+                :key="option.value"
+                class="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700"
+              >
+                <input v-model="form.floatStatus" type="radio" :value="option.value" />
+                <span>{{ option.label }}</span>
+              </label>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="mt-6 flex justify-end gap-2">
+          <Button variant="outline" @click="closeDialog">취소</Button>
+          <Button :disabled="saving" @click="submit">{{ saving ? '저장 중...' : form.id ? '수정 저장' : '등록 저장' }}</Button>
+        </div>
+      </section>
+    </div>
+  </main>
+</template>
+
+<style scoped>
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 0;
+  }
+
+  .shipment-print-hide {
+    display: none !important;
+  }
+
+  main {
+    min-height: auto !important;
+    background: #fff !important;
+    padding: 0 !important;
+  }
+
+  main > div {
+    max-width: none !important;
+    width: 100% !important;
+    padding: 0 !important;
+    gap: 0 !important;
+  }
+
+  .shipment-print-shell {
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+  }
+
+  .shipment-print-table-wrap {
+    margin-top: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    overflow: visible !important;
+  }
+
+  .shipment-print-title-bar {
+    border-left: 0 !important;
+    border-right: 0 !important;
+    border-top: 0 !important;
+    background: #fff !important;
+    padding: 4mm 0 3mm !important;
+  }
+
+  .shipment-print-table {
+    width: 100% !important;
+  }
+}
+</style>

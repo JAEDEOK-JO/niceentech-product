@@ -43,6 +43,7 @@ const stageMeta = {
   marking_laser_1: { field: 'marking_laser_1_status', workMan: '레이저1' },
   marking_laser_2: { field: 'marking_laser_2_status', workMan: '레이저2' },
   nasa: { field: 'nasa_status', workMan: '무용접' },
+  welding: { field: 'welding_status', workMan: '용접' },
   beveling: { field: 'beveling_status', workMan: '티&면치' },
   main_work: { field: 'main_status', workMan: '메인' },
 }
@@ -58,6 +59,7 @@ const workManToStageKey = {
   무용접: 'nasa',
   무용접반: 'nasa',
   나사: 'nasa',
+  용접: 'welding',
   '티&면치': 'beveling',
   메인: 'main_work',
   관리자: 'all',
@@ -130,7 +132,7 @@ const isHoleBasedRow = (row) => {
 }
 const mobileStageRows = [
   ['marking_weld_a', 'marking_weld_b', 'marking_laser_1', 'marking_laser_2'],
-  ['beveling', 'main_work', 'nasa'],
+  ['beveling', 'main_work', 'nasa', 'welding'],
 ]
 const getPlanUnitLabel = (row) => (isHoleBasedRow(row) ? '홀' : '헤드')
 const getPlanQty = (row) => {

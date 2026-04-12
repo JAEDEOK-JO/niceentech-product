@@ -12,6 +12,7 @@ const props = defineProps({
   planLoading: { type: Boolean, default: false },
   planError: { type: String, default: '' },
   groupedRows: { type: Array, default: () => [] },
+  currentWorkMan: { type: String, default: '' },
 })
 
 const emit = defineEmits([
@@ -57,6 +58,7 @@ const selectedRowId = ref(null)
 const isTestDateDialogOpen = ref(false)
 const pendingTestDateIso = ref('')
 const activeTestDateRow = ref(null)
+
 const isDrawingDialogOpen = ref(false)
 const drawingFiles = ref([])
 const drawingLoading = ref(false)
@@ -231,6 +233,7 @@ const inspectionActionLabel = computed(() => (activeDialogRow.value?.not_test ? 
 const holdActionLabel = computed(() => (activeDialogRow.value?.hold ? '보류 해제' : '보류'))
 const pendingTestDateLabel = computed(() => formatKoreanDateLabel(pendingTestDateIso.value))
 
+
 const calendarMonthLabel = computed(() => {
   const base = localCalendarMonth.value
   return `${base.getFullYear()}년 ${String(base.getMonth() + 1).padStart(2, '0')}월`
@@ -263,6 +266,7 @@ const openCalendarDialog = () => {
   syncCalendarMonth(localCalendarValue.value)
   isCalendarDialogOpen.value = true
 }
+
 
 const closeCalendarDialog = () => {
   isCalendarDialogOpen.value = false
@@ -645,6 +649,7 @@ const selectDrawingFile = (file) => {
         />
       </div>
     </main>
+
 
     <div
       v-if="isTestDateDialogOpen && activeTestDateRow"

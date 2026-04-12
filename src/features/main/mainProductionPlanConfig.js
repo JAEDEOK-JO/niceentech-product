@@ -103,6 +103,7 @@ const workerColumnMeta = {
 const workerEmptySourceFields = {
   worker_t: ['marking_weld_a_status', 'marking_weld_b_status', 'marking_laser_1_status', 'beveling_status'],
   worker_main: ['marking_laser_2_status', 'main_status'],
+  worker_welding: ['welding_status'],
 }
 const isNoneLikeStatus = (value) => {
   const raw = String(value ?? '').trim()

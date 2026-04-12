@@ -19,6 +19,7 @@ const loadingManagers = ref(false)
 const saveError = ref('')
 const searchText = ref('')
 const savingIds = ref([])
+const deletingIds = ref([])
 const showExpectedOnly = ref(false)
 
 const canManageCompany = computed(() => isAdminRole(profile.value?.role) || isDesignDepartment(profile.value?.department))
@@ -255,6 +256,30 @@ const saveRow = async (rowId) => {
   target.originalManagerId = target.managerId
 }
 
+const deleteRow = async (rowId) => {
+  saveError.value = ''
+  const target = rows.value.find((item) => item.id === rowId)
+  if (!target) return
+
+  const confirmed = typeof window === 'undefined'
+    ? true
+    : window.confirm(
+        `${target.company} ${target.place} 회사를 삭제할까요?\n생산계획/검수리스트 데이터는 삭제되지 않고 회사 연결만 해제됩니다.`,
+      )
+  if (!confirmed) return
+
+  deletingIds.value = [...deletingIds.value, rowId]
+  const { error } = await supabase.from('company_list').delete().eq('id', rowId)
+  deletingIds.value = deletingIds.value.filter((id) => id !== rowId)
+
+  if (error) {
+    saveError.value = `회사 삭제 실패: ${error.message}`
+    return
+  }
+
+  rows.value = rows.value.filter((item) => item.id !== rowId)
+}
+
 const goBack = () => {
   router.push({ name: 'main' })
 }
@@ -284,11 +309,13 @@ watch(
     :show-expected-only="showExpectedOnly"
     :total-count="filteredRows.length"
     :saving-ids="savingIds"
+    :deleting-ids="deletingIds"
     @go-back="goBack"
     @refresh="fetchRows"
     @update-search="searchText = $event"
     @toggle-expected-only="showExpectedOnly = !showExpectedOnly"
     @update-row="updateRow"
     @save-row="saveRow"
+    @delete-row="deleteRow"
   />
 </template>

@@ -579,7 +579,7 @@ onMounted(async () => {
       <template v-else>
         <div v-show="currentPage === 1 || isPrinting" class="report-page report-page-break space-y-6">
           <div class="report-print-title">생산부 대표 보고 · 1페이지 요약본</div>
-          <section class="rounded-3xl border border-rose-200 bg-gradient-to-r from-rose-50 via-white to-orange-50 p-6 shadow-sm">
+          <section class="production-print-hide rounded-3xl border border-rose-200 bg-gradient-to-r from-rose-50 via-white to-orange-50 p-6 shadow-sm">
             <div class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
               <div>
                 <p class="text-[12px] font-bold text-rose-700">{{ reportYearLabel }} 누적 생산 현황</p>
@@ -595,7 +595,7 @@ onMounted(async () => {
           </section>
 
           <section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
-            <div class="grid items-stretch gap-4 xl:grid-cols-2">
+            <div class="production-print-grid-top grid items-stretch gap-4 xl:grid-cols-2">
               <article class="h-full rounded-2xl border border-rose-200 bg-rose-50 p-4">
                 <p class="text-[15px] font-extrabold text-rose-900">이번주 생산량</p>
                 <p class="mt-1 text-[13px] font-semibold text-rose-700">{{ formatTestDate(currentWeekTuesday) }} 검수 기준</p>
@@ -669,7 +669,7 @@ onMounted(async () => {
                       <span class="font-extrabold text-rose-600">{{ formatRatio(qualityReturnOverallSummary.ratio) }}</span>
                     </p>
                     <p class="mt-3 inline-flex rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-[12px] font-extrabold text-indigo-700">
-                      증지수량 3,000개 = 헤드환산 4,500개
+                      증지수량 3,000개 = 헤드환산 5,500개
                     </p>
                   </div>
                 </div>
@@ -922,14 +922,27 @@ onMounted(async () => {
     display: none !important;
   }
 
+  .production-print-hide {
+    display: none !important;
+  }
+
   .report-root :deep(main) {
     max-width: none !important;
     background: #fff !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
   }
 
   .report-page > * {
     break-inside: avoid;
     page-break-inside: avoid;
+    width: 100% !important;
+  }
+
+  .production-print-grid-top {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
 
   .production-print-grid-4 {

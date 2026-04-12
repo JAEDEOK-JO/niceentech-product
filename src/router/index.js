@@ -7,6 +7,12 @@ import MainEditPage from '@/pages/MainEditPage.vue'
 import CompanyRegisterPage from '@/pages/CompanyRegisterPage.vue'
 import CompanyListPage from '@/pages/CompanyListPage.vue'
 import HomePage from '@/pages/HomePage.vue'
+import QualityListPage from '@/pages/QualityListPage.vue'
+import QualityCreatePage from '@/pages/QualityCreatePage.vue'
+import QualityUpdatePage from '@/pages/QualityUpdatePage.vue'
+import QualityCountCheckPage from '@/pages/QualityCountCheckPage.vue'
+import QualityCalculationPage from '@/pages/QualityCalculationPage.vue'
+import ShipmentSchedulePage from '@/pages/ShipmentSchedulePage.vue'
 import MyPage from '@/pages/MyPage.vue'
 import SettingsPage from '@/pages/SettingsPage.vue'
 import NotificationsPage from '@/pages/NotificationsPage.vue'
@@ -70,6 +76,42 @@ const routes = [
     path: '/home',
     name: 'home',
     component: HomePage,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/quality',
+    name: 'quality-list',
+    component: QualityListPage,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/quality/create',
+    name: 'quality-create',
+    component: QualityCreatePage,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/quality/:id/edit',
+    name: 'quality-update',
+    component: QualityUpdatePage,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/quality/:id/count-check',
+    name: 'quality-count-check',
+    component: QualityCountCheckPage,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/quality/calculation',
+    name: 'quality-calculation',
+    component: QualityCalculationPage,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/shipment-schedule',
+    name: 'shipment-schedule',
+    component: ShipmentSchedulePage,
     meta: { requiresAuth: true },
   },
   {
