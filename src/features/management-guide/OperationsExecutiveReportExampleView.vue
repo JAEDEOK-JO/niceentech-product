@@ -2,7 +2,6 @@
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { supabase } from '@/lib/supabase'
 import Button from '@/components/ui/button/Button.vue'
-import Input from '@/components/ui/input/Input.vue'
 
 const COMPANY_LIST_TABLE = 'company_list'
 const METRIC_DEFINITIONS_TABLE = 'department_metric_definitions'
@@ -10,12 +9,10 @@ const METRIC_ENTRIES_TABLE = 'department_metric_entries'
 const DEPARTMENT_CODE = 'operations'
 const INVENTORY_PERIOD_TYPE = 'weekly'
 const LEGACY_INVENTORY_PERIOD_TYPE = 'monthly'
-const ISSUE_PERIOD_TYPE = 'monthly'
 const METRIC_KEYS = {
   received: 'monthly_received_ton',
   used: 'monthly_used_ton',
   balance: 'monthly_balance_ton',
-  issueEntries: 'monthly_issue_entries_json',
 }
 const MANAGERS = ['진민택', '민뚜라']
 
@@ -36,19 +33,22 @@ const loading = ref(false)
 const errorMessage = ref('')
 const isPrinting = ref(false)
 const isInventoryDialogOpen = ref(false)
-const isIssueDialogOpen = ref(false)
 const selectedInventoryMonth = ref(new Date(reportYear, reportMonth - 1, 1))
 const inventoryError = ref('')
-const issueEntryError = ref('')
 const savingInventory = ref(false)
-const savingIssueEntry = ref(false)
-const deletingIssueEntry = ref(false)
-const editingIssueId = ref(null)
-const selectedIssueDetailRow = ref(null)
-const issueCompanySearchText = ref('')
-const issueCompanySearchLoading = ref(false)
-const issueCompanySearchResults = ref([])
 const totalBalanceSum = ref(0)
+const weldingInspections = ref([])
+const weldingIssues = ref([])
+const isWeldingIssueDialogOpen = ref(false)
+const savingWeldingIssue = ref(false)
+const deletingWeldingIssueId = ref(null)
+const weldingIssueForm = ref({ inspector: MANAGERS[0], issue_type: 'misproduction', company: '', place: '', area: '', memo: '', head_count: '' })
+const weldingIssueError = ref('')
+const weldingIssueCompanySearchText = ref('')
+const weldingIssueCompanySearchLoading = ref(false)
+const weldingIssueCompanySearchResults = ref([])
+
+const reportPeriodMonth = `${reportYear}-${String(reportMonth).padStart(2, '0')}`
 
 const toNumber = (value) => {
   const number = Number(value)
@@ -102,16 +102,11 @@ const formatShortDate = (value) => {
   if (!matched) return raw || '-'
   return `${matched[2]}월 ${matched[3]}일`
 }
-const issueTypeLabelMap = {
-  misproduction: '오제작',
-  shortage: '누락분',
-}
 
 const operationsMetricDefinitions = [
   { metric_key: METRIC_KEYS.received, label: '주간 입고', value_type: 'number', unit: '톤', sort_order: 1, is_active: true },
   { metric_key: METRIC_KEYS.used, label: '주간 사용', value_type: 'number', unit: '톤', sort_order: 2, is_active: true },
   { metric_key: METRIC_KEYS.balance, label: '주간 잔고', value_type: 'number', unit: '톤', sort_order: 3, is_active: true },
-  { metric_key: METRIC_KEYS.issueEntries, label: '월 이슈 목록', value_type: 'text', unit: '', sort_order: 4, is_active: true },
 ]
 
 const createDefaultInventoryForm = () => ({
@@ -129,56 +124,8 @@ const createInventoryWeekForm = (week) => ({
   balance: '0',
 })
 
-const createIssueId = () =>
-  typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-    ? crypto.randomUUID()
-    : `issue-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-
-const createDefaultIssueForm = (row = null, issueType = 'misproduction') =>
-  row
-    ? {
-        reportedAt: row.reportedAt ?? formatDateInput(new Date()),
-        manager: row.manager ?? MANAGERS[0],
-        company: row.company ?? '',
-        place: row.place ?? '',
-        area: row.area ?? '',
-        headCount: String(row.headCount ?? ''),
-        installCount: String(row.installCount ?? ''),
-        detail: row.detail ?? '',
-        issueType: row.issueType ?? issueType,
-      }
-    : {
-        reportedAt: formatDateInput(new Date()),
-        manager: MANAGERS[0],
-        company: '',
-        place: '',
-        area: '',
-        headCount: '',
-        installCount: '',
-        detail: '',
-        issueType,
-      }
-
-const normalizeIssueEntry = (row, index = 0) => ({
-  id: normalizeText(row?.id) || `issue-${index + 1}`,
-  reportedAt: normalizeText(row?.reportedAt),
-  manager: MANAGERS.includes(row?.manager) ? row.manager : MANAGERS[0],
-  company: normalizeText(row?.company),
-  place: normalizeText(row?.place),
-  area: normalizeText(row?.area),
-  headCount: toNumber(row?.headCount),
-  installCount: toNumber(row?.installCount),
-  issueType: row?.issueType === 'shortage' ? 'shortage' : 'misproduction',
-  detail: normalizeText(row?.detail),
-})
-
 const inventoryForm = ref(createDefaultInventoryForm())
 const inventoryDraftWeeks = ref([])
-const issueEntries = ref([])
-const issueForm = ref(createDefaultIssueForm())
-
-const sortIssueEntries = (rows) =>
-  [...rows].sort((a, b) => String(b.reportedAt ?? '').localeCompare(String(a.reportedAt ?? '')) || String(b.id ?? '').localeCompare(String(a.id ?? '')))
 
 const selectedInventoryMonthValue = computed(() => formatMonthValue(selectedInventoryMonth.value))
 const selectedInventoryMonthEndValue = computed(() => formatMonthEndValue(selectedInventoryMonth.value))
@@ -196,18 +143,6 @@ const ensureOperationsMetricDefinitions = async () => {
   )
 
   if (error) throw new Error(error.message ?? '공무부 지표 정의 저장에 실패했습니다.')
-}
-
-const fetchMetricEntries = async () => {
-  const { data, error } = await supabase
-    .from(METRIC_ENTRIES_TABLE)
-    .select('metric_key,numeric_value,text_value')
-    .eq('department_code', DEPARTMENT_CODE)
-    .eq('period_type', ISSUE_PERIOD_TYPE)
-    .eq('period_start_date', reportMonthValue)
-
-  if (error) throw new Error(error.message ?? '공무부 데이터를 불러오지 못했습니다.')
-  return data ?? []
 }
 
 const fetchWeeklyInventoryEntriesByMonth = async (monthValue, monthEndValue) => {
@@ -235,6 +170,94 @@ const fetchLegacyInventoryEntriesByMonth = async (monthValue) => {
 
   if (error) throw new Error(error.message ?? '공무부 수치 데이터를 불러오지 못했습니다.')
   return data ?? []
+}
+
+const fetchWeldingInspections = async () => {
+  const monthStart = reportMonthValue
+  const monthEnd = reportMonthEndValue
+  const { data, error } = await supabase
+    .from('welding_inspections')
+    .select('id,inspector,welding_status,head_count,drawing_no,company,place,area,test_date,created_at')
+    .gte('created_at', `${monthStart}T00:00:00`)
+    .lte('created_at', `${monthEnd}T23:59:59`)
+    .order('created_at', { ascending: false })
+  if (error) throw new Error(error.message ?? '용접 검수 데이터를 불러오지 못했습니다.')
+  return data ?? []
+}
+
+const fetchWeldingIssues = async () => {
+  const { data, error } = await supabase
+    .from('welding_issues')
+    .select('*')
+    .eq('period_month', reportPeriodMonth)
+    .order('created_at', { ascending: false })
+  if (error) throw new Error(error.message ?? '오제작/누락분 데이터를 불러오지 못했습니다.')
+  return data ?? []
+}
+
+const searchWeldingIssueCompanies = async () => {
+  const term = normalizeText(weldingIssueCompanySearchText.value)
+  if (!term) {
+    weldingIssueCompanySearchResults.value = []
+    return
+  }
+  weldingIssueCompanySearchLoading.value = true
+  const { data, error } = await supabase
+    .from(COMPANY_LIST_TABLE)
+    .select('id,company,place,full_name')
+    .ilike('full_name', `%${term}%`)
+    .order('full_name', { ascending: true })
+    .limit(20)
+  weldingIssueCompanySearchLoading.value = false
+  if (error) {
+    weldingIssueError.value = error.message ?? '회사 검색에 실패했습니다.'
+    return
+  }
+  weldingIssueCompanySearchResults.value = (data ?? []).map((item) => ({
+    id: item.id,
+    company: normalizeText(item.company),
+    place: normalizeText(item.place),
+    fullName: normalizeText(item.full_name),
+  }))
+}
+
+const selectWeldingIssueCompany = (item) => {
+  weldingIssueForm.value.company = item.company
+  weldingIssueForm.value.place = item.place
+  weldingIssueCompanySearchText.value = item.fullName || `${item.company} ${item.place}`.trim()
+  weldingIssueCompanySearchResults.value = []
+}
+
+const saveWeldingIssue = async () => {
+  weldingIssueError.value = ''
+  savingWeldingIssue.value = true
+  const { error } = await supabase.from('welding_issues').insert({
+    inspector: weldingIssueForm.value.inspector,
+    issue_type: weldingIssueForm.value.issue_type,
+    company: String(weldingIssueForm.value.company ?? '').trim(),
+    place: String(weldingIssueForm.value.place ?? '').trim(),
+    area: String(weldingIssueForm.value.area ?? '').trim(),
+    memo: String(weldingIssueForm.value.memo ?? '').trim(),
+    head_count: toNumber(weldingIssueForm.value.head_count),
+    period_month: reportPeriodMonth,
+  })
+  savingWeldingIssue.value = false
+  if (error) {
+    weldingIssueError.value = error.message ?? '저장 실패'
+    return
+  }
+  weldingIssueForm.value = { inspector: MANAGERS[0], issue_type: 'misproduction', company: '', place: '', area: '', memo: '', head_count: '' }
+  weldingIssueCompanySearchText.value = ''
+  weldingIssueCompanySearchResults.value = []
+  isWeldingIssueDialogOpen.value = false
+  weldingIssues.value = await fetchWeldingIssues()
+}
+
+const deleteWeldingIssue = async (id) => {
+  deletingWeldingIssueId.value = id
+  await supabase.from('welding_issues').delete().eq('id', id)
+  deletingWeldingIssueId.value = null
+  weldingIssues.value = weldingIssues.value.filter((r) => r.id !== id)
 }
 
 const fetchAllBalanceEntries = async () => {
@@ -304,13 +327,15 @@ const fetchReportData = async () => {
   errorMessage.value = ''
 
   try {
-    const [rows, weeklyInventoryRows, legacyInventoryRows, balanceRows] = await Promise.all([
-      fetchMetricEntries(),
+    const [weeklyInventoryRows, legacyInventoryRows, balanceRows, weldingRows, issueRows] = await Promise.all([
       fetchWeeklyInventoryEntriesByMonth(reportMonthValue, reportMonthEndValue),
       fetchLegacyInventoryEntriesByMonth(reportMonthValue),
       fetchAllBalanceEntries(),
+      fetchWeldingInspections(),
+      fetchWeldingIssues(),
     ])
-    const entryMap = Object.fromEntries(rows.map((row) => [String(row.metric_key ?? '').trim(), row]))
+    weldingInspections.value = weldingRows
+    weldingIssues.value = issueRows
     totalBalanceSum.value = balanceRows.reduce((sum, row) => sum + toNumber(row?.numeric_value), 0)
     const inventoryTotals = weeklyInventoryRows.length > 0 ? sumInventoryRows(weeklyInventoryRows) : sumInventoryRows(legacyInventoryRows)
 
@@ -319,24 +344,13 @@ const fetchReportData = async () => {
       used: String(inventoryTotals.used),
       balance: String(inventoryTotals.balance),
     }
-
-    const rawIssueJson = normalizeText(entryMap[METRIC_KEYS.issueEntries]?.text_value)
-    if (!rawIssueJson) {
-      issueEntries.value = []
-    } else {
-      try {
-        const parsed = JSON.parse(rawIssueJson)
-        issueEntries.value = Array.isArray(parsed) ? sortIssueEntries(parsed.map(normalizeIssueEntry)) : []
-      } catch {
-        issueEntries.value = []
-      }
-    }
   } catch (error) {
     errorMessage.value = error?.message ?? '공무부 데이터를 불러오지 못했습니다.'
     inventoryForm.value = createDefaultInventoryForm()
     inventoryDraftWeeks.value = []
-    issueEntries.value = []
     totalBalanceSum.value = 0
+    weldingInspections.value = []
+    weldingIssues.value = []
   } finally {
     loading.value = false
   }
@@ -347,17 +361,6 @@ const inventoryValues = computed(() => ({
   used: toNumber(inventoryForm.value.used),
   balance: toNumber(inventoryForm.value.balance),
 }))
-
-const misproductionRows = computed(() => issueEntries.value.filter((row) => row.issueType === 'misproduction'))
-const shortageRows = computed(() => issueEntries.value.filter((row) => row.issueType === 'shortage'))
-
-const sumHeadCount = (rows) => rows.reduce((sum, row) => sum + toNumber(row.headCount), 0)
-const sumInstallCount = (rows) => rows.reduce((sum, row) => sum + toNumber(row.installCount), 0)
-
-const misproductionHeadTotal = computed(() => sumHeadCount(misproductionRows.value))
-const shortageHeadTotal = computed(() => sumHeadCount(shortageRows.value))
-const misproductionInstallTotal = computed(() => sumInstallCount(misproductionRows.value))
-const shortageInstallTotal = computed(() => sumInstallCount(shortageRows.value))
 
 const summaryCards = computed(() => [
   {
@@ -380,98 +383,64 @@ const summaryCards = computed(() => [
   },
 ])
 
-const managerMetrics = computed(() => {
-  const initialState = MANAGERS.reduce((accumulator, manager) => {
-    accumulator[manager] = { headCount: 0, installCount: 0, misproductionCount: 0, shortageCount: 0 }
-    return accumulator
+const weldingMetrics = computed(() => {
+  const state = MANAGERS.reduce((acc, m) => {
+    acc[m] = {
+      inProgressHead: 0,
+      completedHead: 0,
+      misproductionCount: 0,
+      shortageCount: 0,
+      inspectionRows: [],
+      issueRows: [],
+    }
+    return acc
   }, {})
 
-  for (const row of issueEntries.value) {
-    const manager = MANAGERS.includes(row.manager) ? row.manager : MANAGERS[0]
-    initialState[manager].headCount += toNumber(row.headCount)
-    initialState[manager].installCount += toNumber(row.installCount)
-    if (row.issueType === 'misproduction') initialState[manager].misproductionCount += 1
-    if (row.issueType === 'shortage') initialState[manager].shortageCount += 1
+  for (const row of weldingInspections.value) {
+    const inspector = MANAGERS.includes(row.inspector) ? row.inspector : null
+    if (!inspector) continue
+    if (row.welding_status === '작업중') state[inspector].inProgressHead += toNumber(row.head_count)
+    if (row.welding_status === '작업완료') state[inspector].completedHead += toNumber(row.head_count)
+    state[inspector].inspectionRows.push(row)
   }
 
-  return initialState
+  for (const row of weldingIssues.value) {
+    const inspector = MANAGERS.includes(row.inspector) ? row.inspector : null
+    if (!inspector) continue
+    if (row.issue_type === 'misproduction') state[inspector].misproductionCount += 1
+    if (row.issue_type === 'shortage') state[inspector].shortageCount += 1
+    state[inspector].issueRows.push(row)
+  }
+
+  return state
 })
 
-const partnerComparisonRows = computed(() => [
+const weldingComparisonRows = computed(() => [
   {
-    label: '헤드',
-    jinminTech: managerMetrics.value['진민택'].headCount,
-    minTura: managerMetrics.value['민뚜라'].headCount,
-    compareMode: 'neutral',
+    label: '작업중 헤드',
+    jinminTech: weldingMetrics.value['진민택'].inProgressHead,
+    minTura: weldingMetrics.value['민뚜라'].inProgressHead,
+    unit: 'EA',
   },
   {
-    label: '전실/입상',
-    jinminTech: managerMetrics.value['진민택'].installCount,
-    minTura: managerMetrics.value['민뚜라'].installCount,
-    compareMode: 'neutral',
+    label: '작업완료 헤드',
+    jinminTech: weldingMetrics.value['진민택'].completedHead,
+    minTura: weldingMetrics.value['민뚜라'].completedHead,
+    unit: 'EA',
   },
   {
     label: '오제작',
-    jinminTech: managerMetrics.value['진민택'].misproductionCount,
-    minTura: managerMetrics.value['민뚜라'].misproductionCount,
-    compareMode: 'higher-bad',
+    jinminTech: weldingMetrics.value['진민택'].misproductionCount,
+    minTura: weldingMetrics.value['민뚜라'].misproductionCount,
+    unit: '건',
   },
   {
     label: '누락분',
-    jinminTech: managerMetrics.value['진민택'].shortageCount,
-    minTura: managerMetrics.value['민뚜라'].shortageCount,
-    compareMode: 'higher-bad',
+    jinminTech: weldingMetrics.value['진민택'].shortageCount,
+    minTura: weldingMetrics.value['민뚜라'].shortageCount,
+    unit: '건',
   },
 ])
-
-const isBadValue = (value, otherValue, compareMode) => compareMode === 'higher-bad' && Number(value || 0) > Number(otherValue || 0)
-const getComparisonTextClass = (value, otherValue, compareMode) =>
-  isBadValue(value, otherValue, compareMode) ? 'text-red-500' : 'text-slate-900'
-
-const openIssueDetailDialog = (row) => {
-  selectedIssueDetailRow.value = row
-}
-
-const closeIssueDetailDialog = () => {
-  if (deletingIssueEntry.value) return
-  selectedIssueDetailRow.value = null
-}
-
-const searchIssueCompanies = async () => {
-  const term = normalizeText(issueCompanySearchText.value)
-  if (!term) {
-    issueCompanySearchResults.value = []
-    return
-  }
-
-  issueCompanySearchLoading.value = true
-  const { data, error } = await supabase
-    .from(COMPANY_LIST_TABLE)
-    .select('id,company,place,full_name')
-    .ilike('full_name', `%${term}%`)
-    .order('full_name', { ascending: true })
-    .limit(20)
-  issueCompanySearchLoading.value = false
-
-  if (error) {
-    issueEntryError.value = error.message ?? '회사 검색에 실패했습니다.'
-    return
-  }
-
-  issueCompanySearchResults.value = (data ?? []).map((item) => ({
-    id: item.id,
-    company: normalizeText(item.company),
-    place: normalizeText(item.place),
-    fullName: normalizeText(item.full_name),
-  }))
-}
-
-const selectIssueCompany = (item) => {
-  issueForm.value.company = item.company
-  issueForm.value.place = item.place
-  issueCompanySearchText.value = item.fullName || `${item.company} ${item.place}`.trim()
-  issueCompanySearchResults.value = []
-}
 
 const upsertMetricEntry = async ({
   metricKey,
@@ -499,20 +468,6 @@ const upsertMetricEntry = async ({
   )
 
   if (error) throw new Error(error.message ?? '공무부 데이터 저장에 실패했습니다.')
-}
-
-const saveIssueEntries = async (nextEntries, createdBy = null) => {
-  await ensureOperationsMetricDefinitions()
-  await upsertMetricEntry({
-    metricKey: METRIC_KEYS.issueEntries,
-    numericValue: null,
-    textValue: JSON.stringify(nextEntries),
-    createdBy,
-    periodType: ISSUE_PERIOD_TYPE,
-    periodStartDate: reportMonthValue,
-    periodEndDate: reportMonthEndValue,
-  })
-  issueEntries.value = sortIssueEntries(nextEntries)
 }
 
 const openInventoryDialog = async () => {
@@ -613,99 +568,6 @@ const saveInventory = async () => {
   }
 }
 
-const openIssueDialog = (row = null, issueType = 'misproduction') => {
-  issueEntryError.value = ''
-  editingIssueId.value = row?.id ?? null
-  issueForm.value = createDefaultIssueForm(row, issueType)
-  issueCompanySearchText.value = row ? `${row.company ?? ''} ${row.place ?? ''}`.trim() : ''
-  issueCompanySearchResults.value = []
-  isIssueDialogOpen.value = true
-}
-
-const closeIssueDialog = () => {
-  if (savingIssueEntry.value || deletingIssueEntry.value) return
-  issueEntryError.value = ''
-  editingIssueId.value = null
-  issueForm.value = createDefaultIssueForm()
-  issueCompanySearchText.value = ''
-  issueCompanySearchResults.value = []
-  isIssueDialogOpen.value = false
-}
-
-const saveIssueEntry = async () => {
-  issueEntryError.value = ''
-
-  const payload = {
-    id: editingIssueId.value ?? createIssueId(),
-    reportedAt: normalizeText(issueForm.value.reportedAt),
-    manager: MANAGERS.includes(issueForm.value.manager) ? issueForm.value.manager : MANAGERS[0],
-    company: normalizeText(issueForm.value.company),
-    place: normalizeText(issueForm.value.place),
-    area: normalizeText(issueForm.value.area),
-    headCount: toNumber(issueForm.value.headCount),
-    installCount: toNumber(issueForm.value.installCount),
-    detail: normalizeText(issueForm.value.detail),
-    issueType: issueForm.value.issueType === 'shortage' ? 'shortage' : 'misproduction',
-  }
-
-  if (!payload.reportedAt) {
-    issueEntryError.value = '접수일을 입력해주세요.'
-    return
-  }
-  if (!payload.company) {
-    issueEntryError.value = '회사명을 입력해주세요.'
-    return
-  }
-  if (!payload.place) {
-    issueEntryError.value = '현장명을 입력해주세요.'
-    return
-  }
-  if (!payload.area) {
-    issueEntryError.value = '구역을 입력해주세요.'
-    return
-  }
-  if (!payload.detail) {
-    issueEntryError.value = '내용을 입력해주세요.'
-    return
-  }
-
-  savingIssueEntry.value = true
-
-  try {
-    const { data: sessionData } = await supabase.auth.getSession()
-    const createdBy = sessionData.session?.user?.id ?? null
-    const nextEntries = [...issueEntries.value.filter((row) => row.id !== payload.id), payload]
-    await saveIssueEntries(nextEntries, createdBy)
-    closeIssueDialog()
-  } catch (error) {
-    issueEntryError.value = error?.message ?? '공무 이슈 저장에 실패했습니다.'
-  } finally {
-    savingIssueEntry.value = false
-  }
-}
-
-const deleteIssueEntry = async (rowId) => {
-  issueEntryError.value = ''
-  const targetRow = issueEntries.value.find((row) => row.id === rowId)
-  const confirmed = typeof window === 'undefined' ? true : window.confirm(`${targetRow?.company || '선택한'} 항목을 삭제할까요?`)
-  if (!confirmed) return
-
-  deletingIssueEntry.value = true
-
-  try {
-    const { data: sessionData } = await supabase.auth.getSession()
-    const createdBy = sessionData.session?.user?.id ?? null
-    const nextEntries = issueEntries.value.filter((row) => row.id !== rowId)
-    await saveIssueEntries(nextEntries, createdBy)
-    if (editingIssueId.value === rowId) closeIssueDialog()
-    if (selectedIssueDetailRow.value?.id === rowId) closeIssueDetailDialog()
-  } catch (error) {
-    issueEntryError.value = error?.message ?? '공무 이슈 삭제에 실패했습니다.'
-  } finally {
-    deletingIssueEntry.value = false
-  }
-}
-
 const printReport = async () => {
   if (typeof window === 'undefined') return
   isPrinting.value = true
@@ -751,8 +613,8 @@ onMounted(fetchReportData)
         <button type="button" class="rounded-xl bg-slate-100 px-4 py-2.5 text-[13px] font-bold text-slate-600 transition hover:bg-slate-200" @click="openInventoryDialog">
           톤수입력
         </button>
-        <button type="button" class="rounded-xl bg-slate-100 px-4 py-2.5 text-[13px] font-bold text-slate-600 transition hover:bg-slate-200" @click="openIssueDialog()">
-          이슈입력
+        <button type="button" class="rounded-xl bg-slate-100 px-4 py-2.5 text-[13px] font-bold text-slate-600 transition hover:bg-slate-200" @click="isWeldingIssueDialogOpen = true">
+          오제작/누락분 입력
         </button>
       </div>
     </header>
@@ -778,190 +640,273 @@ onMounted(fetchReportData)
         </section>
 
         <section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
-          <div class="operations-print-grid-5 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <div class="grid gap-3 md:grid-cols-3">
             <div v-for="card in summaryCards" :key="card.label" class="rounded-2xl border p-4" :class="card.tone">
               <p class="text-[13px] font-bold">{{ card.label }}</p>
               <p class="mt-2 text-2xl font-extrabold">{{ card.value }}</p>
               <p class="mt-1 text-[11px] font-semibold opacity-80">{{ card.note }}</p>
             </div>
-            <article class="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-              <p class="text-[13px] font-bold text-amber-800">오제작</p>
-              <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ misproductionRows.length }}건</p>
-              <p class="mt-1 text-[11px] font-semibold text-amber-700">입력 건수 합계</p>
-            </article>
-            <article class="rounded-2xl border border-rose-200 bg-rose-50 p-4">
-              <p class="text-[13px] font-bold text-rose-800">누락분</p>
-              <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ shortageRows.length }}건</p>
-              <p class="mt-1 text-[11px] font-semibold text-rose-700">입력 건수 합계</p>
-            </article>
           </div>
         </section>
 
         <section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
+          <!-- 헤더 -->
           <div class="flex items-center justify-between gap-3">
             <p class="text-[13px] font-extrabold text-slate-900">진민택 / 민뚜라 비교</p>
-            <p class="mt-1 text-[12px] text-slate-500">이슈 입력 기준</p>
+            <p class="text-[12px] text-slate-500">{{ reportMonthLabel }} 기준</p>
           </div>
-          <div class="mt-4 overflow-hidden rounded-3xl border border-slate-200 bg-white">
-            <div class="grid grid-cols-[120px_1fr_1fr] border-b border-slate-200 px-5 py-4 text-sm font-bold text-slate-700">
-              <div class="text-left">구분</div>
-              <div class="text-center">진민택</div>
-              <div class="text-center">민뚜라</div>
-            </div>
-            <div
-              v-for="row in partnerComparisonRows"
-              :key="row.label"
-              class="grid grid-cols-[120px_1fr_1fr] items-center border-b border-slate-200 px-5 py-5 last:border-b-0"
-            >
-              <div class="text-left text-base font-extrabold text-slate-900">{{ row.label }}</div>
-              <div class="text-center">
-                <p
-                  class="text-2xl font-extrabold"
-                  :class="getComparisonTextClass(row.jinminTech, row.minTura, row.compareMode)"
+
+          <!-- 비교 테이블 -->
+          <div class="mt-4 overflow-hidden rounded-2xl border border-slate-200">
+            <table class="w-full border-collapse text-sm">
+              <thead>
+                <tr class="bg-slate-50">
+                  <th class="border border-slate-200 px-4 py-3 text-left text-xs font-bold text-slate-600">구분</th>
+                  <th class="border border-slate-200 px-4 py-3 text-center text-xs font-bold text-slate-600">진민택</th>
+                  <th class="border border-slate-200 px-4 py-3 text-center text-xs font-bold text-slate-600">민뚜라</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="row in weldingComparisonRows"
+                  :key="row.label"
+                  class="hover:bg-slate-50/60"
                 >
-                  {{ formatCount(row.jinminTech) }}
-                </p>
-              </div>
-              <div class="text-center">
-                <p
-                  class="text-2xl font-extrabold"
-                  :class="getComparisonTextClass(row.minTura, row.jinminTech, row.compareMode)"
-                >
-                  {{ formatCount(row.minTura) }}
-                </p>
-              </div>
-            </div>
+                  <td class="border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700">{{ row.label }}</td>
+                  <td class="border border-slate-200 px-4 py-4 text-center">
+                    <template v-if="row.jinminTech">
+                      <span class="text-2xl font-extrabold text-slate-900">{{ formatCount(row.jinminTech) }}</span>
+                      <span class="ml-1 text-xs text-slate-500">{{ row.unit }}</span>
+                    </template>
+                  </td>
+                  <td class="border border-slate-200 px-4 py-4 text-center">
+                    <template v-if="row.minTura">
+                      <span class="text-2xl font-extrabold text-slate-900">{{ formatCount(row.minTura) }}</span>
+                      <span class="ml-1 text-xs text-slate-500">{{ row.unit }}</span>
+                    </template>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
+
         </section>
+
+        <!-- 오제작/누락분 입력 다이얼로그 -->
+        <div
+          v-if="isWeldingIssueDialogOpen"
+          class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+          @click.self="isWeldingIssueDialogOpen = false; weldingIssueCompanySearchText = ''; weldingIssueCompanySearchResults = []"
+        >
+          <div class="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
+            <h3 class="mb-4 text-base font-extrabold text-slate-900">오제작 / 누락분 입력</h3>
+            <div class="space-y-3">
+              <div>
+                <p class="mb-1.5 text-xs font-bold text-slate-600">구분</p>
+                <div class="flex gap-2">
+                  <button
+                    type="button"
+                    class="flex-1 rounded-lg border px-3 py-2 text-sm font-semibold transition"
+                    :class="weldingIssueForm.issue_type === 'misproduction' ? 'border-amber-500 bg-amber-500 text-white' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'"
+                    @click="weldingIssueForm.issue_type = 'misproduction'"
+                  >오제작</button>
+                  <button
+                    type="button"
+                    class="flex-1 rounded-lg border px-3 py-2 text-sm font-semibold transition"
+                    :class="weldingIssueForm.issue_type === 'shortage' ? 'border-rose-500 bg-rose-500 text-white' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'"
+                    @click="weldingIssueForm.issue_type = 'shortage'"
+                  >누락분</button>
+                </div>
+              </div>
+              <div>
+                <p class="mb-1.5 text-xs font-bold text-slate-600">담당자</p>
+                <div class="flex gap-2">
+                  <button
+                    v-for="name in MANAGERS"
+                    :key="name"
+                    type="button"
+                    class="flex-1 rounded-lg border px-3 py-2 text-sm font-semibold transition"
+                    :class="weldingIssueForm.inspector === name ? 'border-indigo-500 bg-indigo-600 text-white' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'"
+                    @click="weldingIssueForm.inspector = name"
+                  >{{ name }}</button>
+                </div>
+              </div>
+              <div>
+                <p class="mb-1 text-xs font-bold text-slate-600">회사명 / 현장명 검색</p>
+                <div class="flex gap-2">
+                  <input
+                    v-model="weldingIssueCompanySearchText"
+                    type="text"
+                    placeholder="회사명 또는 현장명 검색"
+                    class="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none"
+                    @keydown.enter.prevent="searchWeldingIssueCompanies"
+                  />
+                  <button
+                    type="button"
+                    class="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                    @click="searchWeldingIssueCompanies"
+                  >검색</button>
+                </div>
+                <div v-if="weldingIssueCompanySearchLoading" class="mt-1 text-[11px] text-slate-500">검색 중...</div>
+                <ul v-if="weldingIssueCompanySearchResults.length > 0" class="mt-1 max-h-48 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg">
+                  <li
+                    v-for="item in weldingIssueCompanySearchResults"
+                    :key="item.id"
+                    class="cursor-pointer px-3 py-2 text-sm hover:bg-indigo-50"
+                    @click="selectWeldingIssueCompany(item)"
+                  >
+                    <span class="font-semibold text-slate-800">{{ item.company }}</span>
+                    <span v-if="item.place" class="ml-1 text-slate-500">· {{ item.place }}</span>
+                  </li>
+                </ul>
+                <div v-if="weldingIssueForm.company || weldingIssueForm.place" class="mt-1.5 flex gap-2 text-[11px]">
+                  <span class="rounded bg-slate-100 px-2 py-0.5 font-semibold text-slate-700">{{ weldingIssueForm.company || '-' }}</span>
+                  <span class="rounded bg-slate-100 px-2 py-0.5 font-semibold text-slate-700">{{ weldingIssueForm.place || '-' }}</span>
+                </div>
+              </div>
+              <div>
+                <p class="mb-1 text-xs font-bold text-slate-600">구역명</p>
+                <input v-model="weldingIssueForm.area" type="text" placeholder="구역명" class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none" />
+              </div>
+              <div>
+                <p class="mb-1 text-xs font-bold text-slate-600">헤드수</p>
+                <input
+                  :value="weldingIssueForm.head_count"
+                  type="text"
+                  inputmode="numeric"
+                  placeholder="0"
+                  class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none"
+                  @input="weldingIssueForm.head_count = sanitizeCountInput($event.target.value)"
+                />
+              </div>
+              <div>
+                <p class="mb-1 text-xs font-bold text-slate-600">메모</p>
+                <input v-model="weldingIssueForm.memo" type="text" placeholder="메모 (선택)" class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none" />
+              </div>
+              <p v-if="weldingIssueError" class="text-xs font-semibold text-red-600">{{ weldingIssueError }}</p>
+            </div>
+            <div class="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                class="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                @click="isWeldingIssueDialogOpen = false; weldingIssueCompanySearchText = ''; weldingIssueCompanySearchResults = []"
+              >닫기</button>
+              <button type="button" class="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50" :disabled="savingWeldingIssue" @click="saveWeldingIssue">
+                {{ savingWeldingIssue ? '저장 중...' : '저장' }}
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div v-show="currentPage === 2 || isPrinting" class="report-page space-y-6">
         <div class="report-print-title">공무부 대표 보고 · 2페이지 디테일</div>
+
+        <!-- 작업 현황 -->
         <section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
-          <div class="flex items-center justify-between gap-3">
-            <div>
-              <p class="text-[13px] font-extrabold text-slate-900">오제작 목록</p>
-            </div>
-            <div class="flex items-center gap-2">
-              <span class="rounded-full bg-amber-100 px-3 py-1 text-[11px] font-bold text-amber-700">{{ misproductionRows.length }}건</span>
-              <Button class="h-9 px-3 text-xs" variant="outline" @click="openIssueDialog(null, 'misproduction')">오제작 입력</Button>
+          <p class="mb-4 text-[13px] font-extrabold text-slate-900">진민택 / 민뚜라 작업 현황</p>
+          <div class="space-y-5">
+            <div v-for="manager in MANAGERS" :key="`ws-${manager}`">
+              <p class="mb-2 text-[12px] font-bold text-slate-700">{{ manager }} 작업 현황</p>
+              <div v-if="weldingMetrics[manager].inspectionRows.length === 0" class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">
+                이번 달 데이터 없음
+              </div>
+              <div v-else class="overflow-x-auto rounded-xl border border-slate-200">
+                <table class="w-full table-fixed border-collapse text-xs">
+                  <colgroup>
+                    <col style="width: 72px" />
+                    <col style="width: 82px" />
+                    <col style="width: 80px" />
+                    <col />
+                    <col />
+                    <col style="width: 65px" />
+                    <col style="width: 120px" />
+                  </colgroup>
+                  <thead>
+                    <tr class="bg-slate-50 text-slate-600">
+                      <th class="border border-slate-200 px-2 py-2 text-center font-bold">상태</th>
+                      <th class="border border-slate-200 px-2 py-2 text-center font-bold">도번</th>
+                      <th class="border border-slate-200 px-2 py-2 text-center font-bold">회사명</th>
+                      <th class="border border-slate-200 px-2 py-2 text-center font-bold">현장명</th>
+                      <th class="border border-slate-200 px-2 py-2 text-center font-bold">구역명</th>
+                      <th class="border border-slate-200 px-2 py-2 text-center font-bold">헤드</th>
+                      <th class="border border-slate-200 px-2 py-2 text-center font-bold whitespace-nowrap">검수일</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr
+                      v-for="item in weldingMetrics[manager].inspectionRows"
+                      :key="item.id"
+                      class="hover:bg-slate-50/60"
+                    >
+                      <td class="border border-slate-200 px-2 py-2 text-center">
+                        <span
+                          class="rounded-full px-2 py-0.5 text-[10px] font-bold"
+                          :class="item.welding_status === '작업완료' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'"
+                        >{{ item.welding_status }}</span>
+                      </td>
+                      <td class="border border-slate-200 px-2 py-2 text-center">{{ item.drawing_no || '-' }}</td>
+                      <td class="border border-slate-200 px-2 py-2 text-center">{{ item.company || '-' }}</td>
+                      <td class="border border-slate-200 px-2 py-2 text-center">{{ item.place || '-' }}</td>
+                      <td class="border border-slate-200 px-2 py-2 text-center">{{ item.area || '-' }}</td>
+                      <td class="border border-slate-200 px-2 py-2 text-center font-semibold">{{ formatCount(item.head_count) }}</td>
+                      <td class="border border-slate-200 px-2 py-2 text-center whitespace-nowrap">{{ item.test_date || '-' }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
-          <div class="mt-4 overflow-x-auto">
-            <table class="w-full border-separate border-spacing-0 text-sm table-fixed">
-              <colgroup>
-                <col class="w-[9%]" />
-                <col class="w-[7%]" />
-                <col class="w-[12%]" />
-                <col class="w-[14%]" />
-                <col class="w-[15%]" />
-                <col class="w-[8%]" />
-                <col class="w-[9%]" />
-                <col class="w-[27%]" />
-              </colgroup>
+        </section>
+
+        <!-- 오제작/누락분 목록 -->
+        <section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
+          <p class="mb-4 text-[13px] font-extrabold text-slate-900">오제작 / 누락분 목록</p>
+          <div v-if="weldingIssues.length === 0" class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">
+            등록된 항목이 없습니다.
+          </div>
+          <div v-else class="overflow-x-auto rounded-xl border border-slate-200">
+            <table class="w-full border-collapse text-xs">
               <thead>
                 <tr class="bg-slate-50 text-slate-600">
-                  <th class="border border-slate-200 px-3 py-2 text-center">접수일</th>
-                  <th class="border border-slate-200 px-3 py-2 text-center">담당자</th>
-                  <th class="border border-slate-200 px-3 py-2 text-center">회사</th>
-                  <th class="border border-slate-200 px-3 py-2 text-center">현장</th>
-                  <th class="border border-slate-200 px-3 py-2 text-center">구역</th>
-                  <th class="border border-slate-200 px-3 py-2 text-center">헤드수</th>
-                  <th class="border border-slate-200 px-3 py-2 text-center">전실/입상</th>
-                  <th class="border border-slate-200 px-3 py-2 text-center">내용</th>
+                  <th class="border border-slate-200 px-3 py-2 text-center font-bold">구분</th>
+                  <th class="border border-slate-200 px-3 py-2 text-center font-bold">담당자</th>
+                  <th class="border border-slate-200 px-3 py-2 text-center font-bold">회사명</th>
+                  <th class="border border-slate-200 px-3 py-2 text-center font-bold">현장명</th>
+                  <th class="border border-slate-200 px-3 py-2 text-center font-bold">구역명</th>
+                  <th class="border border-slate-200 px-3 py-2 text-center font-bold">헤드수</th>
+                  <th class="border border-slate-200 px-3 py-2 text-center font-bold">메모</th>
+                  <th class="border border-slate-200 px-3 py-2 text-center font-bold"></th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-if="misproductionRows.length === 0" class="bg-white">
-                  <td colspan="8" class="border border-slate-200 px-3 py-8 text-center text-slate-500">등록된 오제작 항목이 없습니다.</td>
-                </tr>
-                <tr v-for="row in misproductionRows" :key="`${row.reportedAt}-${row.place}`" class="bg-white">
-                  <td class="border border-slate-200 px-3 py-2 text-center">{{ formatShortDate(row.reportedAt) }}</td>
-                  <td class="border border-slate-200 px-3 py-2 text-center font-semibold">{{ row.manager }}</td>
-                  <td class="border border-slate-200 px-3 py-2 text-center">{{ row.company }}</td>
-                  <td class="border border-slate-200 px-3 py-2 text-center">{{ row.place }}</td>
-                  <td class="border border-slate-200 px-3 py-2 text-center">{{ row.area }}</td>
-                  <td class="border border-slate-200 px-3 py-2 text-center font-semibold text-slate-900">{{ formatHeadCount(row.headCount) }}</td>
-                  <td class="border border-slate-200 px-3 py-2 text-center font-semibold text-slate-900">{{ formatHeadCount(row.installCount) }}</td>
-                  <td class="border border-slate-200 px-4 py-2 text-left align-top">
-                    <button type="button" class="block w-full text-left whitespace-pre-wrap break-words leading-6 text-slate-700 hover:text-slate-900" @click="openIssueDetailDialog(row)">
-                      {{ row.detail }}
-                    </button>
+                <tr v-for="item in weldingIssues" :key="item.id" class="hover:bg-slate-50/60">
+                  <td class="border border-slate-200 px-3 py-2 text-center">
+                    <span
+                      class="rounded-full px-2 py-0.5 text-[10px] font-bold"
+                      :class="item.issue_type === 'misproduction' ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'"
+                    >{{ item.issue_type === 'misproduction' ? '오제작' : '누락분' }}</span>
                   </td>
-                </tr>
-                <tr class="bg-slate-50 font-bold text-slate-900">
-                  <td colspan="5" class="border border-slate-200 px-3 py-2 text-center">합계</td>
-                  <td class="border border-slate-200 px-3 py-2 text-center">{{ formatHeadCount(misproductionHeadTotal) }}</td>
-                  <td class="border border-slate-200 px-3 py-2 text-center">{{ formatHeadCount(misproductionInstallTotal) }}</td>
-                  <td class="border border-slate-200 px-3 py-2 text-center">-</td>
+                  <td class="border border-slate-200 px-3 py-2 text-center font-semibold">{{ item.inspector }}</td>
+                  <td class="border border-slate-200 px-3 py-2 text-center">{{ item.company || '-' }}</td>
+                  <td class="border border-slate-200 px-3 py-2 text-center">{{ item.place || '-' }}</td>
+                  <td class="border border-slate-200 px-3 py-2 text-center">{{ item.area || '-' }}</td>
+                  <td class="border border-slate-200 px-3 py-2 text-center font-semibold">{{ item.head_count || '-' }}</td>
+                  <td class="border border-slate-200 px-3 py-2 text-center">{{ item.memo || '-' }}</td>
+                  <td class="border border-slate-200 px-3 py-2 text-center">
+                    <button
+                      type="button"
+                      class="text-[11px] font-semibold text-red-500 hover:text-red-700 disabled:opacity-40"
+                      :disabled="deletingWeldingIssueId === item.id"
+                      @click="deleteWeldingIssue(item.id)"
+                    >삭제</button>
+                  </td>
                 </tr>
               </tbody>
             </table>
           </div>
         </section>
 
-        <section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
-          <div class="flex items-center justify-between gap-3">
-            <div>
-              <p class="text-[13px] font-extrabold text-slate-900">누락분 목록</p>
-            </div>
-            <div class="flex items-center gap-2">
-              <span class="rounded-full bg-rose-100 px-3 py-1 text-[11px] font-bold text-rose-700">{{ shortageRows.length }}건</span>
-              <Button class="h-9 px-3 text-xs" variant="outline" @click="openIssueDialog(null, 'shortage')">누락분 입력</Button>
-            </div>
-          </div>
-          <div class="mt-4 overflow-x-auto">
-            <table class="w-full border-separate border-spacing-0 text-sm table-fixed">
-              <colgroup>
-                <col class="w-[9%]" />
-                <col class="w-[8%]" />
-                <col class="w-[12%]" />
-                <col class="w-[14%]" />
-                <col class="w-[15%]" />
-                <col class="w-[8%]" />
-                <col class="w-[9%]" />
-                <col class="w-[26%]" />
-              </colgroup>
-              <thead>
-                <tr class="bg-slate-50 text-slate-600">
-                  <th class="border border-slate-200 px-3 py-2 text-center">접수일</th>
-                  <th class="border border-slate-200 px-3 py-2 text-center">담당자</th>
-                  <th class="border border-slate-200 px-3 py-2 text-center">회사</th>
-                  <th class="border border-slate-200 px-3 py-2 text-center">현장</th>
-                  <th class="border border-slate-200 px-3 py-2 text-center">구역</th>
-                  <th class="border border-slate-200 px-3 py-2 text-center">헤드수</th>
-                  <th class="border border-slate-200 px-3 py-2 text-center">전실/입상</th>
-                  <th class="border border-slate-200 px-3 py-2 text-center">내용</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-if="shortageRows.length === 0" class="bg-white">
-                  <td colspan="8" class="border border-slate-200 px-3 py-8 text-center text-slate-500">등록된 누락분 항목이 없습니다.</td>
-                </tr>
-                <tr v-for="row in shortageRows" :key="`${row.reportedAt}-${row.place}`" class="bg-white">
-                  <td class="border border-slate-200 px-3 py-2 text-center">{{ formatShortDate(row.reportedAt) }}</td>
-                  <td class="border border-slate-200 px-3 py-2 text-center font-semibold">{{ row.manager }}</td>
-                  <td class="border border-slate-200 px-3 py-2 text-center">{{ row.company }}</td>
-                  <td class="border border-slate-200 px-3 py-2 text-center">{{ row.place }}</td>
-                  <td class="border border-slate-200 px-3 py-2 text-center">{{ row.area }}</td>
-                  <td class="border border-slate-200 px-3 py-2 text-center font-semibold text-slate-900">{{ formatHeadCount(row.headCount) }}</td>
-                  <td class="border border-slate-200 px-3 py-2 text-center font-semibold text-slate-900">{{ formatHeadCount(row.installCount) }}</td>
-                  <td class="border border-slate-200 px-4 py-2 text-left align-top">
-                    <button type="button" class="block w-full text-left whitespace-pre-wrap break-words leading-6 text-slate-700 hover:text-slate-900" @click="openIssueDetailDialog(row)">
-                      {{ row.detail }}
-                    </button>
-                  </td>
-                </tr>
-                <tr class="bg-slate-50 font-bold text-slate-900">
-                  <td colspan="5" class="border border-slate-200 px-3 py-2 text-center">합계</td>
-                  <td class="border border-slate-200 px-3 py-2 text-center">{{ formatHeadCount(shortageHeadTotal) }}</td>
-                  <td class="border border-slate-200 px-3 py-2 text-center">{{ formatHeadCount(shortageInstallTotal) }}</td>
-                  <td class="border border-slate-200 px-3 py-2 text-center">-</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
       </div>
       </template>
     </main>
@@ -1056,170 +1001,6 @@ onMounted(fetchReportData)
       </div>
     </div>
 
-    <div v-if="selectedIssueDetailRow" class="report-dialog fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4">
-      <div class="w-full max-w-3xl rounded-3xl bg-white p-5 shadow-2xl md:p-6">
-        <div class="flex items-center justify-between gap-3">
-          <div>
-            <p class="text-[13px] font-extrabold text-slate-900">{{ issueTypeLabelMap[selectedIssueDetailRow.issueType] || '이슈' }} 상세</p>
-            <p class="mt-1 text-[12px] text-slate-500">{{ selectedIssueDetailRow.company || '-' }} · {{ selectedIssueDetailRow.place || '-' }}</p>
-          </div>
-          <button type="button" class="text-sm font-semibold text-slate-500 hover:text-slate-700" :disabled="deletingIssueEntry" @click="closeIssueDetailDialog">닫기</button>
-        </div>
-        <div class="mt-5 grid gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-2">
-          <div>
-            <p class="text-[11px] font-bold text-slate-500">접수일</p>
-            <p class="mt-1 text-sm font-semibold text-slate-900">{{ formatShortDate(selectedIssueDetailRow.reportedAt) }}</p>
-          </div>
-          <div>
-            <p class="text-[11px] font-bold text-slate-500">담당자</p>
-            <p class="mt-1 text-sm font-semibold text-slate-900">{{ selectedIssueDetailRow.manager || '-' }}</p>
-          </div>
-          <div>
-            <p class="text-[11px] font-bold text-slate-500">회사</p>
-            <p class="mt-1 text-sm font-semibold text-slate-900">{{ selectedIssueDetailRow.company || '-' }}</p>
-          </div>
-          <div>
-            <p class="text-[11px] font-bold text-slate-500">현장</p>
-            <p class="mt-1 text-sm font-semibold text-slate-900">{{ selectedIssueDetailRow.place || '-' }}</p>
-          </div>
-          <div>
-            <p class="text-[11px] font-bold text-slate-500">구역</p>
-            <p class="mt-1 text-sm font-semibold text-slate-900">{{ selectedIssueDetailRow.area || '-' }}</p>
-          </div>
-          <div>
-            <p class="text-[11px] font-bold text-slate-500">헤드 / 전실·입상</p>
-            <p class="mt-1 text-sm font-semibold text-slate-900">{{ formatHeadCount(selectedIssueDetailRow.headCount) }} / {{ formatHeadCount(selectedIssueDetailRow.installCount) }}</p>
-          </div>
-          <div class="md:col-span-2">
-            <p class="text-[11px] font-bold text-slate-500">내용</p>
-            <div class="mt-1 min-h-[180px] rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm leading-7 whitespace-pre-wrap break-words text-slate-800">
-              {{ selectedIssueDetailRow.detail || '-' }}
-            </div>
-          </div>
-        </div>
-        <div class="mt-5 flex justify-end gap-2">
-          <Button class="h-10 px-4 text-sm" variant="outline" :disabled="deletingIssueEntry" @click="closeIssueDetailDialog">닫기</Button>
-          <Button class="h-10 px-4 text-sm" variant="outline" :disabled="deletingIssueEntry" @click="openIssueDialog(selectedIssueDetailRow)">수정</Button>
-          <Button class="h-10 px-4 text-sm" :disabled="deletingIssueEntry" @click="deleteIssueEntry(selectedIssueDetailRow.id)">{{ deletingIssueEntry ? '삭제 중...' : '삭제' }}</Button>
-        </div>
-      </div>
-    </div>
-
-    <div v-if="isIssueDialogOpen" class="report-dialog fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4">
-      <div class="w-full max-w-4xl rounded-3xl bg-white p-5 shadow-2xl md:p-6">
-        <div class="flex items-center justify-between gap-3">
-          <div>
-            <p class="text-[13px] font-extrabold text-slate-900">{{ editingIssueId ? '이슈 수정' : '이슈 입력' }}</p>
-          </div>
-          <button type="button" class="text-sm font-semibold text-slate-500 hover:text-slate-700" :disabled="savingIssueEntry || deletingIssueEntry" @click="closeIssueDialog">닫기</button>
-        </div>
-        <div class="mt-5 grid gap-5 md:grid-cols-2">
-          <label class="block">
-            <p class="mb-2 text-sm font-bold text-slate-700">구분</p>
-            <select v-model="issueForm.issueType" class="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
-              <option value="misproduction">오제작</option>
-              <option value="shortage">누락분</option>
-            </select>
-          </label>
-          <label class="block">
-            <p class="mb-2 text-sm font-bold text-slate-700">담당자</p>
-            <select v-model="issueForm.manager" class="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
-              <option v-for="manager in MANAGERS" :key="manager" :value="manager">{{ manager }}</option>
-            </select>
-          </label>
-          <label class="block">
-            <p class="mb-2 text-sm font-bold text-slate-700">접수일</p>
-            <input v-model="issueForm.reportedAt" type="date" class="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2" />
-          </label>
-          <div class="block md:col-span-2">
-            <p class="mb-2 text-sm font-bold text-slate-700">회사명 검색</p>
-            <div class="flex gap-2">
-              <Input
-                class="flex-1"
-                :model-value="issueCompanySearchText"
-                placeholder="회사명 또는 현장명 검색"
-                @update:model-value="issueCompanySearchText = $event"
-                @keydown.enter="searchIssueCompanies"
-              />
-              <Button class="h-11 px-4 text-sm" variant="outline" @click="searchIssueCompanies">검색</Button>
-            </div>
-          </div>
-          <div class="block md:col-span-2">
-            <div class="max-h-[180px] overflow-y-auto rounded-2xl border border-slate-200 bg-slate-50 p-3">
-              <div v-if="issueCompanySearchLoading" class="py-6 text-center text-sm text-slate-500">검색 중...</div>
-              <div v-else-if="issueCompanySearchResults.length === 0" class="py-6 text-center text-sm text-slate-500">검색 결과가 없습니다.</div>
-              <div v-else class="space-y-2">
-                <button
-                  v-for="item in issueCompanySearchResults"
-                  :key="item.id"
-                  type="button"
-                  class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-left hover:border-slate-300 hover:bg-slate-50"
-                  @click="selectIssueCompany(item)"
-                >
-                  <p class="text-sm font-extrabold text-slate-900">{{ item.company || '-' }}</p>
-                  <p class="mt-1 text-sm text-slate-600">{{ item.place || '-' }}</p>
-                  <p class="mt-1 text-xs text-slate-500">{{ item.fullName || '-' }}</p>
-                </button>
-              </div>
-            </div>
-          </div>
-          <div class="grid gap-5 md:col-span-2 md:grid-cols-3">
-            <label class="block">
-              <p class="mb-2 text-sm font-bold text-slate-700">회사명</p>
-              <Input :model-value="issueForm.company" readonly placeholder="검색 후 선택" />
-            </label>
-            <label class="block">
-              <p class="mb-2 text-sm font-bold text-slate-700">현장명</p>
-              <Input :model-value="issueForm.place" readonly placeholder="검색 후 선택" />
-            </label>
-            <label class="block">
-              <p class="mb-2 text-sm font-bold text-slate-700">구역</p>
-              <input v-model="issueForm.area" type="text" class="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2" placeholder="구역을 입력해주세요" />
-            </label>
-          </div>
-          <div class="grid gap-5 md:col-span-2 md:grid-cols-2">
-            <label class="block">
-              <p class="mb-2 text-sm font-bold text-slate-700">헤드수</p>
-              <div class="flex items-center gap-2">
-                <input
-                  :value="issueForm.headCount"
-                  type="text"
-                  inputmode="numeric"
-                  class="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-right text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
-                  placeholder="0"
-                  @input="issueForm.headCount = sanitizeCountInput($event.target.value)"
-                />
-                <span class="shrink-0 text-xs font-semibold text-slate-500">개</span>
-              </div>
-            </label>
-            <label class="block">
-              <p class="mb-2 text-sm font-bold text-slate-700">전실/입상</p>
-              <div class="flex items-center gap-2">
-                <input
-                  :value="issueForm.installCount"
-                  type="text"
-                  inputmode="numeric"
-                  class="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-right text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
-                  placeholder="0"
-                  @input="issueForm.installCount = sanitizeCountInput($event.target.value)"
-                />
-                <span class="shrink-0 text-xs font-semibold text-slate-500">개</span>
-              </div>
-            </label>
-          </div>
-          <label class="block md:col-span-2">
-            <p class="mb-2 text-sm font-bold text-slate-700">{{ issueTypeLabelMap[issueForm.issueType] || '이슈' }} 내용</p>
-            <textarea v-model="issueForm.detail" rows="4" class="min-h-[112px] w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2" placeholder="상세 내용을 입력해주세요" />
-          </label>
-        </div>
-        <p v-if="issueEntryError" class="mt-4 text-sm font-bold text-red-600">{{ issueEntryError }}</p>
-        <div class="mt-5 flex justify-end gap-2">
-          <Button v-if="editingIssueId" class="h-10 px-4 text-sm" variant="outline" :disabled="savingIssueEntry || deletingIssueEntry" @click="deleteIssueEntry(editingIssueId)">{{ deletingIssueEntry ? '삭제 중...' : '삭제' }}</Button>
-          <Button class="h-10 px-4 text-sm" variant="outline" :disabled="savingIssueEntry || deletingIssueEntry" @click="closeIssueDialog">닫기</Button>
-          <Button class="h-10 px-4 text-sm" :disabled="savingIssueEntry || deletingIssueEntry" @click="saveIssueEntry">{{ savingIssueEntry ? '저장 중...' : editingIssueId ? '수정' : '저장' }}</Button>
-        </div>
-      </div>
-    </div>
   </section>
 </template>
 

@@ -60,6 +60,8 @@ const workManToStageKey = {
   무용접반: 'nasa',
   나사: 'nasa',
   용접: 'welding',
+  진민택: 'welding',
+  민뚜라: 'welding',
   '티&면치': 'beveling',
   메인: 'main_work',
   관리자: 'all',

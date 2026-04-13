@@ -46,6 +46,8 @@ const workManRoleToStages = {
   레이저2: ['marking_laser_2'],
   무용접: ['nasa'],
   용접: ['welding'],
+  진민택: ['welding'],
+  민뚜라: ['welding'],
   '티&면치': ['beveling'],
   메인: ['main_work'],
   관리자: ['*'],
@@ -183,12 +185,17 @@ const isVirtualDistributedRow = (row) =>
 const isDistributedRow = (row) => isActualDistributedRow(row) || isVirtualDistributedRow(row)
 const isCompletedRow = (row) => Boolean(row?.complete)
 
+const isEffectivelyCompleted = (row) =>
+  Boolean(row?.complete) ||
+  row?.worker_t === '작업완료' ||
+  row?.worker_main === '작업완료'
+
 const sortRowsByPriority = (rows) => {
   return [...rows].sort((a, b) => {
     const rank = (row) => {
       const distributed = isDistributedRow(row)
-      const completed = isCompletedRow(row)
-      // 0: 배포, 1: 작업완료, 2: 미배포
+      const completed = isEffectivelyCompleted(row)
+      // 0: 배포됨(작업안됨), 1: 작업완료, 2: 도면배포 안됨(미배포)
       if (distributed && !completed) return 0
       if (completed) return 1
       return 2
@@ -206,9 +213,7 @@ const sortRowsByPriority = (rows) => {
     if (companyCompare !== 0) return companyCompare
     const placeCompare = compareText(a?.place, b?.place)
     if (placeCompare !== 0) return placeCompare
-    const areaCompare = compareText(a?.area, b?.area)
-    if (areaCompare !== 0) return areaCompare
-    return compareText(a?.initial, b?.initial)
+    return compareText(a?.area, b?.area)
   })
 }
 
@@ -302,7 +307,7 @@ export function useProductionPlan(session) {
     planError.value = ''
 
     const baseColumns =
-      'id,no,company_info,uid,initial,company,place,area,memo,full_text,work_type,hole,head,groove,weight,name,test_date,drawing,is_drawing,drawing_date,delivery_due_date,delay_time,delay_text,complete,complete_date,shipment,not_test,hold,outsourcing,paper,calculation,ahn,stamp,worker_t,worker_t_time,worker_t_time_final,worker_main,worker_main_time,worker_main_time_final,worker_nasa,worker_nasa_time,worker_nasa_time_final,worker_welding,worker_welding_time,worker_welding_time_final,marking_weld_a_status,marking_weld_a_started_on,marking_weld_a_completed_on,marking_weld_b_status,marking_weld_b_started_on,marking_weld_b_completed_on,marking_laser_1_status,marking_laser_1_started_on,marking_laser_1_completed_on,marking_laser_2_status,marking_laser_2_started_on,marking_laser_2_completed_on,cutting_status,beveling_status,beveling_started_on,beveling_completed_on,main_status,main_started_on,main_completed_on,nasa_status,nasa_started_on,nasa_completed_on,welding_status,welding_started_on,welding_completed_on'
+      'id,no,company_info,uid,initial,company,place,area,memo,full_text,work_type,hole,head,groove,weight,name,test_date,drawing,is_drawing,drawing_date,delivery_due_date,delay_time,delay_text,complete,complete_date,shipment,not_test,hold,outsourcing,paper,calculation,ahn,stamp,worker_t,worker_t_time,worker_t_time_final,worker_main,worker_main_time,worker_main_time_final,worker_nasa,worker_nasa_time,worker_nasa_time_final,worker_welding,worker_welding_time,worker_welding_time_final,marking_weld_a_status,marking_weld_a_started_on,marking_weld_a_completed_on,marking_weld_b_status,marking_weld_b_started_on,marking_weld_b_completed_on,marking_laser_1_status,marking_laser_1_started_on,marking_laser_1_completed_on,marking_laser_2_status,marking_laser_2_started_on,marking_laser_2_completed_on,cutting_status,beveling_status,beveling_started_on,beveling_completed_on,main_status,main_started_on,main_completed_on,nasa_status,nasa_started_on,nasa_completed_on,welding_status,welding_started_on,welding_completed_on,welding_inspector'
     const withVirtualColumns = `${baseColumns},virtual_drawing_distributed`
     const runQuery = (columns) => {
       let query = supabase.from(PRODUCT_LIST_TABLE).select(columns)
@@ -380,6 +385,16 @@ export function useProductionPlan(session) {
     if (current === '작업완료' && longPressMs < LONG_PRESS_REQUIRED_MS) {
       return { ok: false, reason: 'long_press_required' }
     }
+
+    // 용접 단계 잠금: 작업중을 누른 사람만 작업완료 가능
+    if (field === 'welding_status' && !isAdminRole(role)) {
+      const inspector = String(row.welding_inspector ?? '').trim()
+      const normalized = normalizeWorkMan(workMan)
+      if (current === '작업중' && inspector && normalizeWorkMan(inspector) !== normalized) {
+        return { ok: false, reason: 'unauthorized' }
+      }
+    }
+
     const next = statusCycle[current]
 
     const nextRow = { ...row, [field]: next }
@@ -387,6 +402,15 @@ export function useProductionPlan(session) {
     const worker_main = resolveWorkerMainStatus(nextRow)
     const worker_welding = resolveWorkerWeldingStatus(nextRow)
     const updatePayload = { [field]: next, worker_t, worker_main, worker_welding }
+
+    // 용접 inspector 추적: 작업중 → 저장, 없음(롱클릭 초기화) → 완전 클리어
+    if (field === 'welding_status') {
+      if (next === '작업중') {
+        updatePayload.welding_inspector = workMan ?? ''
+      } else if (next === '없음') {
+        updatePayload.welding_inspector = ''
+      }
+    }
     const todayText = formatWorkerDate(new Date())
     const todayDate = formatIsoDate(new Date())
     if (dateFields) {
@@ -440,6 +464,36 @@ export function useProductionPlan(session) {
     if (error) {
       planError.value = `상태 변경 실패: ${error.message}`
       return { ok: false, reason: 'db_error' }
+    }
+
+    if (field === 'welding_status') {
+      if (next === '작업중' || next === '작업완료') {
+        const { error: upsertError } = await supabase.from('welding_inspections').upsert(
+          {
+            product_list_id: rowId,
+            company: String(row.company ?? ''),
+            place: String(row.place ?? ''),
+            area: String(row.area ?? ''),
+            head_count: Number(row.head ?? 0),
+            drawing_no: String(row.initial ?? ''),
+            test_date: String(row.test_date ?? ''),
+            inspector: String(workMan ?? ''),
+            welding_status: next,
+          },
+          { onConflict: 'product_list_id' },
+        )
+        if (upsertError) {
+          console.error('welding_inspections upsert error:', upsertError.message)
+        }
+      } else if (next === '없음') {
+        const { error: deleteError } = await supabase
+          .from('welding_inspections')
+          .delete()
+          .eq('product_list_id', rowId)
+        if (deleteError) {
+          console.error('welding_inspections delete error:', deleteError.message)
+        }
+      }
     }
 
     const updated = [...planRows.value]
@@ -653,12 +707,13 @@ export function useProductionPlan(session) {
 
     const uploadedRows = []
     for (const file of uploadTargets) {
-      const safeName = sanitizeStorageFileName(file.name || `drawing-${Date.now()}`)
+      const originalName = file.name || `drawing-${Date.now()}`
+      const ext = originalName.includes('.') ? originalName.slice(originalName.lastIndexOf('.')) : ''
       const randomId =
         typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
           ? crypto.randomUUID()
           : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-      const storagePath = `drawings/${rowId}/${randomId}_${safeName}`
+      const storagePath = `drawings/${rowId}/${randomId}${ext}`
 
       const { error: uploadError } = await supabase.storage.from('media').upload(storagePath, file, {
         cacheControl: '3600',
@@ -676,7 +731,7 @@ export function useProductionPlan(session) {
         .from('drawing_pdf')
         .insert({
           product_list_id: rowId,
-          name: safeName,
+          name: originalName,
           url: publicUrl || null,
           storage_url: publicUrl || null,
           nas_path: storagePath,
@@ -691,7 +746,7 @@ export function useProductionPlan(session) {
 
       uploadedRows.push({
         id: insertedRow.id,
-        name: String(insertedRow.name ?? '').trim() || safeName,
+        name: String(insertedRow.name ?? '').trim() || originalName,
         viewUrl: String(insertedRow.storage_url ?? insertedRow.url ?? '').trim(),
         rawPath: String(insertedRow.nas_path ?? '').trim(),
         createdAt: insertedRow.created_at,
