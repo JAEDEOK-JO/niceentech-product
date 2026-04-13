@@ -59,9 +59,6 @@ const workManToStageKey = {
   무용접: 'nasa',
   무용접반: 'nasa',
   나사: 'nasa',
-  용접: 'welding',
-  진민택: 'welding',
-  민뚜라: 'welding',
   '티&면치': 'beveling',
   메인: 'main_work',
   관리자: 'all',
@@ -74,6 +71,8 @@ const pressStartedAt = ref({})
 const longPressTimers = new Map()
 const longPressTriggered = new Set()
 const ignoreNextClick = new Set()
+const isWeldingDialogOpen = ref(false)
+const weldingDialogRow = ref(null)
 const isCallDialogOpen = ref(false)
 const activeCallRow = ref(null)
 const delayTextInput = ref('')
@@ -276,6 +275,82 @@ const consumeIgnoredClick = (pressKey) => {
   ignoreNextClick.delete(pressKey)
   return true
 }
+const canOpenWeldingDialog = (workMan) => {
+  if (isAdminRole(props.currentRole)) return true
+  const normalized = normalizeWorkMan(workMan)
+  return ['용접', '진민택', '민뚜라'].some((w) => normalized.includes(normalizeWorkMan(w)))
+}
+
+const weldingDialogStatus = computed(() => {
+  const raw = String(weldingDialogRow.value?.welding_status ?? '').trim()
+  if (raw.includes('작업중')) return '작업중'
+  if (raw.includes('작업완료')) return '작업완료'
+  return '없음'
+})
+const weldingDialogInspector = computed(() => String(weldingDialogRow.value?.welding_inspector ?? '').trim())
+const weldingDialogTitle = computed(() => {
+  const status = weldingDialogStatus.value
+  const inspector = weldingDialogInspector.value
+  if ((status === '작업중' || status === '작업완료') && inspector) {
+    return `용접 담당자 ${inspector}`
+  }
+  return '용접 담당자 선택'
+})
+const weldingDialogButtons = computed(() => {
+  const status = weldingDialogStatus.value
+  const inspector = weldingDialogInspector.value
+  if (status === '작업중') {
+    if (inspector === '진민택') return [{ name: '진민택', label: '작업완료', color: 'red', longPressMs: 0 }]
+    if (inspector === '민뚜라') return [{ name: '민뚜라', label: '작업완료', color: 'red', longPressMs: 0 }]
+  }
+  if (status === '작업완료') {
+    return [{ name: inspector || '용접', label: '없음으로 초기화', color: 'gray', longPressMs: 700 }]
+  }
+  return [
+    { name: '진민택', label: '진민택', color: 'dark', longPressMs: 0 },
+    { name: '민뚜라', label: '민뚜라', color: 'purple', longPressMs: 0 },
+  ]
+})
+
+const openWeldingDialog = (row) => {
+  if (isRowDisabled(row)) {
+    showSnack('도면 배포전 입니다')
+    return
+  }
+  if (!canOpenWeldingDialog(props.currentWorkMan)) {
+    showSnack('권한이 없습니다.')
+    return
+  }
+  weldingDialogRow.value = row
+  isWeldingDialogOpen.value = true
+}
+
+const closeWeldingDialog = () => {
+  isWeldingDialogOpen.value = false
+  weldingDialogRow.value = null
+}
+
+const handleWeldingSelect = (workerName, longPressMs = 0) => {
+  const row = weldingDialogRow.value
+  if (!row) return
+  closeWeldingDialog()
+  emit('toggle-work-status', {
+    rowId: row.id,
+    stageKey: 'welding',
+    overrideWorkMan: workerName,
+    longPressMs,
+    onResult: (result) => {
+      if (!result?.ok && result?.reason === 'long_press_required') {
+        showSnack('작업완료에서 작업전 변경은 롱클릭이 필요합니다')
+        return
+      }
+      if (!result?.ok && result?.reason === 'unauthorized') {
+        showSnack('권한이 없습니다.')
+      }
+    },
+  })
+}
+
 const emitToggleWorkStatus = (row, stageKey, longPressMs) => {
   emit('toggle-work-status', {
     rowId: row.id,
@@ -335,10 +410,16 @@ const handleStagePressStart = (row, stageKey, currentWorkMan) => {
   startLongPress({ row, stageKey, currentWorkMan })
 }
 const handleMobileStagePressStart = (row, stageKey, currentWorkMan) => {
+  if (stageKey === 'welding') return
   if (!ensureMobileRowEditable(row.id)) return
   handleStagePressStart(row, stageKey, currentWorkMan)
 }
 const handleMobileStageClick = (row, stageKey, currentWorkMan) => {
+  if (stageKey === 'welding') {
+    if (!ensureMobileRowEditable(row.id)) return
+    openWeldingDialog(row)
+    return
+  }
   if (!ensureMobileRowEditable(row.id)) return
   handleStageClick(row, stageKey, currentWorkMan)
 }
@@ -887,6 +968,20 @@ onBeforeUnmount(() => {
                         메뉴
                       </button>
                       <button
+                        v-else-if="isStageColumn(col.key) && col.key === 'welding'"
+                        type="button"
+                        class="inline-flex min-w-[64px] items-center justify-center rounded-md px-2 py-1 text-xs font-semibold"
+                        :class="[
+                          statusClass(getCellText(row, col.key)),
+                          getCellText(row, col.key) === '없음' ? 'border border-transparent shadow-none' : '',
+                        ]"
+                        @mousedown.stop
+                        @touchstart.stop
+                        @click.stop="openWeldingDialog(row)"
+                      >
+                        {{ getCellText(row, col.key) }}
+                      </button>
+                      <button
                         v-else-if="isStageColumn(col.key)"
                         type="button"
                         class="inline-flex min-w-[64px] items-center justify-center rounded-md px-2 py-1 text-xs font-semibold"
@@ -917,6 +1012,45 @@ onBeforeUnmount(() => {
               </table>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <div
+      v-if="isWeldingDialogOpen && weldingDialogRow"
+      class="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40 p-4"
+      @click.self="closeWeldingDialog"
+    >
+      <div class="w-full max-w-xs rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden">
+        <div class="px-5 pt-5 pb-4">
+          <h3 class="text-lg font-extrabold text-slate-900">{{ weldingDialogTitle }}</h3>
+          <div class="mt-3 space-y-1 text-sm">
+            <p class="font-bold text-slate-800">{{ weldingDialogRow.company || '-' }}</p>
+            <p class="text-slate-500">{{ weldingDialogRow.place || '-' }}</p>
+            <p v-if="weldingDialogRow.area" class="text-slate-400 text-xs">{{ weldingDialogRow.area }}</p>
+          </div>
+        </div>
+        <div class="px-5 pb-4 flex gap-3">
+          <button
+            v-for="btn in weldingDialogButtons"
+            :key="btn.name"
+            type="button"
+            class="flex-1 rounded-xl py-4 text-base font-extrabold tracking-wide transition active:scale-95"
+            :class="{
+              'bg-red-500 text-white hover:bg-red-600 shadow-md shadow-red-200': btn.color === 'red',
+              'bg-slate-800 text-white hover:bg-slate-700': btn.color === 'dark',
+              'bg-violet-600 text-white hover:bg-violet-700': btn.color === 'purple',
+              'bg-slate-200 text-slate-700 hover:bg-slate-300': btn.color === 'gray',
+            }"
+            @click="handleWeldingSelect(btn.name, btn.longPressMs)"
+          >
+            {{ btn.label }}
+          </button>
+        </div>
+        <div class="border-t border-slate-100 px-5 py-3">
+          <button type="button" class="w-full rounded-xl py-2.5 text-sm font-semibold text-slate-500 hover:bg-slate-50 transition" @click="closeWeldingDialog">
+            취소
+          </button>
         </div>
       </div>
     </div>

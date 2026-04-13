@@ -124,16 +124,18 @@ const getWorkerDisplayInfo = (row, key) => {
   const finalTime = String(row?.[meta.finalTimeField] ?? '').trim()
   const completedTime = String(row?.[meta.timeField] ?? '').trim()
 
-  if (hasAllWorkerSourcesNone(row, key)) {
-    return { text: '없음', tone: '없음' }
-  }
-
   if (rawStatus === '출하완료' && finalTime) {
     return { text: formatStatusDate(finalTime), tone: '출하완료' }
   }
   if (status === '작업완료' && completedTime) {
     return { text: formatStatusDate(completedTime), tone: '작업완료' }
   }
+
+  // worker 필드 자체가 없음/빈값일 때만 소스 stage 기준으로 없음 판단
+  if ((!rawStatus || rawStatus === '없음') && hasAllWorkerSourcesNone(row, key)) {
+    return { text: '없음', tone: '없음' }
+  }
+
   return { text: rawStatus || '', tone: rawStatus || status || '작업전' }
 }
 

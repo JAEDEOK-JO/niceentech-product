@@ -47,11 +47,11 @@ const goStats = () => {
   router.push('/stats')
 }
 
-const handleToggleWorkStatus = async ({ rowId, stageKey, longPressMs, onResult }) => {
+const handleToggleWorkStatus = async ({ rowId, stageKey, longPressMs, overrideWorkMan, onResult }) => {
   const result = await toggleWorkStatus({
     rowId,
     stageKey,
-    workMan: profile.value?.work_man ?? '',
+    workMan: overrideWorkMan ?? profile.value?.work_man ?? '',
     role: profile.value?.role ?? '',
     longPressMs,
   })
