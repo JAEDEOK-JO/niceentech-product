@@ -395,13 +395,11 @@ const monthlyComparisonRows = computed(() =>
     const twoMonthsAgoValue = twoMonthsAgoCounts.value[item.key]
     const previousValue = previousCounts.value[item.key]
     const currentProgressValue = currentMonthProgressCounts.value[item.key]
-    const progressRate = previousValue > 0 ? Math.round((currentProgressValue / previousValue) * 100) : 0
     return {
       ...item,
       twoMonthsAgoValue,
       previousValue,
       currentProgressValue,
-      progressRate,
     }
   }),
 )
@@ -704,7 +702,6 @@ onMounted(async () => {
                         <th class="px-4 py-3 text-center">{{ twoMonthsAgoLabel }}</th>
                         <th class="px-4 py-3 text-center">{{ previousMonthLabel }}</th>
                         <th class="px-4 py-3 text-center">{{ currentMonthProgressLabel }}</th>
-                        <th class="px-4 py-3 text-center">증감률</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -727,12 +724,6 @@ onMounted(async () => {
                         <td class="px-4 py-4 text-center font-semibold text-slate-500">{{ formatCount(item.twoMonthsAgoValue) }}</td>
                         <td class="px-4 py-4 text-center font-semibold text-slate-700">{{ formatCount(item.previousValue) }}</td>
                         <td class="px-4 py-4 text-center font-extrabold text-slate-900">{{ formatCount(item.currentProgressValue) }}</td>
-                        <td
-                          class="px-4 py-4 text-center font-extrabold"
-                          :class="item.currentProgressValue >= item.previousValue ? 'text-emerald-600' : 'text-rose-600'"
-                        >
-                          {{ item.progressRate }}%
-                        </td>
                       </tr>
                     </tbody>
                   </table>

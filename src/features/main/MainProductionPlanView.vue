@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import Button from '@/components/ui/button/Button.vue'
 import Input from '@/components/ui/input/Input.vue'
 import MainProductionPlanGroupTable from '@/features/main/MainProductionPlanGroupTable.vue'
@@ -26,6 +26,8 @@ const emit = defineEmits([
   'toggle-row-hold',
   'delete-row',
   'cell-action',
+  'ship-row',
+  'cancel-ship-row',
   'move-test-date',
   'load-drawing-files',
   'upload-drawing-files',
@@ -56,6 +58,13 @@ const selectedRowId = ref(null)
 const isTestDateDialogOpen = ref(false)
 const pendingTestDateIso = ref('')
 const activeTestDateRow = ref(null)
+
+const isShipmentConfirmOpen = ref(false)
+const activeShipmentRow = ref(null)
+const shipmentMode = ref('ship') // 'ship' | 'cancel'
+const snackbarMessage = ref('')
+const snackbarVisible = ref(false)
+let snackbarTimer = null
 
 const isDrawingDialogOpen = ref(false)
 const drawingFiles = ref([])
@@ -300,8 +309,52 @@ const handleCellClick = ({ row, columnKey }) => {
     })
     return
   }
+  const workerColumns = ['worker_t', 'worker_nasa', 'worker_main', 'worker_welding']
+  if (workerColumns.includes(columnKey)) {
+    if (row?.shipment) {
+      activeShipmentRow.value = row
+      shipmentMode.value = 'cancel'
+      isShipmentConfirmOpen.value = true
+    } else if (Boolean(row?.complete) || row?.worker_t === '작업완료' || row?.worker_main === '작업완료') {
+      activeShipmentRow.value = row
+      shipmentMode.value = 'ship'
+      isShipmentConfirmOpen.value = true
+    } else {
+      showSnackbar('출하완료가 불가능합니다.')
+    }
+    return
+  }
+
   emit('cell-action', { row, columnKey })
 }
+
+const closeShipmentConfirm = () => {
+  isShipmentConfirmOpen.value = false
+  activeShipmentRow.value = null
+}
+
+const handleConfirmShipment = () => {
+  if (!activeShipmentRow.value) return
+  if (shipmentMode.value === 'cancel') {
+    emit('cancel-ship-row', activeShipmentRow.value)
+  } else {
+    emit('ship-row', activeShipmentRow.value)
+  }
+  closeShipmentConfirm()
+}
+
+const showSnackbar = (message) => {
+  snackbarMessage.value = message
+  snackbarVisible.value = true
+  if (snackbarTimer) clearTimeout(snackbarTimer)
+  snackbarTimer = setTimeout(() => {
+    snackbarVisible.value = false
+  }, 3000)
+}
+
+onUnmounted(() => {
+  if (snackbarTimer) clearTimeout(snackbarTimer)
+})
 
 const closeTestDateDialog = () => {
   isTestDateDialogOpen.value = false
@@ -745,6 +798,46 @@ const selectDrawingFile = (file) => {
         </div>
       </div>
     </div>
+
+    <div
+      v-if="isShipmentConfirmOpen && activeShipmentRow"
+      class="print-hide fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 px-4"
+      @click.self="closeShipmentConfirm"
+    >
+      <div class="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+        <h3 class="text-lg font-bold text-slate-900">{{ shipmentMode === 'cancel' ? '출하완료 취소' : '출하완료 처리' }}</h3>
+        <p class="mt-2 text-sm font-semibold leading-6 text-slate-600">
+          {{ activeShipmentRow.company || '-' }} / {{ activeShipmentRow.place || '-' }}
+        </p>
+        <p class="text-sm text-slate-500">{{ activeShipmentRow.area || '-' }}</p>
+        <div class="mt-6 flex justify-end gap-2">
+          <Button class="h-10 px-4 text-sm" variant="outline" @click="closeShipmentConfirm">취소</Button>
+          <Button
+            class="h-10 px-4 text-sm text-white"
+            :class="shipmentMode === 'cancel' ? 'bg-slate-600 hover:bg-slate-700' : 'bg-red-500 hover:bg-red-600'"
+            @click="handleConfirmShipment"
+          >
+            {{ shipmentMode === 'cancel' ? '출하완료 취소' : '출하완료' }}
+          </Button>
+        </div>
+      </div>
+    </div>
+
+    <transition
+      enter-active-class="transition ease-out duration-200"
+      enter-from-class="translate-y-4 opacity-0"
+      enter-to-class="translate-y-0 opacity-100"
+      leave-active-class="transition ease-in duration-150"
+      leave-from-class="translate-y-0 opacity-100"
+      leave-to-class="translate-y-4 opacity-0"
+    >
+      <div
+        v-if="snackbarVisible"
+        class="print-hide fixed bottom-6 left-1/2 z-[70] -translate-x-1/2 rounded-xl bg-slate-800 px-5 py-3 text-sm font-semibold text-white shadow-lg"
+      >
+        {{ snackbarMessage }}
+      </div>
+    </transition>
   </section>
 </template>
 

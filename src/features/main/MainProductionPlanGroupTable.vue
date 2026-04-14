@@ -16,7 +16,7 @@ defineProps({
   overallTotals: { type: Object, required: true },
 })
 
-const clickableColumns = ['initial', 'design_distributed', 'name', 'company', 'place', 'area', 'drawing']
+const clickableColumns = ['initial', 'design_distributed', 'name', 'company', 'place', 'area', 'drawing', 'worker_t', 'worker_nasa', 'worker_main', 'worker_welding']
 const tableBorderStyle = {
   borderColor: 'rgba(0, 0, 0, 0.28)',
   borderWidth: '0.1px',
@@ -169,7 +169,7 @@ const emit = defineEmits(['open-row-menu', 'cell-click'])
                 class="flex h-full w-full items-center justify-center bg-transparent p-0 text-inherit"
                 @click="emit('cell-click', { row, columnKey: column.key })"
               >
-                <span class="cell-fixed-text block w-full">{{ getCellText(row, column.key) }}</span>
+                <span class="cell-fixed-text block w-full" :class="isStatusCompactColumn(column.key) ? 'text-center text-[11px] font-bold' : ''">{{ getCellText(row, column.key) }}</span>
               </button>
               <span v-else-if="isStatusCompactColumn(column.key) || isCompactTextColumn(column.key)" class="cell-fixed-text block text-center text-[11px] font-bold">
                 {{ getCellText(row, column.key) }}

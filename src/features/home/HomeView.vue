@@ -300,8 +300,8 @@ const weldingDialogButtons = computed(() => {
   const status = weldingDialogStatus.value
   const inspector = weldingDialogInspector.value
   if (status === '작업중') {
-    if (inspector === '진민택') return [{ name: '진민택', label: '작업완료', color: 'red', longPressMs: 0 }]
-    if (inspector === '민뚜라') return [{ name: '민뚜라', label: '작업완료', color: 'red', longPressMs: 0 }]
+    if (inspector === '진민택') return [{ name: '진민택', label: `작업완료(진민택)`, color: 'red', longPressMs: 0 }]
+    if (inspector === '민뚜라') return [{ name: '민뚜라', label: `작업완료(민뚜라)`, color: 'red', longPressMs: 0 }]
   }
   if (status === '작업완료') {
     return [{ name: inspector || '용접', label: '없음으로 초기화', color: 'gray', longPressMs: 700 }]
@@ -1023,7 +1023,13 @@ onBeforeUnmount(() => {
     >
       <div class="w-full max-w-xs rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden">
         <div class="px-5 pt-5 pb-4">
-          <h3 class="text-lg font-extrabold text-slate-900">{{ weldingDialogTitle }}</h3>
+          <h3 class="text-lg font-extrabold text-slate-900">
+            <template v-if="weldingDialogStatus === '작업중' || weldingDialogStatus === '작업완료'">
+              용접 담당자
+              <span class="text-violet-600">{{ weldingDialogInspector }}</span>
+            </template>
+            <template v-else>용접 담당자 선택</template>
+          </h3>
           <div class="mt-3 space-y-1 text-sm">
             <p class="font-bold text-slate-800">{{ weldingDialogRow.company || '-' }}</p>
             <p class="text-slate-500">{{ weldingDialogRow.place || '-' }}</p>

@@ -92,6 +92,59 @@ const handleDeleteRow = async (row) => {
   await deletePlanRow({ rowId: row.id })
 }
 
+const handleCancelShipRow = async (row) => {
+  if (!row?.id) return
+  const updates = { shipment: false }
+  if (row.worker_t === '출하완료') {
+    updates.worker_t = '작업완료'
+    updates.worker_t_time_final = ''
+  }
+  if (row.worker_nasa === '출하완료') {
+    updates.worker_nasa = '작업완료'
+    updates.worker_nasa_time_final = ''
+  }
+  if (row.worker_main === '출하완료') {
+    updates.worker_main = '작업완료'
+    updates.worker_main_time_final = ''
+  }
+  if (row.worker_welding === '출하완료') {
+    updates.worker_welding = '작업완료'
+    updates.worker_welding_time_final = ''
+  }
+  await updatePlanRowFields({ rowId: row.id, updates })
+}
+
+const handleShipRow = async (row) => {
+  if (!row?.id) return
+  const now = new Date()
+  const yy = String(now.getFullYear()).slice(2)
+  const mm = String(now.getMonth() + 1).padStart(2, '0')
+  const dd = String(now.getDate()).padStart(2, '0')
+  const HH = String(now.getHours()).padStart(2, '0')
+  const min = String(now.getMinutes()).padStart(2, '0')
+  const finalTimeStr = `${yy}.${mm}.${dd} ${HH}:${min}`
+
+  const updates = { shipment: true }
+  if (row.worker_t === '작업완료') {
+    updates.worker_t = '출하완료'
+    updates.worker_t_time_final = finalTimeStr
+  }
+  if (row.worker_nasa === '작업완료') {
+    updates.worker_nasa = '출하완료'
+    updates.worker_nasa_time_final = finalTimeStr
+  }
+  if (row.worker_main === '작업완료') {
+    updates.worker_main = '출하완료'
+    updates.worker_main_time_final = finalTimeStr
+  }
+  if (row.worker_welding === '작업완료') {
+    updates.worker_welding = '출하완료'
+    updates.worker_welding_time_final = finalTimeStr
+  }
+
+  await updatePlanRowFields({ rowId: row.id, updates })
+}
+
 const handleCellAction = async ({ row, columnKey }) => {
   if (!row?.id || !columnKey) return
 
@@ -218,6 +271,8 @@ watch(
     @toggle-row-inspection="handleToggleInspection"
     @toggle-row-hold="handleToggleHold"
     @delete-row="handleDeleteRow"
+    @ship-row="handleShipRow"
+    @cancel-ship-row="handleCancelShipRow"
     @cell-action="handleCellAction"
     @move-test-date="handleMoveTestDate"
     @load-drawing-files="handleLoadDrawingFiles"

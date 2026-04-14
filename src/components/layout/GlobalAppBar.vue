@@ -28,10 +28,12 @@ const navItems = computed(() => {
     items.push({ key: 'company-register', label: '회사등록', to: { name: 'company-register' } })
     items.push({ key: 'company-list', label: '회사리스트', to: { name: 'company-list' } })
   }
+  items.push({ key: 'messenger', label: '메신저', to: { name: 'messenger' } })
   return items
 })
 
 const activeSection = computed(() => {
+  if (route.path.startsWith('/messenger')) return 'messenger'
   if (route.path.startsWith('/company/list')) return 'company-list'
   if (route.path.startsWith('/company/register')) return 'company-register'
   if (route.path.startsWith('/reports')) return 'reports'

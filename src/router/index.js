@@ -27,6 +27,7 @@ import AdminSalesDashboardPage from '@/pages/AdminSalesDashboardPage.vue'
 import AdminDesignDashboardPage from '@/pages/AdminDesignDashboardPage.vue'
 import AdminOperationsDashboardPage from '@/pages/AdminOperationsDashboardPage.vue'
 import AdminProductionDashboardPage from '@/pages/AdminProductionDashboardPage.vue'
+import MessengerPage from '@/pages/MessengerPage.vue'
 import { isAdminRole, isDesignDepartment } from '@/utils/adminAccess'
 
 const isDesktopRuntime = typeof window !== 'undefined' && Boolean(window.desktop)
@@ -112,6 +113,12 @@ const routes = [
     path: '/shipment-schedule',
     name: 'shipment-schedule',
     component: ShipmentSchedulePage,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/messenger',
+    name: 'messenger',
+    component: MessengerPage,
     meta: { requiresAuth: true },
   },
   {
