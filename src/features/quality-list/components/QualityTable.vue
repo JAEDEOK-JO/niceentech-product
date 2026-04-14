@@ -6,51 +6,60 @@ import type { QualityListRow } from '../types/quality'
 const props = defineProps<{
   items: QualityListRow[]
   loading?: boolean
+  showAllRecords?: boolean
 }>()
+
+function formatShortDate(testDate: string): string {
+  // "2026년 01월 03일" → "(26년01월03일)"
+  const compact = testDate.replace(/\s/g, '')
+  return compact.length >= 2 ? `(${compact.slice(2)})` : ''
+}
 
 const emit = defineEmits<{
   edit: [item: QualityListRow]
-  countCheck: [item: QualityListRow]
   delete: [item: QualityListRow]
-  moveDate: [item: QualityListRow]
-  copyDate: [item: QualityListRow]
-  updateRange: [item: QualityListRow, lotStart: number]
+  notification: [item: QualityListRow]
+  stamp: [item: QualityListRow]
   updateCancel: [item: QualityListRow, field: QualityCountField, value: number]
-  toggleReturn: [item: QualityListRow, field: QualityCountField, value: boolean]
-  moveUp: [index: number]
-  moveDown: [index: number]
+  updateRange: [item: QualityListRow, lotStart: number]
 }>()
 
-const rangeInputs = ref<Record<number, number>>({})
+const rangeInputs = ref<Record<number, string>>({})
 
 watch(
   () => props.items,
   (items) => {
-    rangeInputs.value = items.reduce<Record<number, number>>((acc, item) => {
-      acc[item.id] = item.lotNumStartH
+    rangeInputs.value = items.reduce<Record<number, string>>((acc, item) => {
+      acc[item.id] = String(item.lotNumStartH ?? '')
       return acc
     }, {})
   },
   { immediate: true },
 )
 
+function saveRange(item: QualityListRow) {
+  const val = Number.parseInt(rangeInputs.value[item.id] ?? '', 10)
+  emit('updateRange', item, Number.isFinite(val) ? val : 0)
+}
+
+const menuDialogItem = ref<QualityListRow | null>(null)
+function openMenuDialog(item: QualityListRow) { menuDialogItem.value = item }
+function closeMenuDialog() { menuDialogItem.value = null }
+
 const total = computed(() =>
   props.items.reduce(
-    (sum, item) =>
-      sum +
-      item.a32 +
-      item.a40 +
-      item.a50 +
-      item.a65 +
-      item.m65 +
-      item.m80 +
-      item.m100 +
-      item.m125 +
-      item.m150 +
-      item.m200,
+    (sum, item) => sum + item.a32 + item.a40 + item.a50 + item.a65 + item.m65 + item.m80 + item.m100 + item.m125 + item.m150 + item.m200,
     0,
   ),
 )
+
+function lotRoundClass(round: string) {
+  if (round === '1차') return 'round-1'
+  if (round === '2차') return 'round-2'
+  if (round === '3차') return 'round-3'
+  if (round === '4차') return 'round-4'
+  return ''
+}
 
 function promptCancel(item: QualityListRow, field: QualityCountField, currentValue: number) {
   const input = window.prompt(`${field.toUpperCase()} 반납 수량`, String(currentValue))
@@ -58,132 +67,433 @@ function promptCancel(item: QualityListRow, field: QualityCountField, currentVal
   const next = Number.parseInt(input, 10)
   emit('updateCancel', item, field, Number.isFinite(next) ? next : 0)
 }
+
+interface CountCol {
+  label: string
+  field: QualityCountField
+  valueKey: keyof QualityListRow
+  cancelKey: keyof QualityListRow
+  metric: boolean
+}
+
+const countCols: CountCol[] = [
+  { label: '32A',  field: 'a32',  valueKey: 'a32',  cancelKey: 'a32Cancel',  metric: false },
+  { label: '40A',  field: 'a40',  valueKey: 'a40',  cancelKey: 'a40Cancel',  metric: false },
+  { label: '50A',  field: 'a50',  valueKey: 'a50',  cancelKey: 'a50Cancel',  metric: false },
+  { label: '65A',  field: 'a65',  valueKey: 'a65',  cancelKey: 'a65Cancel',  metric: false },
+  { label: '65A',  field: 'm65',  valueKey: 'm65',  cancelKey: 'm65Cancel',  metric: true  },
+  { label: '80A',  field: 'm80',  valueKey: 'm80',  cancelKey: 'm80Cancel',  metric: true  },
+  { label: '100A', field: 'm100', valueKey: 'm100', cancelKey: 'm100Cancel', metric: true  },
+  { label: '125A', field: 'm125', valueKey: 'm125', cancelKey: 'm125Cancel', metric: true  },
+  { label: '150A', field: 'm150', valueKey: 'm150', cancelKey: 'm150Cancel', metric: true  },
+  { label: '200A', field: 'm200', valueKey: 'm200', cancelKey: 'm200Cancel', metric: true  },
+]
 </script>
 
 <template>
-  <section class="table-panel">
-    <div class="table-summary">
-      <strong>총합: {{ total }}</strong>
-      <span v-if="loading">데이터를 불러오는 중입니다.</span>
+  <section class="qt-wrap">
+    <div class="qt-summary">
+      <span />
+      <strong>총합 : {{ total }}개</strong>
     </div>
 
-    <div v-if="loading" class="empty-panel">로딩 중...</div>
-    <div v-else-if="items.length === 0" class="empty-panel">검수리스트가 없습니다.</div>
-    <div v-else class="table-scroll">
-      <table class="quality-table">
+    <div v-if="loading" class="qt-empty">로딩 중...</div>
+    <div v-else-if="items.length === 0" class="qt-empty">검수리스트가 없습니다.</div>
+    <div v-else class="qt-scroll">
+      <table class="qt">
+        <colgroup>
+          <col class="col-n" />
+          <col class="col-initial" />
+          <col class="col-place" />
+          <col class="col-lot" />
+          <col v-for="col in countCols" :key="col.field" class="col-count" />
+          <col class="col-total" />
+          <col class="col-menu" />
+        </colgroup>
         <thead>
           <tr>
-            <th>N</th>
-            <th>도번</th>
-            <th>현장명</th>
-            <th>구역명</th>
-            <th>확관</th>
-            <th>32A</th>
-            <th>40A</th>
-            <th>50A</th>
-            <th>65A</th>
-            <th>M65</th>
-            <th>M80</th>
-            <th>M100</th>
-            <th>M125</th>
-            <th>M150</th>
-            <th>M200</th>
-            <th>합계</th>
-            <th>메뉴</th>
+            <th class="th-base">N</th>
+            <th class="th-base">도번</th>
+            <th class="th-base">현장명</th>
+            <th class="th-base">확관</th>
+            <th v-for="col in countCols" :key="col.field" :class="col.metric ? 'th-metric' : 'th-inch'">{{ col.label }}</th>
+            <th class="th-base">합계</th>
+            <th class="th-base">메뉴</th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="(item, index) in items" :key="item.id">
-            <td>{{ index + 1 }}</td>
-            <td>{{ item.initial }}</td>
-            <td>{{ item.company }} {{ item.place }}</td>
-            <td>{{ item.area }}</td>
-            <td>
-              <div class="lot-range-cell">
-                <div>{{ item.lotNameH || '-' }}</div>
-                <div class="lot-range-meta">
-                  <input v-model.number="rangeInputs[item.id]" type="number" min="0" />
-                  <button type="button" class="tiny-button" @click="emit('updateRange', item, rangeInputs[item.id] ?? 0)">
-                    반영
-                  </button>
-                </div>
+            <td class="td-center">{{ index + 1 }}</td>
+            <td class="td-center td-initial">{{ item.initial }}</td>
+            <td class="td-center td-place">
+              {{ item.company }} {{ item.place }}{{ item.area ? ' ' + item.area : '' }}
+              <span v-if="showAllRecords && item.testDate" class="place-date">{{ formatShortDate(item.testDate) }}</span>
+            </td>
+            <td class="td-lot">
+              <div class="lot-inner" :class="lotRoundClass(item.lotRound)">
+                <span class="lot-num">({{ item.lotNumH ? String(item.lotNumH).slice(-3) : '---' }})</span>
+                <span class="lot-name">{{ item.lotNameH || '-' }}</span>
+                <input
+                  v-model="rangeInputs[item.id]"
+                  type="number"
+                  inputmode="numeric"
+                  min="0"
+                  class="lot-input"
+                  @keydown.enter="saveRange(item)"
+                  @keydown="(e) => ['e','E','+','-','.'].includes(e.key) && e.preventDefault()"
+                />
+                <span class="lot-end">~ {{ item.lotNumEndH || '' }}</span>
               </div>
             </td>
-            <td class="count-cell">
-              <button type="button" class="link-button" @click="promptCancel(item, 'a32', item.a32Cancel)">
-                {{ item.a32 || '' }}
+            <td
+              v-for="col in countCols"
+              :key="col.field"
+              class="td-center td-count"
+              :class="col.metric ? 'td-count--metric' : 'td-count--inch'"
+            >
+              <button
+                v-if="(item[col.cancelKey] as number) > 0 || (item[col.valueKey] as number) > 0"
+                type="button"
+                class="count-btn"
+                @click="promptCancel(item, col.field, item[col.cancelKey] as number)"
+              >
+                {{ (item[col.valueKey] as number) || '' }}
               </button>
-              <label><input :checked="item.a32Return" type="checkbox" @change="emit('toggleReturn', item, 'a32', ($event.target as HTMLInputElement).checked)" />반납</label>
+              <span v-else class="count-empty" />
             </td>
-            <td class="count-cell">
-              <button type="button" class="link-button" @click="promptCancel(item, 'a40', item.a40Cancel)">
-                {{ item.a40 || '' }}
-              </button>
-              <label><input :checked="item.a40Return" type="checkbox" @change="emit('toggleReturn', item, 'a40', ($event.target as HTMLInputElement).checked)" />반납</label>
-            </td>
-            <td class="count-cell">
-              <button type="button" class="link-button" @click="promptCancel(item, 'a50', item.a50Cancel)">
-                {{ item.a50 || '' }}
-              </button>
-              <label><input :checked="item.a50Return" type="checkbox" @change="emit('toggleReturn', item, 'a50', ($event.target as HTMLInputElement).checked)" />반납</label>
-            </td>
-            <td class="count-cell">
-              <button type="button" class="link-button" @click="promptCancel(item, 'a65', item.a65Cancel)">
-                {{ item.a65 || '' }}
-              </button>
-              <label><input :checked="item.a65Return" type="checkbox" @change="emit('toggleReturn', item, 'a65', ($event.target as HTMLInputElement).checked)" />반납</label>
-            </td>
-            <td class="count-cell">
-              <button type="button" class="link-button" @click="promptCancel(item, 'm65', item.m65Cancel)">
-                {{ item.m65 || '' }}
-              </button>
-              <label><input :checked="item.m65Return" type="checkbox" @change="emit('toggleReturn', item, 'm65', ($event.target as HTMLInputElement).checked)" />반납</label>
-            </td>
-            <td class="count-cell">
-              <button type="button" class="link-button" @click="promptCancel(item, 'm80', item.m80Cancel)">
-                {{ item.m80 || '' }}
-              </button>
-              <label><input :checked="item.m80Return" type="checkbox" @change="emit('toggleReturn', item, 'm80', ($event.target as HTMLInputElement).checked)" />반납</label>
-            </td>
-            <td class="count-cell">
-              <button type="button" class="link-button" @click="promptCancel(item, 'm100', item.m100Cancel)">
-                {{ item.m100 || '' }}
-              </button>
-              <label><input :checked="item.m100Return" type="checkbox" @change="emit('toggleReturn', item, 'm100', ($event.target as HTMLInputElement).checked)" />반납</label>
-            </td>
-            <td class="count-cell">
-              <button type="button" class="link-button" @click="promptCancel(item, 'm125', item.m125Cancel)">
-                {{ item.m125 || '' }}
-              </button>
-              <label><input :checked="item.m125Return" type="checkbox" @change="emit('toggleReturn', item, 'm125', ($event.target as HTMLInputElement).checked)" />반납</label>
-            </td>
-            <td class="count-cell">
-              <button type="button" class="link-button" @click="promptCancel(item, 'm150', item.m150Cancel)">
-                {{ item.m150 || '' }}
-              </button>
-              <label><input :checked="item.m150Return" type="checkbox" @change="emit('toggleReturn', item, 'm150', ($event.target as HTMLInputElement).checked)" />반납</label>
-            </td>
-            <td class="count-cell">
-              <button type="button" class="link-button" @click="promptCancel(item, 'm200', item.m200Cancel)">
-                {{ item.m200 || '' }}
-              </button>
-              <label><input :checked="item.m200Return" type="checkbox" @change="emit('toggleReturn', item, 'm200', ($event.target as HTMLInputElement).checked)" />반납</label>
-            </td>
-            <td>{{ item.totalH }}</td>
-            <td>
-              <div class="row-actions">
-                <button type="button" class="tiny-button" @click="emit('moveUp', index)" :disabled="index === 0">위</button>
-                <button type="button" class="tiny-button" @click="emit('moveDown', index)" :disabled="index === items.length - 1">아래</button>
-                <button type="button" class="tiny-button" @click="emit('edit', item)">수정</button>
-                <button type="button" class="tiny-button" @click="emit('countCheck', item)">수량</button>
-                <button type="button" class="tiny-button" @click="emit('moveDate', item)">이동</button>
-                <button type="button" class="tiny-button" @click="emit('copyDate', item)">복사</button>
-                <button type="button" class="tiny-button danger" @click="emit('delete', item)">삭제</button>
-              </div>
+            <td class="td-center td-total">{{ item.totalH || '' }}</td>
+            <td class="td-center">
+              <button type="button" class="menu-txt-btn" @click="openMenuDialog(item)">메뉴</button>
             </td>
           </tr>
         </tbody>
       </table>
     </div>
+
+    <!-- 메뉴 다이얼로그 -->
+    <div v-if="menuDialogItem" class="dialog-overlay" @click.self="closeMenuDialog">
+      <div class="dialog-box">
+        <div class="dialog-header">
+          <div>
+            <p class="dialog-company">{{ menuDialogItem.company }} {{ menuDialogItem.place }}</p>
+            <p v-if="menuDialogItem.area" class="dialog-area">{{ menuDialogItem.area }}</p>
+          </div>
+          <button type="button" class="dialog-close" @click="closeMenuDialog">닫기</button>
+        </div>
+        <div class="dialog-actions">
+          <button type="button" class="da-btn da-btn--blue" @click="emit('edit', menuDialogItem); closeMenuDialog()">수정</button>
+          <button type="button" class="da-btn da-btn--green" @click="emit('notification', menuDialogItem); closeMenuDialog()">통보서</button>
+          <button type="button" class="da-btn da-btn--purple" @click="emit('stamp', menuDialogItem); closeMenuDialog()">증지</button>
+          <button type="button" class="da-btn da-btn--danger" @click="emit('delete', menuDialogItem); closeMenuDialog()">삭제</button>
+        </div>
+      </div>
+    </div>
   </section>
 </template>
+
+<style scoped>
+/* ── 레이아웃 ── */
+.qt-wrap { display: flex; flex-direction: column; gap: 10px; }
+
+.qt-summary {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  font-size: 23px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.qt-empty {
+  padding: 56px 24px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 15px;
+}
+
+.qt-scroll {
+  overflow: auto;
+  max-height: calc(100vh - 200px);
+}
+
+/* ── 테이블 ── */
+.qt {
+  width: 100%;
+  min-width: 900px;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 15px;
+  background: #fff;
+}
+
+/* colgroup widths — table-layout:fixed 이므로 비율대로 적용됨 */
+.col-n       { width: 32px;  }
+.col-initial { width: 41px;  }
+.col-place   { width: 218px; }
+.col-lot     { width: 140px; }
+.col-count   { width: 37px;  }
+.col-total   { width: 41px;  }
+.col-menu    { width: 22px;  }
+
+.qt th, .qt td {
+  border-right: 1px solid #94a3b8;
+  border-bottom: 1px solid #94a3b8;
+  padding: 0;
+  vertical-align: middle;
+  text-align: center;
+}
+
+.qt th:first-child, .qt td:first-child {
+  border-left: 1px solid #94a3b8;
+}
+
+/* 헤더 공통 */
+.qt thead th {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  color: #1e3a8a;
+  font-weight: 700;
+  font-size: 15px;
+  height: 40px;
+  padding: 0 4px;
+  white-space: nowrap;
+  border-top: 1px solid #94a3b8;
+  border-right: 1px solid #64748b;
+  border-bottom: 2px solid #475569;
+}
+
+/* N·도번·현장명·확관·합계·메뉴 — 두 단계 연하게 */
+.qt thead th.th-base   { background: #eff6ff; }
+/* 32A~65A — 한 단계 연하게 */
+.qt thead th.th-inch   { background: #dbeafe; }
+/* M65~M200 — 연한 딥오렌지 */
+.qt thead th.th-metric { background: #ffedd5; color: #7c2d12; }
+
+/* 바디 행 높이 */
+.qt tbody tr { height: 64px; }
+
+/* 기본 td */
+.td-center { padding: 10px 4px; }
+
+.td-initial {
+  font-size: 14px;
+  color: #334155;
+  font-weight: 600;
+  padding: 6px 4px;
+  white-space: normal;
+  word-break: break-all;
+  line-height: 1.4;
+}
+
+/* 현장명 — 헤더 제외 바디 셀만 왼쪽 정렬 */
+.qt tbody .td-place {
+  white-space: normal;
+  word-break: keep-all;
+  font-size: 15px;
+  font-weight: 600;
+  color: #0f172a;
+  padding: 10px 8px;
+  line-height: 1.5;
+  text-align: left;
+}
+
+.place-date {
+  margin-left: 4px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #ea580c;
+  white-space: nowrap;
+}
+
+/* 확관 */
+.td-lot {
+  padding: 0 4px;
+  vertical-align: middle;
+}
+.lot-inner {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  white-space: nowrap;
+}
+.lot-num {
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.lot-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: #111827;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex-shrink: 1;
+}
+.lot-input {
+  width: 68px;
+  flex-shrink: 0;
+  padding: 3px 7px;
+  border: 1px solid #94a3b8;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  background: #f8fafc;
+  color: #0f172a;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  /* 스핀버튼 숨김 */
+  -moz-appearance: textfield;
+}
+.lot-input::-webkit-outer-spin-button,
+.lot-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.lot-input:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59,130,246,0.2);
+}
+.lot-end {
+  font-size: 14px;
+  color: #111827;
+  white-space: nowrap;
+}
+
+/* 차수별 색상 (입력창 제외) */
+.round-1 .lot-num,
+.round-1 .lot-name,
+.round-1 .lot-end { color: #111827; }
+
+.round-2 .lot-num,
+.round-2 .lot-name,
+.round-2 .lot-end { color: #ea580c; }
+
+.round-3 .lot-num,
+.round-3 .lot-name,
+.round-3 .lot-end { color: #16a34a; }
+
+.round-4 .lot-num,
+.round-4 .lot-name,
+.round-4 .lot-end { color: #7c3aed; }
+
+/* 카운트 셀 */
+.td-count { padding: 0; font-weight: 700; }
+.td-count--inch   { background: #ffffff; }
+.td-count--metric { background: #fff7ed; }
+
+.count-btn {
+  display: block;
+  width: 100%;
+  height: 64px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 700;
+  color: #111827;
+}
+.count-btn:hover { background: rgba(0,0,0,0.06); }
+.count-empty { display: block; height: 64px; }
+
+/* 합계 */
+.td-total {
+  font-weight: 700;
+  font-size: 15px;
+  color: #0f172a;
+  padding: 8px 4px;
+}
+
+/* 메뉴 텍스트 버튼 */
+.menu-txt-btn {
+  background: transparent;
+  border: none;
+  padding: 4px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.menu-txt-btn:hover { color: #374151; }
+
+/* ── 다이얼로그 ── */
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.5);
+  padding: 16px;
+}
+.dialog-box {
+  background: #fff;
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 20px 48px rgba(15, 23, 42, 0.18);
+  padding: 24px;
+  width: 100%;
+  max-width: 300px;
+}
+.dialog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.dialog-company {
+  font-weight: 700;
+  font-size: 15px;
+  color: #0f172a;
+  margin: 0;
+}
+.dialog-area {
+  font-size: 13px;
+  color: #64748b;
+  margin: 4px 0 0;
+}
+.dialog-close {
+  font-size: 13px;
+  color: #94a3b8;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+}
+.dialog-actions {
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+}
+.da-btn {
+  flex: 1;
+  padding: 13px 8px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+  cursor: pointer;
+  transition: background 0.12s;
+  white-space: nowrap;
+}
+.da-btn--blue   { background: #dbeafe; border-color: #bfdbfe; color: #1e40af; }
+.da-btn--blue:hover   { background: #bfdbfe; }
+.da-btn--green  { background: #dcfce7; border-color: #bbf7d0; color: #166534; }
+.da-btn--green:hover  { background: #bbf7d0; }
+.da-btn--purple { background: #ede9fe; border-color: #ddd6fe; color: #5b21b6; }
+.da-btn--purple:hover { background: #ddd6fe; }
+.da-btn--danger { background: #fee2e2; border-color: #fecaca; color: #b91c1c; }
+.da-btn--danger:hover { background: #fecaca; }
+</style>

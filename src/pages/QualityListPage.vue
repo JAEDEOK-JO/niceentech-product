@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import '@/features/quality-list/quality.css'
 import QualityFilters from '@/features/quality-list/components/QualityFilters.vue'
@@ -32,7 +32,7 @@ const loading = ref(false)
 const items = ref<QualityListRow[]>([])
 
 const currentDateLabel = computed(() =>
-  showAllRecords.value ? '전체 보기' : formatQualityDate(currentTuesday.value),
+  showAllRecords.value ? '검수리스트 전체 검색결과' : formatQualityDate(currentTuesday.value),
 )
 const calendarValue = computed(() => formatIsoDate(currentTuesday.value))
 
@@ -56,6 +56,13 @@ async function load() {
 }
 
 const channel = subscribeQualityList(() => {
+  void load()
+})
+
+watch(showAllRecords, (val) => {
+  if (!val) {
+    currentTuesday.value = getNextTuesday(new Date())
+  }
   void load()
 })
 
@@ -196,16 +203,11 @@ onBeforeUnmount(() => {
     <QualityTable
       :items="items"
       :loading="loading"
+      :show-all-records="showAllRecords"
       @edit="goEdit"
-      @count-check="goCountCheck"
       @delete="onDelete"
-      @move-date="onMoveDate"
-      @copy-date="onCopyDate"
       @update-range="onUpdateRange"
       @update-cancel="onUpdateCancel"
-      @toggle-return="onToggleReturn"
-      @move-up="onMoveUp"
-      @move-down="onMoveDown"
     />
   </div>
 </template>

@@ -37,8 +37,14 @@ function openCalendar() {
   <section class="quality-filters">
     <div class="filter-left">
       <h1 class="quality-title">
-        <span class="quality-title-date">{{ currentDateLabel }}</span>
-        <span class="quality-title-accent">검수리스트</span>
+        <template v-if="showAllRecords">
+          <span class="quality-title-accent">검수리스트</span>
+          <span class="quality-title-date"> 전체 검색결과</span>
+        </template>
+        <template v-else>
+          <span class="quality-title-date">{{ currentDateLabel }}</span>
+          <span class="quality-title-accent">검수리스트</span>
+        </template>
       </h1>
     </div>
 
