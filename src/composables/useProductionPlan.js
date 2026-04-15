@@ -37,6 +37,7 @@ const homeWorkerTShortcutFields = [
   'marking_weld_b_status',
   'marking_laser_1_status',
   'beveling_status',
+  'nasa_status',
 ]
 const homeWorkerMainShortcutFields = ['marking_laser_2_status', 'main_status']
 const workManRoleToStages = {
@@ -158,16 +159,19 @@ const normalizeProgressState = (value) => {
   return '작업전'
 }
 const resolveWorkerTStatus = (row) => {
+  // 다이얼로그(가지관 완료 버튼)로 수동 완료된 경우 stage 토글이 덮어쓰지 않음
+  // worker_t_time 이 찍혀 있으면 완료 상태를 보존
+  if (row?.worker_t === '작업완료' && row?.worker_t_time) return '작업완료'
   if (Boolean(row?.complete)) return '작업완료'
   const statuses = workerTStageFields.map((field) => normalizeProgressState(row?.[field]))
-  if (statuses.some((status) => status === '작업중')) return '작업중'
-  if (statuses.some((status) => status === '작업완료')) return '작업중'
+  if (statuses.some((s) => s === '작업중' || s === '작업완료')) return '작업중'
   return '없음'
 }
 const resolveWorkerMainStatus = (row) => {
+  // 다이얼로그(메인관 완료 버튼)로 수동 완료된 경우 보존
+  if (row?.worker_main === '작업완료' && row?.worker_main_time) return '작업완료'
   const statuses = workerMainStageFields.map((field) => normalizeProgressState(row?.[field]))
-  if (statuses.some((status) => status === '작업중')) return '작업중'
-  if (statuses.some((status) => status === '작업완료')) return '작업중'
+  if (statuses.some((s) => s === '작업중' || s === '작업완료')) return '작업중'
   return '없음'
 }
 const resolveWorkerWeldingStatus = (row) => {
@@ -425,17 +429,24 @@ export function useProductionPlan(session) {
         updatePayload[dateFields.completed] = null
       }
     }
-    if (worker_t === '작업완료' && row.worker_t !== '작업완료') {
-      updatePayload.worker_t_time = todayText
+    // 다이얼로그 완료(worker_t_time 있음)로 보존된 경우 시간 필드를 건드리지 않음
+    const workerTManuallyDone = row.worker_t === '작업완료' && row.worker_t_time
+    if (!workerTManuallyDone) {
+      if (worker_t === '작업완료' && row.worker_t !== '작업완료') {
+        updatePayload.worker_t_time = todayText
+      }
+      if (worker_t !== '작업완료' && row.worker_t === '작업완료') {
+        updatePayload.worker_t_time = ''
+      }
     }
-    if (worker_t !== '작업완료' && row.worker_t === '작업완료') {
-      updatePayload.worker_t_time = ''
-    }
-    if (worker_main === '작업완료' && row.worker_main !== '작업완료') {
-      updatePayload.worker_main_time = todayText
-    }
-    if (worker_main !== '작업완료' && row.worker_main === '작업완료') {
-      updatePayload.worker_main_time = ''
+    const workerMainManuallyDone = row.worker_main === '작업완료' && row.worker_main_time
+    if (!workerMainManuallyDone) {
+      if (worker_main === '작업완료' && row.worker_main !== '작업완료') {
+        updatePayload.worker_main_time = todayText
+      }
+      if (worker_main !== '작업완료' && row.worker_main === '작업완료') {
+        updatePayload.worker_main_time = ''
+      }
     }
     if (field === 'nasa_status' && next === '작업완료' && row.worker_nasa !== '작업완료') {
       updatePayload.worker_nasa_time = todayText

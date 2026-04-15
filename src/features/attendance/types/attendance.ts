@@ -1,0 +1,147 @@
+export const LEAVE_TYPES = ['연차', '반차(오전)', '반차(오후)', '기타'] as const
+export const LEAVE_REASONS = ['병원', '출입국방문', '은행업무', '자동차수리'] as const
+export const LEAVE_STATUSES = ['대기중', '승인', '반려'] as const
+
+export type LeaveType = (typeof LEAVE_TYPES)[number]
+export type LeaveStatus = (typeof LEAVE_STATUSES)[number]
+
+export interface AttendanceRequest {
+  id: number
+  userId: string
+  userName: string
+  department: string
+  leaveType: LeaveType | string
+  startDate: string
+  endDate: string
+  daysCount: number
+  reason: string
+  status: LeaveStatus | string
+  approvedBy: string | null
+  approvedAt: string | null
+  rejectReason: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface AttendanceAnnualQuota {
+  id: number
+  userId: string
+  userName: string
+  department: string
+  year: number
+  totalDays: number
+  usedDays: number
+  remainingDays: number
+}
+
+export interface AttendanceFilters {
+  year: number
+  month: number | null
+  department: string
+  status: LeaveStatus | ''
+  searchQuery: string
+}
+
+export interface AttendanceFormState {
+  id?: number
+  selectedDepartment: string
+  selectedEmployeeName: string
+  leaveType: LeaveType
+  startDate: string
+  endDate: string
+  daysCount: number
+  reason: string
+}
+
+const toStr = (v: unknown) => String(v ?? '')
+const toNum = (v: unknown) => {
+  const n = Number(v ?? 0)
+  return Number.isFinite(n) ? n : 0
+}
+
+export function mapAttendanceRequest(raw: Record<string, unknown>): AttendanceRequest {
+  return {
+    id: toNum(raw.id),
+    userId: toStr(raw.user_id),
+    userName: toStr(raw.user_name),
+    department: toStr(raw.department),
+    leaveType: toStr(raw.leave_type),
+    startDate: toStr(raw.start_date),
+    endDate: toStr(raw.end_date),
+    daysCount: toNum(raw.days_count),
+    reason: toStr(raw.reason),
+    status: toStr(raw.status),
+    approvedBy: raw.approved_by != null ? toStr(raw.approved_by) : null,
+    approvedAt: raw.approved_at != null ? toStr(raw.approved_at) : null,
+    rejectReason: raw.reject_reason != null ? toStr(raw.reject_reason) : null,
+    createdAt: toStr(raw.created_at),
+    updatedAt: toStr(raw.updated_at),
+  }
+}
+
+export function mapAnnualQuota(raw: Record<string, unknown>): AttendanceAnnualQuota {
+  const total = toNum(raw.total_days)
+  const used = toNum(raw.used_days)
+  return {
+    id: toNum(raw.id),
+    userId: toStr(raw.user_id),
+    userName: toStr(raw.user_name),
+    department: toStr(raw.department),
+    year: toNum(raw.year),
+    totalDays: total,
+    usedDays: used,
+    remainingDays: Math.max(0, total - used),
+  }
+}
+
+export function createEmptyForm(): AttendanceFormState {
+  const today = new Date().toISOString().slice(0, 10)
+  return {
+    selectedDepartment: '',
+    selectedEmployeeName: '',
+    leaveType: '연차',
+    startDate: today,
+    endDate: today,
+    daysCount: 1,
+    reason: '병원',
+  }
+}
+
+// ─── 직원 ─────────────────────────────────────────────────────────────────────
+export interface Employee {
+  id: number
+  name: string
+  department: string
+  assignedDepartment: string
+  isFullTime: boolean
+  nationality: string
+  role: string
+  hireDate: string | null
+  homeLeaveStart: string | null
+  homeLeaveEnd: string | null
+  createdAt: string
+}
+
+export function mapEmployee(raw: Record<string, unknown>): Employee {
+  return {
+    id: toNum(raw.id),
+    name: toStr(raw.name),
+    department: toStr(raw.department),
+    assignedDepartment: toStr(raw.assigned_department),
+    isFullTime: Boolean(raw.is_full_time),
+    nationality: toStr(raw.nationality),
+    role: toStr(raw.role),
+    hireDate: raw.hire_date != null ? toStr(raw.hire_date) : null,
+    homeLeaveStart: raw.home_leave_start != null ? toStr(raw.home_leave_start) : null,
+    homeLeaveEnd: raw.home_leave_end != null ? toStr(raw.home_leave_end) : null,
+    createdAt: toStr(raw.created_at),
+  }
+}
+
+// 대시보드 집계용
+export interface AttendanceDashboardStats {
+  employeeCount: number
+  thisMonthTotal: number
+  pendingCount: number
+  myRemainingDays: number
+}

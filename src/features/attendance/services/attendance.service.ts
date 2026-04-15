@@ -1,0 +1,409 @@
+import type { RealtimeChannel } from '@supabase/supabase-js'
+import { supabase } from '@/lib/supabase'
+import {
+  mapAttendanceRequest,
+  mapAnnualQuota,
+  mapEmployee,
+  type AttendanceFilters,
+  type AttendanceFormState,
+  type AttendanceRequest,
+  type AttendanceAnnualQuota,
+  type Employee,
+  type LeaveType,
+} from '../types/attendance'
+
+// 연차 차감 일수 계산 (연차/병가만 일수 차감)
+const DEDUCTED_LEAVE_TYPES: string[] = ['연차', '반차(오전)', '반차(오후)', '병가']
+
+// ─── 신청 목록 조회 ────────────────────────────────────────────────────────────
+export async function fetchAttendanceRequests(
+  filters: AttendanceFilters,
+): Promise<AttendanceRequest[]> {
+  let query = supabase
+    .from('attendance_requests')
+    .select('*')
+    .order('created_at', { ascending: false })
+
+  if (filters.year) {
+    const start = `${filters.year}-01-01`
+    const end = `${filters.year}-12-31`
+    query = query.gte('start_date', start).lte('start_date', end)
+  }
+
+  if (filters.month) {
+    const mm = String(filters.month).padStart(2, '0')
+    const start = `${filters.year}-${mm}-01`
+    const lastDay = new Date(filters.year, filters.month, 0).getDate()
+    const endDate = `${filters.year}-${mm}-${String(lastDay).padStart(2, '0')}`
+    query = query.gte('start_date', start).lte('start_date', endDate)
+  }
+
+  if (filters.department) {
+    query = query.eq('department', filters.department)
+  }
+
+  if (filters.status) {
+    query = query.eq('status', filters.status)
+  }
+
+  if (filters.searchQuery.trim()) {
+    query = query.ilike('user_name', `%${filters.searchQuery.trim()}%`)
+  }
+
+  const { data, error } = await query
+  if (error) throw error
+  return (data ?? []).map((row) => mapAttendanceRequest(row as Record<string, unknown>))
+}
+
+// ─── 내 신청 목록 조회 ─────────────────────────────────────────────────────────
+export async function fetchMyAttendanceRequests(userId: string): Promise<AttendanceRequest[]> {
+  const { data, error } = await supabase
+    .from('attendance_requests')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+
+  if (error) throw error
+  return (data ?? []).map((row) => mapAttendanceRequest(row as Record<string, unknown>))
+}
+
+// ─── 신청 생성 ─────────────────────────────────────────────────────────────────
+export async function createAttendanceRequest(
+  form: AttendanceFormState,
+  userId: string,
+  userName: string,
+  department: string,
+): Promise<AttendanceRequest> {
+  const { data, error } = await supabase
+    .from('attendance_requests')
+    .insert({
+      user_id: userId,
+      user_name: userName,
+      department,
+      leave_type: form.leaveType,
+      start_date: form.startDate,
+      end_date: form.endDate,
+      days_count: form.daysCount,
+      reason: form.reason,
+      status: '대기중',
+    })
+    .select()
+    .single()
+
+  if (error) throw error
+  return mapAttendanceRequest(data as Record<string, unknown>)
+}
+
+// ─── 신청 수정 (본인, 대기중 상태만) ──────────────────────────────────────────
+export async function updateAttendanceRequest(
+  id: number,
+  form: AttendanceFormState,
+): Promise<void> {
+  const { error } = await supabase
+    .from('attendance_requests')
+    .update({
+      leave_type: form.leaveType,
+      start_date: form.startDate,
+      end_date: form.endDate,
+      days_count: form.daysCount,
+      reason: form.reason,
+    })
+    .eq('id', id)
+    .eq('status', '대기중')
+
+  if (error) throw error
+}
+
+// ─── 신청 취소/삭제 (본인, 대기중 상태만) ─────────────────────────────────────
+export async function deleteAttendanceRequest(id: number): Promise<void> {
+  const { error } = await supabase
+    .from('attendance_requests')
+    .delete()
+    .eq('id', id)
+    .eq('status', '대기중')
+
+  if (error) throw error
+}
+
+// ─── 신청 삭제 (관리자, 상태 무관) ────────────────────────────────────────────
+export async function adminDeleteAttendanceRequest(id: number): Promise<void> {
+  const { error } = await supabase.from('attendance_requests').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ─── 신청 수정 (관리자, 상태 무관) ────────────────────────────────────────────
+export async function adminUpdateAttendanceRequest(
+  id: number,
+  form: AttendanceFormState,
+): Promise<void> {
+  const { error } = await supabase
+    .from('attendance_requests')
+    .update({
+      leave_type: form.leaveType,
+      start_date: form.startDate,
+      end_date: form.endDate,
+      days_count: form.daysCount,
+      reason: form.reason,
+      user_name: form.selectedEmployeeName,
+      department: form.selectedDepartment,
+    })
+    .eq('id', id)
+
+  if (error) throw error
+}
+
+// ─── 승인/반려 (관리자) ────────────────────────────────────────────────────────
+export async function approveAttendanceRequest(
+  id: number,
+  approverName: string,
+): Promise<void> {
+  const { data: req, error: fetchErr } = await supabase
+    .from('attendance_requests')
+    .select('user_id, leave_type, days_count, start_date')
+    .eq('id', id)
+    .single()
+
+  if (fetchErr) throw fetchErr
+
+  const { error } = await supabase
+    .from('attendance_requests')
+    .update({ status: '승인', approved_by: approverName, approved_at: new Date().toISOString() })
+    .eq('id', id)
+
+  if (error) throw error
+
+  // 연차 차감 처리 (연차/반차/병가)
+  if (DEDUCTED_LEAVE_TYPES.includes(req.leave_type)) {
+    const year = new Date(req.start_date).getFullYear()
+    await upsertUsedDays(req.user_id as string, year, Number(req.days_count))
+  }
+}
+
+export async function rejectAttendanceRequest(
+  id: number,
+  approverName: string,
+  rejectReason: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from('attendance_requests')
+    .update({
+      status: '반려',
+      approved_by: approverName,
+      approved_at: new Date().toISOString(),
+      reject_reason: rejectReason,
+    })
+    .eq('id', id)
+
+  if (error) throw error
+}
+
+// ─── 연차 잔여 조회 ────────────────────────────────────────────────────────────
+export async function fetchAnnualQuota(
+  userId: string,
+  year: number,
+): Promise<AttendanceAnnualQuota | null> {
+  const { data, error } = await supabase
+    .from('attendance_annual_quota')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('year', year)
+    .maybeSingle()
+
+  if (error) throw error
+  if (!data) return null
+  return mapAnnualQuota(data as Record<string, unknown>)
+}
+
+// 사용일수 누적
+async function upsertUsedDays(userId: string, year: number, days: number): Promise<void> {
+  const existing = await fetchAnnualQuota(userId, year)
+
+  if (existing) {
+    const { error } = await supabase
+      .from('attendance_annual_quota')
+      .update({ used_days: existing.usedDays + days })
+      .eq('id', existing.id)
+    if (error) throw error
+  }
+}
+
+// ─── 실시간 구독 ────────────────────────────────────────────────────────────────
+export function subscribeAttendanceRequests(callback: () => void): RealtimeChannel {
+  return supabase
+    .channel('attendance_requests_changes')
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'attendance_requests' },
+      callback,
+    )
+    .subscribe()
+}
+
+export function unsubscribeAttendance(channel: RealtimeChannel): void {
+  void supabase.removeChannel(channel)
+}
+
+// ─── 부서 목록 (profiles 테이블에서 추출) ─────────────────────────────────────
+export async function fetchDepartments(): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('department')
+    .not('department', 'is', null)
+    .neq('department', '')
+
+  if (error) throw error
+  const depts = [...new Set((data ?? []).map((r: Record<string, unknown>) => String(r.department)))]
+  return depts.filter(Boolean).sort()
+}
+
+// ─── 연차 현황 전체 목록 (관리자용) ───────────────────────────────────────────
+export async function fetchAllAnnualQuotas(year: number): Promise<AttendanceAnnualQuota[]> {
+  const { data, error } = await supabase
+    .from('attendance_annual_quota')
+    .select('*')
+    .eq('year', year)
+    .order('department')
+
+  if (error) throw error
+  return (data ?? []).map((row) => mapAnnualQuota(row as Record<string, unknown>))
+}
+
+// ─── 직원 목록 ─────────────────────────────────────────────────────────────────
+export async function fetchEmployees(): Promise<Employee[]> {
+  const { data, error } = await supabase
+    .from('employees')
+    .select('*')
+    .order('department')
+    .order('name')
+
+  if (error) throw error
+  return (data ?? []).map((row) => mapEmployee(row as Record<string, unknown>))
+}
+
+export async function fetchEmployeeCount(): Promise<number> {
+  const { count, error } = await supabase
+    .from('employees')
+    .select('*', { count: 'exact', head: true })
+
+  if (error) throw error
+  return count ?? 0
+}
+
+export interface EmployeeFormData {
+  name: string
+  department: string
+  assignedDepartment: string
+  isFullTime: boolean
+  nationality: string
+  role: string
+  hireDate: string
+  homeLeaveStart: string
+  homeLeaveEnd: string
+}
+
+export async function createEmployee(data: EmployeeFormData): Promise<Employee> {
+  const { data: row, error } = await supabase
+    .from('employees')
+    .insert({
+      name: data.name,
+      department: data.department,
+      assigned_department: data.assignedDepartment,
+      is_full_time: data.isFullTime,
+      nationality: data.nationality,
+      role: data.role,
+      hire_date: data.hireDate || null,
+      home_leave_start: data.homeLeaveStart || null,
+      home_leave_end: data.homeLeaveEnd || null,
+    })
+    .select()
+    .single()
+
+  if (error) throw error
+  return mapEmployee(row as Record<string, unknown>)
+}
+
+export async function updateEmployee(id: number, data: EmployeeFormData): Promise<void> {
+  const { error } = await supabase
+    .from('employees')
+    .update({
+      name: data.name,
+      department: data.department,
+      assigned_department: data.assignedDepartment,
+      is_full_time: data.isFullTime,
+      nationality: data.nationality,
+      role: data.role,
+      hire_date: data.hireDate || null,
+      home_leave_start: data.homeLeaveStart || null,
+      home_leave_end: data.homeLeaveEnd || null,
+    })
+    .eq('id', id)
+
+  if (error) throw error
+}
+
+export async function deleteEmployee(id: number): Promise<void> {
+  const { error } = await supabase.from('employees').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ─── 프로필 목록 (서명 관리용) ────────────────────────────────────────────────
+export interface ProfileItem {
+  id: string
+  name: string
+  signaturePath: string | null
+}
+
+export async function fetchProfilesList(): Promise<ProfileItem[]> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, name, signature_path')
+    .order('name')
+
+  if (error) throw error
+  return (data ?? []).map((r: Record<string, unknown>) => ({
+    id: String(r.id),
+    name: String(r.name ?? ''),
+    signaturePath: r.signature_path ? String(r.signature_path) : null,
+  }))
+}
+
+// ─── 서명 이미지 업로드 + profiles 저장 ───────────────────────────────────────
+export async function uploadAndSaveSignature(userId: string, file: Blob): Promise<string> {
+  const fileName = `${userId}.png`
+
+  const { error: uploadError } = await supabase.storage
+    .from('signatures')
+    .upload(fileName, file, { upsert: true, contentType: 'image/png' })
+
+  if (uploadError) throw uploadError
+
+  const { data: urlData } = supabase.storage.from('signatures').getPublicUrl(fileName)
+  const publicUrl = urlData.publicUrl
+
+  const { error: updateError } = await supabase
+    .from('profiles')
+    .update({ signature_path: publicUrl })
+    .eq('id', userId)
+
+  if (updateError) throw updateError
+  return publicUrl
+}
+
+// ─── 서명 이미지 조회 ──────────────────────────────────────────────────────────
+export interface SignatureInfo {
+  name: string
+  signaturePath: string | null
+}
+
+export async function fetchSignatures(names: string[]): Promise<SignatureInfo[]> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('name, signature_path')
+    .in('name', names)
+
+  if (error) throw error
+  return names.map((name) => {
+    const row = (data ?? []).find((r: Record<string, unknown>) => r.name === name)
+    return { name, signaturePath: row?.signature_path ? String(row.signature_path) : null }
+  })
+}

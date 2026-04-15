@@ -29,10 +29,12 @@ const navItems = computed(() => {
     items.push({ key: 'company-list', label: '회사리스트', to: { name: 'company-list' } })
   }
   items.push({ key: 'messenger', label: '메신저', to: { name: 'messenger' } })
+  items.push({ key: 'attendance', label: '근태관리', to: { name: 'attendance' } })
   return items
 })
 
 const activeSection = computed(() => {
+  if (route.path.startsWith('/attendance')) return 'attendance'
   if (route.path.startsWith('/messenger')) return 'messenger'
   if (route.path.startsWith('/company/list')) return 'company-list'
   if (route.path.startsWith('/company/register')) return 'company-register'

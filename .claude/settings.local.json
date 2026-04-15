@@ -10,7 +10,10 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "mcp__supabase__execute_sql",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "mcp__supabase__list_tables",
+      "Bash(npx vue-tsc:*)",
+      "Bash(npx vite:*)"
     ]
   }
 }
