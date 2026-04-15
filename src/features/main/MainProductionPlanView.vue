@@ -9,6 +9,7 @@ const props = defineProps({
   weekOffset: { type: Number, default: 0 },
   selectedTuesdayIso: { type: String, default: '' },
   searchText: { type: String, default: '' },
+  searchAllDates: { type: Boolean, default: false },
   planLoading: { type: Boolean, default: false },
   planError: { type: String, default: '' },
   groupedRows: { type: Array, default: () => [] },
@@ -50,6 +51,7 @@ const overallTotals = computed(() =>
 const isCalendarDialogOpen = ref(false)
 const localCalendarValue = ref('')
 const localSearchText = ref('')
+const localSearchAllDates = ref(false)
 const localCalendarMonth = ref(new Date())
 const calendarWeekLabels = ['일', '월', '화', '수', '목', '금', '토']
 const isRowDialogOpen = ref(false)
@@ -104,9 +106,10 @@ const formatKoreanDateLabel = (value) => {
 }
 
 watch(
-  () => props.searchText,
-  (value) => {
-    localSearchText.value = String(value ?? '')
+  () => [props.searchText, props.searchAllDates],
+  ([text, allDates]) => {
+    localSearchText.value = String(text ?? '')
+    localSearchAllDates.value = Boolean(allDates)
   },
   { immediate: true },
 )
@@ -167,6 +170,9 @@ const activeDialogRow = computed(() => {
 const inspectionActionLabel = computed(() => (activeDialogRow.value?.not_test ? '검수' : '비검수'))
 const holdActionLabel = computed(() => (activeDialogRow.value?.hold ? '보류 해제' : '보류'))
 const pendingTestDateLabel = computed(() => formatKoreanDateLabel(pendingTestDateIso.value))
+const searchPlaceholder = computed(() =>
+  localSearchAllDates.value ? '회사명, 현장명, 구역명, 도번 검색 가능' : '검색어를 입력해주세요',
+)
 
 
 const calendarMonthLabel = computed(() => {
@@ -211,8 +217,31 @@ const handleSearchInput = (value) => {
   localSearchText.value = value
 }
 
+const handleSearchAllDatesChange = (event) => {
+  localSearchAllDates.value = Boolean(event?.target?.checked)
+  if (!localSearchAllDates.value) {
+    submitSearch()
+    return
+  }
+
+  if (String(localSearchText.value ?? '').trim()) {
+    submitSearch()
+    return
+  }
+
+  showSnackbar('검색어를 입력해주세요.')
+}
+
 const submitSearch = () => {
-  emit('search-change', localSearchText.value)
+  if (localSearchAllDates.value && !String(localSearchText.value ?? '').trim()) {
+    showSnackbar('검색어를 입력해주세요.')
+    return
+  }
+
+  emit('search-change', {
+    text: localSearchText.value,
+    allDates: localSearchAllDates.value,
+  })
 }
 
 const moveCalendarMonth = (delta) => {
@@ -529,11 +558,20 @@ const selectDrawingFile = (file) => {
                 <Input
                   class="h-8 border-slate-200 pl-9 pr-3 text-xs md:text-sm"
                   :model-value="localSearchText"
-                  placeholder="검색어를 입력해주세요"
+                  :placeholder="searchPlaceholder"
                   @update:model-value="handleSearchInput"
                   @keydown.enter="submitSearch"
                 />
             </div>
+            <label class="print-hide inline-flex h-8 shrink-0 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 md:text-sm">
+              <input
+                :checked="localSearchAllDates"
+                type="checkbox"
+                class="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-400"
+                @change="handleSearchAllDatesChange"
+              />
+              <span>전체</span>
+            </label>
           </div>
         </div>
       </div>

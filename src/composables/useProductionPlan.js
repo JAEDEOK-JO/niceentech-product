@@ -267,7 +267,7 @@ export function useProductionPlan(session) {
     return `${y}년 ${m}월 ${d}일`
   }
 
-  const pageTitle = computed(() => `${formatKoreanDate(selectedTuesday.value)} 생산계획표`)
+  const pageTitle = computed(() => (searchAllDates.value ? '생산계획표 전체 검색' : `${formatKoreanDate(selectedTuesday.value)} 생산계획표`))
   const filterDate = computed(() => formatKoreanDate(selectedTuesday.value))
 
   const normalizedSearchTerms = computed(() =>

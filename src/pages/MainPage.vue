@@ -15,6 +15,7 @@ const {
   weekOffset,
   selectedTuesdayIso,
   searchText,
+  searchAllDates,
   planLoading,
   planError,
   pageTitle,
@@ -43,12 +44,19 @@ const goRegister = () => {
     query: {
       date: selectedTuesdayIso.value,
       q: String(searchText.value ?? '').trim() || undefined,
+      all: searchAllDates.value ? '1' : undefined,
     },
   })
 }
 
 const handleSearchChange = (value) => {
-  searchText.value = String(value ?? '')
+  if (typeof value === 'string') {
+    searchText.value = value
+    return
+  }
+
+  searchText.value = String(value?.text ?? '')
+  searchAllDates.value = Boolean(value?.allDates)
 }
 
 const handleSelectTuesday = (value) => {
@@ -63,6 +71,7 @@ const handleEditRow = (row) => {
     query: {
       date: selectedTuesdayIso.value,
       q: String(searchText.value ?? '').trim() || undefined,
+      all: searchAllDates.value ? '1' : undefined,
     },
   })
 }
@@ -217,10 +226,11 @@ const handleDeleteDrawingFile = async ({ fileId, onResult }) => {
 
 
 watch(
-  () => [route.query.date, route.query.q],
-  ([dateQuery, searchQuery]) => {
+  () => [route.query.date, route.query.q, route.query.all],
+  ([dateQuery, searchQuery, allQuery]) => {
     const nextDate = typeof dateQuery === 'string' ? dateQuery : ''
     const nextSearch = typeof searchQuery === 'string' ? searchQuery : ''
+    const nextSearchAllDates = allQuery === '1'
 
     if (nextDate && nextDate !== selectedTuesdayIso.value) {
       setSelectedTuesday(nextDate)
@@ -228,17 +238,21 @@ watch(
     if (nextSearch !== searchText.value) {
       searchText.value = nextSearch
     }
+    if (nextSearchAllDates !== searchAllDates.value) {
+      searchAllDates.value = nextSearchAllDates
+    }
   },
   { immediate: true },
 )
 
 watch(
-  () => [selectedTuesdayIso.value, searchText.value],
-  ([date, search]) => {
+  () => [selectedTuesdayIso.value, searchText.value, searchAllDates.value],
+  ([date, search, allDates]) => {
     const normalizedSearch = String(search ?? '').trim()
     const currentDate = typeof route.query.date === 'string' ? route.query.date : ''
     const currentSearch = typeof route.query.q === 'string' ? route.query.q : ''
-    if (currentDate === date && currentSearch === normalizedSearch) return
+    const currentAll = route.query.all === '1'
+    if (currentDate === date && currentSearch === normalizedSearch && currentAll === allDates) return
 
     router.replace({
       name: 'main',
@@ -246,6 +260,7 @@ watch(
         ...route.query,
         date,
         q: normalizedSearch || undefined,
+        all: allDates ? '1' : undefined,
       },
     })
   },
@@ -258,6 +273,7 @@ watch(
     :week-offset="weekOffset"
     :selected-tuesday-iso="selectedTuesdayIso"
     :search-text="searchText"
+    :search-all-dates="searchAllDates"
     :plan-loading="planLoading"
     :plan-error="planError"
     :grouped-rows="groupedRows"
