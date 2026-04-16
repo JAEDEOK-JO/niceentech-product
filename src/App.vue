@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
 import GlobalAppBar from '@/components/layout/GlobalAppBar.vue'
 import AppDialog from '@/components/ui/AppDialog.vue'
@@ -9,12 +9,22 @@ import packageJson from '../package.json'
 
 const route = useRoute()
 const showGlobalAppBar = computed(() => route.meta.requiresAuth === true)
-const { subscribeIfPermitted } = usePushNotification()
+const {
+  isSupported: pushSupported,
+  permission: pushPermission,
+  requestPermission,
+  subscribeIfPermitted,
+  refreshSubscriptionState,
+} = usePushNotification()
 
 const currentVersion = packageJson.version
 const remoteVersion = ref('')
 const updateMessage = ref('')
+const pushPromptVisible = ref(false)
 let settingsChannel = null
+let authSubscription = null
+
+const PUSH_PROMPT_DISMISSED_KEY = 'push_prompt_dismissed'
 
 const normalizeVersion = (value) => {
   const raw = String(value ?? '').trim()
@@ -68,6 +78,38 @@ const handleUpdate = () => {
   window.location.reload()
 }
 
+const dismissPushPrompt = () => {
+  pushPromptVisible.value = false
+  if (typeof window !== 'undefined') {
+    window.sessionStorage.setItem(PUSH_PROMPT_DISMISSED_KEY, '1')
+  }
+}
+
+const shouldShowPushPrompt = () => {
+  if (!showGlobalAppBar.value) return false
+  if (!pushSupported.value) return false
+  if (pushPermission.value !== 'default') return false
+  if (typeof window === 'undefined') return false
+  return window.sessionStorage.getItem(PUSH_PROMPT_DISMISSED_KEY) !== '1'
+}
+
+const syncPushPrompt = () => {
+  pushPromptVisible.value = shouldShowPushPrompt()
+}
+
+const handleEnablePush = async () => {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+  const userId = session?.user?.id ?? ''
+  if (!userId) return
+
+  const result = await requestPermission(userId)
+  if (result.ok || result.status !== 'default') {
+    dismissPushPrompt()
+  }
+}
+
 // 뒤로가기/닫기 시도 차단
 const blockClose = (e) => {
   if (!hasNewVersion.value) return
@@ -82,17 +124,33 @@ onMounted(async () => {
 
   // 로그인 상태이면 이미 허용된 알림 구독 자동 등록
   const { data: { session } } = await supabase.auth.getSession()
-  if (session?.user?.id) await subscribeIfPermitted(session.user.id)
+  if (session?.user?.id) {
+    await subscribeIfPermitted(session.user.id)
+  } else {
+    await refreshSubscriptionState()
+  }
+  syncPushPrompt()
 
   // 로그인 이벤트마다 구독 갱신
-  supabase.auth.onAuthStateChange(async (_event, newSession) => {
-    if (newSession?.user?.id) await subscribeIfPermitted(newSession.user.id)
+  const { data } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
+    if (newSession?.user?.id) {
+      await subscribeIfPermitted(newSession.user.id)
+    } else {
+      await refreshSubscriptionState()
+    }
+    syncPushPrompt()
   })
+  authSubscription = data.subscription
+})
+
+watch([showGlobalAppBar, pushPermission], () => {
+  syncPushPrompt()
 })
 
 onBeforeUnmount(() => {
   stopSettingRealtime()
   window.removeEventListener('beforeunload', blockClose)
+  authSubscription?.unsubscribe()
 })
 </script>
 
@@ -103,6 +161,40 @@ onBeforeUnmount(() => {
     <div :class="showGlobalAppBar ? 'app-with-bar pt-[72px]' : ''">
       <RouterView />
     </div>
+
+    <Transition name="fade">
+      <div
+        v-if="pushPromptVisible"
+        class="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/45 px-4"
+        @click.self="dismissPushPrompt"
+      >
+        <section class="w-full max-w-md rounded-[28px] border border-slate-200 bg-white p-6 shadow-2xl">
+          <div class="inline-flex rounded-full bg-indigo-100 px-3 py-1 text-xs font-extrabold tracking-[0.18em] text-indigo-700">
+            NOTIFICATION
+          </div>
+          <h2 class="mt-4 text-2xl font-extrabold text-slate-900">메신저 알림을 켜시겠어요?</h2>
+          <p class="mt-3 text-sm leading-6 text-slate-600">
+            채팅방에 새 메시지가 오면 브라우저 푸시 알림으로 바로 받을 수 있습니다.
+          </p>
+          <div class="mt-6 flex gap-3">
+            <button
+              type="button"
+              class="flex-1 rounded-2xl border border-slate-200 py-3 text-sm font-extrabold text-slate-700"
+              @click="dismissPushPrompt"
+            >
+              나중에
+            </button>
+            <button
+              type="button"
+              class="flex-1 rounded-2xl bg-slate-900 py-3 text-sm font-extrabold text-white"
+              @click="handleEnablePush"
+            >
+              알림 켜기
+            </button>
+          </div>
+        </section>
+      </div>
+    </Transition>
 
     <!-- 강제 업데이트 다이얼로그 (닫기 불가) -->
     <Transition name="fade">

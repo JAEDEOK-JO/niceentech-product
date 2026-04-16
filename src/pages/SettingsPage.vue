@@ -1,7 +1,66 @@
 <script setup>
+import { computed, onMounted } from 'vue'
+import { useAuth } from '@/composables/useAuth'
+import { usePushNotification } from '@/composables/usePushNotification'
 import packageJson from '../../package.json'
 
 const appVersion = packageJson.version
+const { session } = useAuth()
+const {
+  isSupported,
+  permission,
+  isSubscribed,
+  loading,
+  requestPermission,
+  removeSubscription,
+  refreshSubscriptionState,
+} = usePushNotification()
+
+const notificationStatus = computed(() => {
+  if (!isSupported.value) return '이 브라우저에서는 푸시 알림을 지원하지 않습니다.'
+  if (permission.value === 'denied') return '브라우저에서 알림이 차단되어 있습니다.'
+  if (permission.value === 'granted' && isSubscribed.value) return '메신저 푸시 알림이 켜져 있습니다.'
+  if (permission.value === 'granted' && !isSubscribed.value) return '브라우저 권한은 허용되어 있고 앱 알림은 꺼져 있습니다.'
+  return '아직 알림 권한을 설정하지 않았습니다.'
+})
+
+const statusToneClass = computed(() => {
+  if (permission.value === 'granted' && isSubscribed.value) return 'bg-emerald-100 text-emerald-700'
+  if (permission.value === 'denied') return 'bg-red-100 text-red-600'
+  return 'bg-amber-100 text-amber-700'
+})
+
+const canEnableNotification = computed(() => (
+  isSupported.value &&
+  Boolean(session.value?.user?.id) &&
+  !loading.value &&
+  !(permission.value === 'granted' && isSubscribed.value)
+))
+
+const canDisableNotification = computed(() => (
+  isSupported.value &&
+  Boolean(session.value?.user?.id) &&
+  !loading.value &&
+  isSubscribed.value
+))
+
+const handleEnableNotification = async () => {
+  const userId = session.value?.user?.id ?? ''
+  if (!userId) return
+  await requestPermission(userId)
+  await refreshSubscriptionState()
+}
+
+const handleDisableNotification = async () => {
+  const userId = session.value?.user?.id ?? ''
+  if (!userId) return
+  await removeSubscription(userId)
+  await refreshSubscriptionState()
+}
+
+onMounted(async () => {
+  await refreshSubscriptionState()
+})
 </script>
 
 <template>
@@ -16,6 +75,50 @@ const appVersion = packageJson.version
 
       <section class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
         <div class="grid gap-3">
+          <article class="rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p class="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">메신저 알림</p>
+                <p class="mt-2 text-sm text-slate-600">{{ notificationStatus }}</p>
+                <p
+                  v-if="permission === 'denied'"
+                  class="mt-2 text-xs text-slate-500"
+                >
+                  브라우저 주소창의 알림 설정 또는 사이트 권한에서 다시 허용해 주세요.
+                </p>
+              </div>
+              <span
+                class="inline-flex rounded-full px-3 py-1 text-xs font-extrabold"
+                :class="statusToneClass"
+              >
+                {{
+                  permission === 'granted' && isSubscribed
+                    ? '켜짐'
+                    : permission === 'denied'
+                      ? '차단됨'
+                      : '꺼짐'
+                }}
+              </span>
+            </div>
+            <div class="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                class="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white disabled:opacity-40"
+                :disabled="!canEnableNotification"
+                @click="handleEnableNotification"
+              >
+                알림 켜기
+              </button>
+              <button
+                type="button"
+                class="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 disabled:opacity-40"
+                :disabled="!canDisableNotification"
+                @click="handleDisableNotification"
+              >
+                알림 끄기
+              </button>
+            </div>
+          </article>
           <article class="rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4">
             <p class="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">앱 버전</p>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ appVersion }}</p>
