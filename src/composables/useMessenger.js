@@ -3,14 +3,19 @@ import { supabase } from '@/lib/supabase'
 
 const sendPush = async ({ excludeUserId, title, body, url }) => {
   try {
-    const { data: subs } = await supabase
-      .from('push_subscriptions')
-      .select('user_id')
-      .neq('user_id', excludeUserId)
-    const userIds = [...new Set((subs ?? []).map((s) => s.user_id))]
-    if (!userIds.length) return
-    await supabase.functions.invoke('send-push', { body: { user_ids: userIds, title, body, url } })
-  } catch {}
+    const { data, error } = await supabase.functions.invoke('send-push', {
+      body: { exclude_user_id: excludeUserId, title, body, url },
+    })
+    if (error) {
+      console.error('send-push invoke failed:', error)
+      return
+    }
+    if (data?.error) {
+      console.error('send-push response error:', data)
+    }
+  } catch (error) {
+    console.error('send-push unexpected error:', error)
+  }
 }
 
 export const useMessenger = (session) => {
