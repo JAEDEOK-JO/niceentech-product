@@ -1,6 +1,6 @@
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { supabase } from '@/lib/supabase'
-import { isAdminRole, normalizeWorkMan } from '@/utils/adminAccess'
+import { isProductionAdmin, normalizeWorkMan } from '@/utils/adminAccess'
 
 const PRODUCT_LIST_TABLE = 'product_list'
 const workTypeGroups = ['용접/무용접', '전실/입상', '나사', '기타']
@@ -51,8 +51,6 @@ const workManRoleToStages = {
   민뚜라: ['welding'],
   '티&면치': ['beveling'],
   메인: ['main_work'],
-  관리자: ['*'],
-  전체: ['*'],
 }
 const statusCycle = {
   없음: '작업중',
@@ -389,7 +387,7 @@ export function useProductionPlan(session) {
     const dateFields = stageToDateFields[stageKey]
     if (!field) return { ok: false, reason: 'invalid_stage' }
 
-    if (!isAdminRole(role) && !canControlStage(workMan, stageKey)) return { ok: false, reason: 'unauthorized' }
+    if (!isProductionAdmin(role) && !canControlStage(workMan, stageKey)) return { ok: false, reason: 'unauthorized' }
 
     const idx = planRows.value.findIndex((r) => r.id === rowId)
     if (idx < 0) return { ok: false, reason: 'not_found' }
@@ -401,7 +399,7 @@ export function useProductionPlan(session) {
     }
 
     // 용접 단계 잠금: 작업중을 누른 사람만 작업완료 가능
-    if (field === 'welding_status' && !isAdminRole(role)) {
+    if (field === 'welding_status' && !isProductionAdmin(role)) {
       const inspector = String(row.welding_inspector ?? '').trim()
       const normalized = normalizeWorkMan(workMan)
       if (current === '작업중' && inspector && normalizeWorkMan(inspector) !== normalized) {
@@ -537,7 +535,7 @@ export function useProductionPlan(session) {
   const reorderByNo = async ({ sourceRowId, targetRowId, role }) => {
     if (!session.value) return { ok: false, reason: 'no_session' }
     if (sourceRowId === targetRowId) return { ok: false, reason: 'same_row' }
-    if (!isAdminRole(role)) return { ok: false, reason: 'unauthorized' }
+    if (!isProductionAdmin(role)) return { ok: false, reason: 'unauthorized' }
 
     const source = planRows.value.find((r) => r.id === sourceRowId)
     const target = planRows.value.find((r) => r.id === targetRowId)

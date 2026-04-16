@@ -1,4 +1,4 @@
-import { createRouter, createWebHashHistory, createWebHistory } from 'vue-router'
+import { createRouter, createWebHistory } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import LoginPage from '@/pages/LoginPage.vue'
 import MainPage from '@/pages/MainPage.vue'
@@ -29,9 +29,8 @@ import AdminOperationsDashboardPage from '@/pages/AdminOperationsDashboardPage.v
 import AdminProductionDashboardPage from '@/pages/AdminProductionDashboardPage.vue'
 import MessengerPage from '@/pages/MessengerPage.vue'
 import AttendancePage from '@/pages/AttendancePage.vue'
-import { isAdminRole, isDesignDepartment } from '@/utils/adminAccess'
+import { isAdminRole, isDesignDepartment, isRootAdmin } from '@/utils/adminAccess'
 
-const isDesktopRuntime = typeof window !== 'undefined' && Boolean(window.desktop)
 
 const routes = [
   {
@@ -246,7 +245,7 @@ const routes = [
 ]
 
 const router = createRouter({
-  history: isDesktopRuntime ? createWebHashHistory() : createWebHistory(),
+  history: createWebHistory(),
   routes,
 })
 
@@ -262,10 +261,13 @@ router.beforeEach(async (to) => {
     return { name: 'home' }
   }
 
-  if (to.meta.requiresAdmin || to.meta.requiresDesignDepartment) {
+  if (to.meta.requiresRootAdmin || to.meta.requiresAdmin || to.meta.requiresDesignDepartment) {
     const userId = data.session?.user?.id ?? null
     if (!userId) return { name: 'login' }
     const { data: profile } = await supabase.from('profiles').select('role,department').eq('id', userId).maybeSingle()
+    if (to.meta.requiresRootAdmin && !isRootAdmin(profile?.role)) {
+      return { name: 'home' }
+    }
     if (to.meta.requiresAdmin && !isAdminRole(profile?.role)) {
       return { name: 'home' }
     }

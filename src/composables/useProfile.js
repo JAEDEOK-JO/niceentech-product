@@ -23,7 +23,7 @@ export function useProfile(session) {
 
     profile.value = {
       ...data,
-      role: data?.role || '',
+      role: data?.role || '일반',
       work_man: data?.work_man || '없음',
     }
   }

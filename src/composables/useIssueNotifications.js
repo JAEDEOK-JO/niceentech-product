@@ -2,6 +2,13 @@ import { onUnmounted, ref, watch } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { isAdminRole, normalizeWorkMan } from '@/utils/adminAccess'
 
+const sendPush = async ({ userIds, title, body, url = '/notifications' }) => {
+  if (!userIds?.length) return
+  try {
+    await supabase.functions.invoke('send-push', { body: { user_ids: userIds, title, body, url } })
+  } catch {}
+}
+
 export function useIssueNotifications(session) {
   const notifications = ref([])
   const completionAlerts = ref([])
@@ -222,7 +229,7 @@ export function useIssueNotifications(session) {
     if (!canReplyRequest({ request, profile })) return { ok: false, reason: 'unauthorized' }
 
     const authorName = String(profile?.name ?? '').trim() || '이름없음'
-    const authorPosition = String(profile?.position ?? '').trim() || '-'
+    const authorWorkMan = String(profile?.work_man ?? '').trim() || '-'
     const effectiveRole = String(profile?.role ?? '').trim() || myRole.value
     const isAdminReply = isAdminRole(effectiveRole)
 
@@ -232,7 +239,7 @@ export function useIssueNotifications(session) {
         request_id: requestId,
         author_user_id: userId,
         author_name: authorName,
-        author_work_man: authorPosition,
+        author_work_man: authorWorkMan,
         message: safeMessage,
         is_admin_reply: isAdminReply,
       })
@@ -367,6 +374,19 @@ export function useIssueNotifications(session) {
         { onConflict: 'request_id,recipient_user_id,notification_kind' },
       )
     }
+
+    const allRecipientIds = [
+      ...recipientUsers.map((u) => u.id),
+      ...adminTargets.map((a) => a.recipient_user_id),
+    ].filter((id) => id && id !== userId)
+
+    sendPush({
+      userIds: [...new Set(allRecipientIds)],
+      title: `✅ 요청 완료: ${request.company || '-'}`,
+      body: `${request.place || '-'} / ${request.area || '-'}`,
+      url: '/notifications',
+    })
+
     return { ok: true }
   }
 
