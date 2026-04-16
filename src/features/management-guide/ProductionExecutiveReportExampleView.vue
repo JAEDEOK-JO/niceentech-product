@@ -2,6 +2,9 @@
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { supabase } from '@/lib/supabase'
 import Button from '@/components/ui/button/Button.vue'
+import { useDialog } from '@/composables/useDialog'
+
+const { confirm, alert } = useDialog()
 
 const PRODUCT_LIST_TABLE = 'product_list'
 const PRODUCTION_REPAIR_HISTORY_TABLE = 'production_repair_history'
@@ -490,8 +493,7 @@ const saveRepairEntry = async () => {
 const deleteRepairEntry = async (rowId) => {
   repairEntryError.value = ''
   const targetRow = repairHistoryRows.value.find((row) => row.id === rowId)
-  const confirmed = typeof window === 'undefined' ? true : window.confirm(`${targetRow?.equipment || '선택한'} 수리내역을 삭제할까요?`)
-  if (!confirmed) return
+  if (!await confirm(`${targetRow?.equipment || '선택한'} 수리내역을 삭제할까요?`)) return
   deletingRepairEntry.value = true
 
   const { error } = await supabase.from(PRODUCTION_REPAIR_HISTORY_TABLE).delete().eq('id', rowId)

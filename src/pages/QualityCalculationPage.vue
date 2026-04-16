@@ -3,6 +3,9 @@ import { onMounted, ref } from 'vue'
 import '@/features/quality-list/quality.css'
 import { fetchCalculationBundle } from '@/features/quality-list/services/quality.service'
 import type { CompanyRecord } from '@/features/quality-list/types/quality'
+import { useDialog } from '@/composables/useDialog'
+
+const { confirm, alert } = useDialog()
 
 const companies = ref<CompanyRecord[]>([])
 const selectedCompanyId = ref<number | null>(null)
@@ -22,7 +25,7 @@ async function load(companyId: number) {
     pipeTransactions.value = bundle.pipeTransactions
     fittingTransactions.value = bundle.fittingTransactions
   } catch (error) {
-    window.alert(error instanceof Error ? error.message : '계산 데이터를 불러오지 못했습니다.')
+    await alert(error instanceof Error ? error.message : '계산 데이터를 불러오지 못했습니다.')
   } finally {
     loading.value = false
   }

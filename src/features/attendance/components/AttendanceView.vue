@@ -15,7 +15,7 @@ import AttendanceEmployeeList from './AttendanceEmployeeList.vue'
 import AttendanceSummaryBoard from './AttendanceSummaryBoard.vue'
 import AttendanceSummaryDetailModal from './AttendanceSummaryDetailModal.vue'
 import AttendanceDetailModal from './AttendanceDetailModal.vue'
-import AttendanceSignatureModal from './AttendanceSignatureModal.vue'
+import AttendanceRequestSignatureDialog from './AttendanceRequestSignatureDialog.vue'
 
 const props = defineProps<{
   items: AttendanceRequest[]
@@ -35,6 +35,10 @@ const props = defineProps<{
   summaryDetailRequests: AttendanceRequest[]
   currentUserId: string
   isAdmin: boolean
+  isRootAdmin: boolean
+  approvalPendingCount: number
+  daepyoPendingCount: number
+  gyeongyuPendingCount: number
   loading: boolean
   formVisible: boolean
   formLoading: boolean
@@ -44,11 +48,9 @@ const props = defineProps<{
   rejectDialogVisible: boolean
   rejectTarget: AttendanceRequest | null
   rejectReason: string
+  signatureRequestVisible: boolean
   detailItem: AttendanceRequest | null
   detailSignatures: import('../services/attendance.service').SignatureInfo[]
-  signatureModalVisible: boolean
-  signatureProfiles: import('../services/attendance.service').ProfileItem[]
-  signatureSaving: boolean
 }>()
 
 const emit = defineEmits<{
@@ -73,9 +75,10 @@ const emit = defineEmits<{
   (e: 'closeDetail'): void
   (e: 'closeReject'): void
   (e: 'submitReject'): void
-  (e: 'openSignature'): void
-  (e: 'closeSignature'): void
-  (e: 'saveSignature', payload: { userId: string; blob: Blob }): void
+  (e: 'daepyoApprove', item: AttendanceRequest): void
+  (e: 'gyeongyu', item: AttendanceRequest): void
+  (e: 'signatureConfirm', blob: Blob): void
+  (e: 'signatureCancel'): void
   (e: 'createEmployee', data: EmployeeFormData): void
   (e: 'updateEmployee', payload: { id: number; data: EmployeeFormData }): void
   (e: 'deleteEmployee', id: number): void
@@ -86,10 +89,6 @@ const activeTab = ref<'requests' | 'employees' | 'summary'>('requests')
 const REQUESTS_PER_PAGE = 10
 const requestsPage = ref(1)
 
-// 대기중 항목 (관리자 빠른처리)
-const pendingItems = computed(() =>
-  props.items.filter((i) => i.status === '대기중').slice(0, 10),
-)
 
 const statusBorder = (status: string) => {
   if (status === '승인') return 'border-l-emerald-500'
@@ -155,14 +154,6 @@ watch(
         </div>
         <div v-if="activeTab === 'requests'" class="flex flex-wrap items-center gap-2">
           <button
-            v-if="isAdmin"
-            type="button"
-            class="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50"
-            @click="emit('openSignature')"
-          >
-            싸인
-          </button>
-          <button
             type="button"
             class="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-slate-700"
             @click="emit('openForm')"
@@ -201,22 +192,58 @@ watch(
       </div>
 
       <!-- 관리자 탭 -->
-      <div v-if="isAdmin" class="mb-5 flex gap-1 rounded-xl border border-slate-200 bg-white p-1 w-fit">
+      <div v-if="isAdmin" class="mb-5 flex flex-wrap gap-1 rounded-xl border border-slate-200 bg-white p-1 w-fit">
         <button
           type="button"
-          class="rounded-lg px-5 py-2 text-sm font-bold transition-colors"
+          class="rounded-lg px-4 py-2 text-sm font-bold transition-colors"
           :class="activeTab === 'requests' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-800'"
           @click="activeTab = 'requests'"
         >신청 현황</button>
         <button
           type="button"
-          class="rounded-lg px-5 py-2 text-sm font-bold transition-colors"
+          class="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-bold transition-colors"
+          :class="activeTab === 'approval' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-800'"
+          @click="activeTab = 'approval'"
+        >
+          부서장 대기
+          <span
+            v-if="approvalPendingCount > 0"
+            class="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-extrabold text-white"
+          >{{ approvalPendingCount }}</span>
+        </button>
+        <button
+          type="button"
+          class="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-bold transition-colors"
+          :class="activeTab === 'daepyo' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-800'"
+          @click="activeTab = 'daepyo'"
+        >
+          최종승인 대기
+          <span
+            v-if="daepyoPendingCount > 0"
+            class="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-purple-500 px-1 text-[10px] font-extrabold text-white"
+          >{{ daepyoPendingCount }}</span>
+        </button>
+        <button
+          type="button"
+          class="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-bold transition-colors"
+          :class="activeTab === 'gyeongyu' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-800'"
+          @click="activeTab = 'gyeongyu'"
+        >
+          경유 대기
+          <span
+            v-if="gyeongyuPendingCount > 0"
+            class="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-extrabold text-white"
+          >{{ gyeongyuPendingCount }}</span>
+        </button>
+        <button
+          type="button"
+          class="rounded-lg px-4 py-2 text-sm font-bold transition-colors"
           :class="activeTab === 'summary' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-800'"
           @click="activeTab = 'summary'"
         >근태요약</button>
         <button
           type="button"
-          class="rounded-lg px-5 py-2 text-sm font-bold transition-colors"
+          class="rounded-lg px-4 py-2 text-sm font-bold transition-colors"
           :class="activeTab === 'employees' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-800'"
           @click="activeTab = 'employees'"
         >직원 목록</button>
@@ -243,6 +270,106 @@ watch(
         @open-detail="emit('openSummaryDetail', $event)"
       />
 
+      <!-- ═══ 부서장 대기 탭 ═══ -->
+      <template v-if="isAdmin && activeTab === 'approval'">
+        <div class="space-y-2">
+          <div v-if="items.filter(i => i.status === '대기중').length === 0"
+            class="rounded-xl border border-dashed border-slate-200 bg-white py-14 text-center text-sm text-slate-400">
+            승인 대기 중인 신청이 없습니다.
+          </div>
+          <div
+            v-for="item in items.filter(i => i.status === '대기중')"
+            :key="item.id"
+            class="cursor-pointer rounded-xl border border-l-4 border-amber-300 bg-white px-4 py-3 transition-shadow hover:shadow-sm"
+          >
+            <div class="flex flex-wrap items-start justify-between gap-2">
+              <div class="flex flex-wrap items-center gap-2" @click="emit('openDetail', item)">
+                <span class="font-bold text-slate-900">{{ item.userName }}</span>
+                <span class="text-xs text-slate-400">({{ item.department || '-' }})</span>
+                <span class="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-700">{{ item.leaveType }}</span>
+                <span class="text-xs font-bold text-slate-700">{{ item.daysCount }}일</span>
+                <span class="text-xs text-slate-400">{{ item.startDate.slice(0,10) }}</span>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <button type="button"
+                  class="rounded-lg bg-emerald-600 px-3 py-1 text-xs font-bold text-white hover:bg-emerald-500"
+                  @click="emit('approve', item)">승인</button>
+                <button type="button"
+                  class="rounded-lg bg-red-500 px-3 py-1 text-xs font-bold text-white hover:bg-red-400"
+                  @click="emit('openReject', item)">반려</button>
+              </div>
+            </div>
+            <p class="mt-1 text-xs text-slate-400" @click="emit('openDetail', item)">{{ item.reason || '-' }}</p>
+          </div>
+        </div>
+      </template>
+
+      <!-- ═══ 최종승인 대기 탭 ═══ -->
+      <template v-if="isAdmin && activeTab === 'daepyo'">
+        <div class="space-y-2">
+          <div v-if="items.filter(i => i.status === '부서장승인').length === 0"
+            class="rounded-xl border border-dashed border-slate-200 bg-white py-14 text-center text-sm text-slate-400">
+            최종 승인 대기 중인 신청이 없습니다.
+          </div>
+          <div
+            v-for="item in items.filter(i => i.status === '부서장승인')"
+            :key="item.id"
+            class="cursor-pointer rounded-xl border border-l-4 border-purple-300 bg-white px-4 py-3 transition-shadow hover:shadow-sm"
+          >
+            <div class="flex flex-wrap items-start justify-between gap-2">
+              <div class="flex flex-wrap items-center gap-2" @click="emit('openDetail', item)">
+                <span class="font-bold text-slate-900">{{ item.userName }}</span>
+                <span class="text-xs text-slate-400">({{ item.department || '-' }})</span>
+                <span class="rounded-full bg-purple-100 px-2 py-0.5 text-[11px] font-bold text-purple-700">{{ item.leaveType }}</span>
+                <span class="text-xs font-bold text-slate-700">{{ item.daysCount }}일</span>
+                <span v-if="item.approvedBy" class="text-xs text-slate-400">부서장: {{ item.approvedBy }}</span>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <button type="button"
+                  class="rounded-lg bg-purple-600 px-3 py-1 text-xs font-bold text-white hover:bg-purple-500"
+                  @click="emit('daepyoApprove', item)">최종 승인</button>
+                <button type="button"
+                  class="rounded-lg bg-red-500 px-3 py-1 text-xs font-bold text-white hover:bg-red-400"
+                  @click="emit('openReject', item)">반려</button>
+              </div>
+            </div>
+            <p class="mt-1 text-xs text-slate-400" @click="emit('openDetail', item)">{{ item.reason || '-' }}</p>
+          </div>
+        </div>
+      </template>
+
+      <!-- ═══ 경유 대기 탭 ═══ -->
+      <template v-if="isAdmin && activeTab === 'gyeongyu'">
+        <div class="space-y-2">
+          <div v-if="items.filter(i => !i.gyeongyuBy).length === 0"
+            class="rounded-xl border border-dashed border-slate-200 bg-white py-14 text-center text-sm text-slate-400">
+            경유 대기 중인 신청이 없습니다.
+          </div>
+          <div
+            v-for="item in items.filter(i => !i.gyeongyuBy)"
+            :key="item.id"
+            class="cursor-pointer rounded-xl border border-l-4 border-blue-300 bg-white px-4 py-3 transition-shadow hover:shadow-sm"
+          >
+            <div class="flex flex-wrap items-start justify-between gap-2">
+              <div class="flex flex-wrap items-center gap-2" @click="emit('openDetail', item)">
+                <span class="font-bold text-slate-900">{{ item.userName }}</span>
+                <span class="text-xs text-slate-400">({{ item.department || '-' }})</span>
+                <span class="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-bold text-blue-700">{{ item.leaveType }}</span>
+                <span class="text-xs font-bold text-slate-700">{{ item.daysCount }}일</span>
+                <span class="rounded-full px-2 py-0.5 text-[11px] font-bold"
+                  :class="item.status === '승인' ? 'bg-emerald-100 text-emerald-700' : item.status === '반려' ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-700'">
+                  {{ item.status }}
+                </span>
+              </div>
+              <button type="button"
+                class="rounded-lg bg-blue-600 px-3 py-1 text-xs font-bold text-white hover:bg-blue-500"
+                @click="emit('gyeongyu', item)">경유</button>
+            </div>
+            <p class="mt-1 text-xs text-slate-400" @click="emit('openDetail', item)">{{ item.reason || '-' }}</p>
+          </div>
+        </div>
+      </template>
+
       <!-- ═══ 신청 현황 탭 ═══ -->
       <template v-if="!isAdmin || activeTab === 'requests'">
 
@@ -264,9 +391,8 @@ watch(
 
         <template v-else>
 
-          <!-- ── 관리자 뷰: 2컬럼 ── -->
-          <div v-if="isAdmin" class="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.8fr)_minmax(280px,0.8fr)]">
-            <!-- 전체 신청 현황 -->
+          <!-- ── 관리자 뷰 ── -->
+          <div v-if="isAdmin">
             <div class="min-w-0">
               <h2 class="mb-3 text-sm font-extrabold text-slate-700">신청 현황</h2>
               <div v-if="items.length === 0" class="rounded-xl border border-dashed border-slate-200 bg-white py-14 text-center text-sm text-slate-400">
@@ -296,6 +422,9 @@ watch(
                         <button type="button" class="rounded border border-slate-200 px-2 py-1 text-xs font-bold text-slate-600 hover:bg-slate-50" @click="emit('adminEdit', item)">수정</button>
                         <button type="button" class="rounded border border-red-200 px-2 py-1 text-xs font-bold text-red-500 hover:bg-red-50" @click="emit('adminDelete', item)">삭제</button>
                       </template>
+                      <template v-else-if="isRootAdmin">
+                        <button type="button" class="rounded border border-red-300 bg-red-50 px-2 py-1 text-xs font-bold text-red-600 hover:bg-red-100" @click="emit('adminDelete', item)">삭제</button>
+                      </template>
                     </div>
                   </div>
                   <div class="mt-1.5 flex flex-wrap items-center gap-3 text-xs text-slate-500" @click="emit('openDetail', item)">
@@ -323,39 +452,6 @@ watch(
                   >
                     다음
                   </button>
-                </div>
-              </div>
-            </div>
-
-            <!-- 빠른 처리 패널 -->
-            <div class="min-w-0">
-              <h2 class="mb-3 text-sm font-extrabold text-slate-700">
-                승인 대기
-                <span v-if="pendingItems.length" class="ml-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-700">
-                  {{ pendingItems.length }}
-                </span>
-              </h2>
-              <div v-if="pendingItems.length === 0" class="rounded-2xl border border-dashed border-slate-200 bg-white py-10 text-center text-sm text-slate-400">
-                대기 중인 신청이 없습니다.
-              </div>
-              <div v-else class="space-y-3">
-                <div
-                  v-for="item in pendingItems"
-                  :key="item.id"
-                  class="rounded-2xl border border-amber-200 bg-amber-50 p-4"
-                >
-                  <div class="flex items-center justify-between gap-2">
-                    <span class="font-bold text-slate-900">{{ item.userName }}</span>
-                    <span class="rounded-full px-2 py-0.5 text-xs font-bold" :class="leaveTypeBadge(item.leaveType)">
-                      {{ item.leaveType }}
-                    </span>
-                  </div>
-                  <p class="mt-1 text-xs text-slate-500">{{ formatPeriod(item) }} · {{ item.daysCount }}일</p>
-                  <p v-if="item.reason" class="mt-1 truncate text-xs text-slate-400">{{ item.reason }}</p>
-                  <div class="mt-3 flex gap-2">
-                    <button type="button" class="flex-1 rounded-lg bg-emerald-600 py-1.5 text-xs font-bold text-white hover:bg-emerald-500" @click="emit('approve', item)">승인</button>
-                    <button type="button" class="flex-1 rounded-lg bg-red-500 py-1.5 text-xs font-bold text-white hover:bg-red-400" @click="emit('openReject', item)">반려</button>
-                  </div>
                 </div>
               </div>
             </div>
@@ -514,13 +610,12 @@ watch(
       />
     </Teleport>
 
+    <!-- 신청 서명 다이얼로그 -->
     <Teleport to="body">
-      <AttendanceSignatureModal
-        v-if="signatureModalVisible"
-        :profiles="signatureProfiles"
-        :saving="signatureSaving"
-        @close="emit('closeSignature')"
-        @save="emit('saveSignature', $event)"
+      <AttendanceRequestSignatureDialog
+        v-if="signatureRequestVisible"
+        @confirm="emit('signatureConfirm', $event)"
+        @cancel="emit('signatureCancel')"
       />
     </Teleport>
 

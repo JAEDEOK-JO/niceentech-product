@@ -1,6 +1,6 @@
 export const LEAVE_TYPES = ['연차', '반차(오전)', '반차(오후)', '기타'] as const
 export const LEAVE_REASONS = ['병원', '출입국방문', '은행업무', '자동차수리'] as const
-export const LEAVE_STATUSES = ['대기중', '승인', '반려'] as const
+export const LEAVE_STATUSES = ['대기중', '부서장승인', '승인', '반려'] as const
 
 export type LeaveType = (typeof LEAVE_TYPES)[number]
 export type LeaveStatus = (typeof LEAVE_STATUSES)[number]
@@ -19,6 +19,11 @@ export interface AttendanceRequest {
   approvedBy: string | null
   approvedAt: string | null
   rejectReason: string | null
+  signatureUrl: string | null
+  gyeongyuBy: string | null
+  gyeongyuAt: string | null
+  daepyoBy: string | null
+  daepyoAt: string | null
   createdAt: string
   updatedAt: string
 }
@@ -75,6 +80,11 @@ export function mapAttendanceRequest(raw: Record<string, unknown>): AttendanceRe
     approvedBy: raw.approved_by != null ? normalizeApprovedBy(raw.approved_by) : null,
     approvedAt: raw.approved_at != null ? toStr(raw.approved_at) : null,
     rejectReason: raw.reject_reason != null ? toStr(raw.reject_reason) : null,
+    signatureUrl: raw.signature_url != null ? toStr(raw.signature_url) : null,
+    gyeongyuBy: raw.gyeongyu_by != null ? toStr(raw.gyeongyu_by) : null,
+    gyeongyuAt: raw.gyeongyu_at != null ? toStr(raw.gyeongyu_at) : null,
+    daepyoBy: raw.daepyo_by != null ? toStr(raw.daepyo_by) : null,
+    daepyoAt: raw.daepyo_at != null ? toStr(raw.daepyo_at) : null,
     createdAt: toStr(raw.created_at),
     updatedAt: toStr(raw.updated_at),
   }

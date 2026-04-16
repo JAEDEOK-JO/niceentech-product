@@ -3,6 +3,9 @@ import { computed, onUnmounted, ref, watch } from 'vue'
 import Button from '@/components/ui/button/Button.vue'
 import Input from '@/components/ui/input/Input.vue'
 import MainProductionPlanGroupTable from '@/features/main/MainProductionPlanGroupTable.vue'
+import { useDialog } from '@/composables/useDialog'
+
+const { confirm, alert } = useDialog()
 
 const props = defineProps({
   pageTitle: { type: String, required: true },
@@ -33,6 +36,7 @@ const emit = defineEmits([
   'load-drawing-files',
   'upload-drawing-files',
   'delete-drawing-file',
+  'welding-long-press',
 ])
 
 const overallTotals = computed(() =>
@@ -338,7 +342,11 @@ const handleCellClick = ({ row, columnKey }) => {
     })
     return
   }
-  const workerColumns = ['worker_t', 'worker_nasa', 'worker_main', 'worker_welding']
+  if (columnKey === 'worker_welding') {
+    emit('cell-action', { row, columnKey })
+    return
+  }
+  const workerColumns = ['worker_t', 'worker_nasa', 'worker_main']
   if (workerColumns.includes(columnKey)) {
     if (row?.shipment) {
       activeShipmentRow.value = row
@@ -467,10 +475,9 @@ const clearDrawingLongPressTimer = () => {
 const handleDrawingItemPressStart = (file) => {
   if (!file?.id || drawingDeletingId.value) return
   clearDrawingLongPressTimer()
-  drawingLongPressTimer = setTimeout(() => {
+  drawingLongPressTimer = setTimeout(async () => {
     suppressDrawingClickId.value = file.id
-    const confirmed = typeof window !== 'undefined' ? window.confirm('삭제하시겠습니까?') : false
-    if (!confirmed) return
+    if (!await confirm('삭제하시겠습니까?')) return
 
     drawingDeletingId.value = file.id
     drawingUploadError.value = ''
@@ -658,6 +665,7 @@ const selectDrawingFile = (file) => {
           :group-index="groupIndex"
           :overall-totals="overallTotals"
           @cell-click="handleCellClick"
+          @cell-long-press="({ row, columnKey }) => columnKey === 'worker_welding' && emit('welding-long-press', row)"
           @open-row-menu="openRowMenu"
         />
       </div>

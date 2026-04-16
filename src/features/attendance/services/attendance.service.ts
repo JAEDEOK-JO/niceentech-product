@@ -75,7 +75,25 @@ export async function createAttendanceRequest(
   userId: string,
   userName: string,
   department: string,
+  signatureBlob?: Blob,
 ): Promise<AttendanceRequest> {
+  // 서명을 먼저 업로드해서 URL 확보 → INSERT에 바로 포함 (별도 UPDATE 불필요)
+  let signatureUrl: string | null = null
+  if (signatureBlob) {
+    try {
+      const timestamp = Date.now()
+      const path = `requests/${userId}/${timestamp}.png`
+      const { error: uploadError } = await supabase.storage
+        .from('signatures')
+        .upload(path, signatureBlob, { upsert: false, contentType: 'image/png' })
+      if (uploadError) throw uploadError
+      const { data: urlData } = supabase.storage.from('signatures').getPublicUrl(path)
+      signatureUrl = urlData.publicUrl
+    } catch (err) {
+      console.error('[서명 업로드 실패]', err)
+    }
+  }
+
   const { data, error } = await supabase
     .from('attendance_requests')
     .insert({
@@ -88,6 +106,7 @@ export async function createAttendanceRequest(
       days_count: form.daysCount,
       reason: form.reason,
       status: '대기중',
+      ...(signatureUrl ? { signature_url: signatureUrl } : {}),
     })
     .select()
     .single()
@@ -154,10 +173,43 @@ export async function adminUpdateAttendanceRequest(
   if (error) throw error
 }
 
-// ─── 승인/반려 (관리자) ────────────────────────────────────────────────────────
+// ─── 경유 처리 ────────────────────────────────────────────────────────────────
+export async function gyeongyuAttendanceRequest(
+  id: number,
+  byName: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from('attendance_requests')
+    .update({
+      gyeongyu_by: byName,
+      gyeongyu_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+
+  if (error) throw error
+}
+
+// ─── 부서장 승인 (1차) ────────────────────────────────────────────────────────
 export async function approveAttendanceRequest(
   id: number,
   approverName: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from('attendance_requests')
+    .update({
+      status: '부서장승인',
+      approved_by: normalizeAttendanceApproverName(approverName),
+      approved_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+
+  if (error) throw error
+}
+
+// ─── 대표 최종 승인 (2차) ──────────────────────────────────────────────────────
+export async function daepyoApproveAttendanceRequest(
+  id: number,
+  byName: string,
 ): Promise<void> {
   const { data: req, error: fetchErr } = await supabase
     .from('attendance_requests')
@@ -171,14 +223,14 @@ export async function approveAttendanceRequest(
     .from('attendance_requests')
     .update({
       status: '승인',
-      approved_by: normalizeAttendanceApproverName(approverName),
-      approved_at: new Date().toISOString(),
+      daepyo_by: normalizeAttendanceApproverName(byName),
+      daepyo_at: new Date().toISOString(),
     })
     .eq('id', id)
 
   if (error) throw error
 
-  // 연차 차감 처리 (연차/반차/병가)
+  // 연차 차감은 최종 승인 시점에 처리
   if (DEDUCTED_LEAVE_TYPES.includes(req.leave_type)) {
     const year = new Date(req.start_date).getFullYear()
     await upsertUsedDays(req.user_id as string, year, Number(req.days_count))

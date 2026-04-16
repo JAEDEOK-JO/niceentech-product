@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import approvalStampUrl from '../approval-stamp.svg?url'
+import gyeongyuStampUrl from '../gyeongyu-stamp.svg?url'
+
+const GYEONGYU_DISPLAY_NAME = '이지형'
 import type { AttendanceRequest } from '../types/attendance'
 import type { SignatureInfo } from '../services/attendance.service'
 import { formatAttendanceReasonText } from '../utils/attendanceReason'
@@ -14,20 +17,25 @@ const emit = defineEmits<{
   (e: 'close'): void
 }>()
 
-const SIGNERS = [
-  { role: '담당', profileName: '쩌민튼', displayName: '쩌민튼' },
+const APPROVAL_SIGNERS = [
+  { role: '담당',  profileName: '쩌민튼',               displayName: '쩌민튼' },
   { role: '부서장', profileName: 'duko777@niceentech.kr', displayName: '조재덕' },
-  { role: '승인', profileName: '', displayName: '' },
+  { role: '대표이사',  profileName: '__daepyo__',            displayName: '' },
 ] as const
 
 const isApproved = computed(() => props.item.status === '승인')
+const isBuseojanApproved = computed(() =>
+  props.item.status === '부서장승인' || props.item.status === '승인'
+)
 
 const shouldShowSignature = (name: string) => {
   if (!name) return false
   if (name === '쩌민튼') return true
-  if (name === 'duko777@niceentech.kr') return isApproved.value
+  if (name === 'duko777@niceentech.kr') return isBuseojanApproved.value
+  if (name === '__daepyo__') return isApproved.value && !!props.item.daepyoBy
   return false
 }
+
 
 const fmt = (d: string) => (d ? d.slice(0, 10) : '-')
 const formatSignerDate = (value: string | null) => {
@@ -40,7 +48,8 @@ const formatSignerDate = (value: string | null) => {
 }
 const getSignerDate = (profileName: string) => {
   if (profileName === '쩌민튼') return formatSignerDate(props.item.createdAt)
-  if (profileName === 'duko777@niceentech.kr' && isApproved.value) return formatSignerDate(props.item.approvedAt)
+  if (profileName === 'duko777@niceentech.kr' && isBuseojanApproved.value) return formatSignerDate(props.item.approvedAt)
+  if (profileName === '__daepyo__' && isApproved.value) return formatSignerDate(props.item.daepyoAt)
   return ''
 }
 
@@ -63,8 +72,14 @@ const today = new Date().toLocaleDateString('ko-KR', {
 
 const statusClass = computed(() => {
   if (props.item.status === '승인') return 'text-emerald-600 border-emerald-400'
+  if (props.item.status === '부서장승인') return 'text-purple-600 border-purple-400'
   if (props.item.status === '반려') return 'text-red-500 border-red-400'
   return 'text-amber-600 border-amber-400'
+})
+
+const statusLabel = computed(() => {
+  if (props.item.status === '부서장승인') return '부서장 승인'
+  return props.item.status
 })
 </script>
 
@@ -73,7 +88,7 @@ const statusClass = computed(() => {
     class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 py-6"
     @click.self="emit('close')"
   >
-    <div class="w-full max-w-2xl rounded-2xl bg-white shadow-2xl">
+    <div class="w-full max-w-2xl rounded-2xl bg-white shadow-2xl overflow-y-auto max-h-[90vh]">
 
       <!-- 모달 헤더 -->
       <div class="flex items-center justify-between border-b border-slate-200 px-6 py-4">
@@ -97,53 +112,86 @@ const statusClass = computed(() => {
           휴&nbsp;가&nbsp;신&nbsp;청&nbsp;서
         </h1>
 
-        <!-- 결재란 -->
-        <div class="mb-6 flex justify-end">
+        <!-- 결재란: 경유(왼쪽) + 담당·부서장·대표이사(오른쪽) -->
+        <div class="mb-6 flex items-start justify-between gap-4">
+
+          <!-- 왼쪽: 경유 -->
+          <table class="table-fixed border-collapse text-xs">
+            <thead>
+              <tr>
+                <th class="border border-slate-300 bg-slate-50 px-5 py-1.5 text-center font-bold text-slate-600">경유</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="border border-slate-300 p-[2px] text-center" style="width: 80px; height: 64px;">
+                  <div v-if="item.gyeongyuBy" class="flex h-[58px] w-full flex-col items-center justify-center gap-0.5 overflow-hidden">
+                    <img
+                      :src="gyeongyuStampUrl"
+                      alt="경유 도장"
+                      class="block h-[42px] w-full object-contain"
+                    />
+                    <span class="text-[10px] leading-none font-bold text-blue-700">{{ GYEONGYU_DISPLAY_NAME }}</span>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td class="border border-slate-300 px-2 py-1 text-center text-xs text-slate-500">
+                  {{ item.gyeongyuAt ? formatSignerDate(item.gyeongyuAt) : '-' }}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <!-- 오른쪽: 담당 · 부서장 · 대표이사 -->
           <table class="border-collapse text-xs">
             <thead>
               <tr>
                 <th
-                  v-for="signer in SIGNERS"
+                  v-for="signer in APPROVAL_SIGNERS"
                   :key="signer.role"
                   class="border border-slate-300 bg-slate-50 px-5 py-1.5 text-center font-bold text-slate-600"
+                  style="width: 92px;"
                 >
                   {{ signer.role }}
                 </th>
               </tr>
             </thead>
             <tbody>
-              <!-- 서명 이미지 행 -->
               <tr>
                 <td
-                  v-for="signer in SIGNERS"
+                  v-for="signer in APPROVAL_SIGNERS"
                   :key="signer.role"
                   class="border border-slate-300 p-[2px] text-center"
-                  style="width: 80px; height: 64px;"
+                  style="width: 92px; height: 64px;"
                 >
                   <template v-if="shouldShowSignature(signer.profileName)">
                     <div class="flex h-[58px] w-full flex-col items-center justify-center gap-0.5 overflow-hidden">
                       <img
                         :src="approvalStampUrl"
-                        :alt="`${signer.displayName} 승인 도장`"
+                        :alt="`${signer.profileName === '__daepyo__' ? item.daepyoBy : signer.displayName} 도장`"
                         class="block h-[42px] w-full object-contain"
                       />
-                      <span class="text-[10px] leading-none font-bold text-slate-700">{{ signer.displayName }}</span>
+                      <span class="text-[10px] leading-none font-bold text-slate-700">
+                        {{ signer.profileName === '__daepyo__' ? item.daepyoBy : signer.displayName }}
+                      </span>
                     </div>
                   </template>
                 </td>
               </tr>
-              <!-- 날짜 행 -->
               <tr>
                 <td
-                  v-for="signer in SIGNERS"
+                  v-for="signer in APPROVAL_SIGNERS"
                   :key="signer.role + '_date'"
                   class="border border-slate-300 px-2 py-1 text-center text-xs text-slate-500"
+                  style="width: 92px;"
                 >
                   {{ getSignerDate(signer.profileName) || '-' }}
                 </td>
               </tr>
             </tbody>
           </table>
+
         </div>
 
         <!-- 신청 내용 테이블 -->
@@ -175,9 +223,12 @@ const statusClass = computed(() => {
                 <span
                   class="rounded-full border px-3 py-0.5 text-xs font-bold"
                   :class="statusClass"
-                >{{ item.status }}</span>
-                <span v-if="item.status === '승인' && item.approvedBy" class="ml-2 text-xs text-slate-400">
+                >{{ statusLabel }}</span>
+                <span v-if="item.status === '부서장승인' && item.approvedBy" class="ml-2 text-xs text-slate-400">
                   ({{ item.approvedBy }})
+                </span>
+                <span v-if="item.status === '승인' && item.daepyoBy" class="ml-2 text-xs text-slate-400">
+                  ({{ item.daepyoBy }})
                 </span>
                 <span v-if="item.status === '반려' && item.rejectReason" class="ml-2 text-xs text-red-500">
                   — {{ item.rejectReason }}
@@ -191,10 +242,22 @@ const statusClass = computed(() => {
           </tbody>
         </table>
 
-        <!-- 하단 문구 -->
-        <p class="mt-5 text-right text-xs text-slate-400">
-          위와 같이 휴가를 신청합니다.&nbsp;&nbsp;{{ today }}
-        </p>
+        <!-- 신청인 서명 -->
+        <div class="mt-5 flex items-end justify-end gap-4 border-t border-slate-100 pt-5">
+          <p class="text-xs text-slate-400">위와 같이 휴가를 신청합니다.&nbsp;&nbsp;{{ today }}</p>
+          <div class="flex flex-col items-center gap-1">
+            <span class="text-xs font-bold text-slate-500">신청인 : {{ item.userName }}</span>
+            <div class="flex h-16 w-32 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
+              <img
+                v-if="item.signatureUrl"
+                :src="item.signatureUrl"
+                :alt="`${item.userName} 서명`"
+                class="max-h-full max-w-full object-contain"
+              />
+              <span v-else class="text-xs text-slate-300">(서명 없음)</span>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>

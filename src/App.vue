@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
 import GlobalAppBar from '@/components/layout/GlobalAppBar.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import { supabase } from '@/lib/supabase'
 import { usePushNotification } from '@/composables/usePushNotification'
 import packageJson from '../package.json'
@@ -97,6 +98,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="min-h-screen bg-white">
+    <AppDialog />
     <GlobalAppBar v-if="showGlobalAppBar" />
     <div :class="showGlobalAppBar ? 'app-with-bar pt-[72px]' : ''">
       <RouterView />

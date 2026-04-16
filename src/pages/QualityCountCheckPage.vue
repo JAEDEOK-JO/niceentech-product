@@ -8,6 +8,9 @@ import {
   saveCountBreakdown,
 } from '@/features/quality-list/services/quality.service'
 import type { QualityCountBreakdown, QualityListRow } from '@/features/quality-list/types/quality'
+import { useDialog } from '@/composables/useDialog'
+
+const { confirm, alert } = useDialog()
 
 const route = useRoute()
 const router = useRouter()
@@ -41,7 +44,7 @@ async function load() {
       breakdown.a65 = [...next.a65]
     }
   } catch (error) {
-    window.alert(error instanceof Error ? error.message : '수량 점검 데이터를 불러오지 못했습니다.')
+    await alert(error instanceof Error ? error.message : '수량 점검 데이터를 불러오지 못했습니다.')
   } finally {
     loading.value = false
   }
@@ -52,10 +55,10 @@ async function save(finalSave: boolean) {
 
   try {
     await saveCountBreakdown(row.value, breakdown, finalSave)
-    window.alert(finalSave ? '최종 확인이 저장되었습니다.' : '중간 저장되었습니다.')
+    await alert(finalSave ? '최종 확인이 저장되었습니다.' : '중간 저장되었습니다.')
     void router.back()
   } catch (error) {
-    window.alert(error instanceof Error ? error.message : '저장에 실패했습니다.')
+    await alert(error instanceof Error ? error.message : '저장에 실패했습니다.')
   }
 }
 

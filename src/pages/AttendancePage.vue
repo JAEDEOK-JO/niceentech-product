@@ -9,9 +9,10 @@
  * 관리자 판별: profiles.role === '관리자' (isAdminRole 사용)
  */
 import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
+import { useDialog } from '@/composables/useDialog'
 import { useAuth } from '@/composables/useAuth'
 import { useProfile } from '@/composables/useProfile'
-import { isAdminRole } from '@/utils/adminAccess'
+import { isAdminRole, isRootAdmin } from '@/utils/adminAccess'
 import {
   fetchAttendanceRequests,
   fetchMyAttendanceRequests,
@@ -22,6 +23,8 @@ import {
   adminDeleteAttendanceRequest,
   approveAttendanceRequest,
   rejectAttendanceRequest,
+  gyeongyuAttendanceRequest,
+  daepyoApproveAttendanceRequest,
   fetchAnnualQuota,
   fetchDepartments,
   fetchEmployeeCount,
@@ -31,13 +34,10 @@ import {
   createEmployee,
   updateEmployee,
   deleteEmployee,
-  fetchProfilesList,
   fetchSignatures,
   subscribeAttendanceRequests,
   unsubscribeAttendance,
-  uploadAndSaveSignature,
   type EmployeeFormData,
-  type ProfileItem,
   type SignatureInfo,
 } from '@/features/attendance/services/attendance.service'
 import {
@@ -62,6 +62,8 @@ const currentDept = computed(() => profile.value?.department ?? '')
 
 // 관리자 판별: profiles.role 컬럼 기준
 const isAdmin = computed(() => isAdminRole(profile.value?.role))
+const { confirm } = useDialog()
+const isRootAdminUser = computed(() => isRootAdmin(profile.value?.role))
 
 // ─── 필터 ──────────────────────────────────────────────────────────────────────
 const thisYear = new Date().getFullYear()
@@ -113,20 +115,22 @@ const isEditForm = ref(false)
 const editTargetId = ref<number | null>(null)
 const formData = ref<AttendanceFormState>(createEmptyForm())
 
+// ─── 서명 다이얼로그 상태 ──────────────────────────────────────────────────────
+const signatureRequestVisible = ref(false)
+
 // ─── 디테일 모달 ───────────────────────────────────────────────────────────────
 const detailItem = ref<AttendanceRequest | null>(null)
 const detailSignatures = ref<SignatureInfo[]>([])
 const SIGNATURE_NAMES = ['쩌민튼', 'duko777@niceentech.kr'] as const
 
-// ─── 서명 관리 모달 ──────────────────────────────────────────────────────────────
-const signatureModalVisible = ref(false)
-const signatureProfiles = ref<ProfileItem[]>([])
-const signatureSaving = ref(false)
-
 async function openDetail(item: AttendanceRequest) {
   detailItem.value = item
   try {
-    detailSignatures.value = await fetchSignatures([...SIGNATURE_NAMES])
+    const names = [...SIGNATURE_NAMES]
+    if (item.gyeongyuBy && !names.includes(item.gyeongyuBy as typeof names[number])) {
+      (names as string[]).push(item.gyeongyuBy)
+    }
+    detailSignatures.value = await fetchSignatures(names)
   } catch {
     detailSignatures.value = SIGNATURE_NAMES.map((name) => ({ name, signaturePath: null }))
   }
@@ -135,33 +139,6 @@ async function openDetail(item: AttendanceRequest) {
 function closeDetail() {
   detailItem.value = null
   detailSignatures.value = []
-}
-
-async function openSignatureModal() {
-  signatureModalVisible.value = true
-  try {
-    signatureProfiles.value = await fetchProfilesList()
-  } catch {
-    signatureProfiles.value = []
-    showToast('서명 대상 목록을 불러오지 못했습니다.', 'error')
-  }
-}
-
-function closeSignatureModal() {
-  signatureModalVisible.value = false
-}
-
-async function handleSaveSignature(payload: { userId: string; blob: Blob }) {
-  signatureSaving.value = true
-  try {
-    await uploadAndSaveSignature(payload.userId, payload.blob)
-    signatureProfiles.value = await fetchProfilesList()
-    showToast('서명이 저장되었습니다.')
-  } catch {
-    showToast('서명 저장 중 오류가 발생했습니다.', 'error')
-  } finally {
-    signatureSaving.value = false
-  }
 }
 
 // ─── 반려 다이얼로그 ───────────────────────────────────────────────────────────
@@ -344,24 +321,44 @@ async function submitForm() {
     showToast('직원을 선택해주세요.', 'error')
     return
   }
-  formLoading.value = true
-  try {
-    if (isEditForm.value && editTargetId.value !== null) {
+
+  // 수정은 서명 없이 바로 처리
+  if (isEditForm.value && editTargetId.value !== null) {
+    formLoading.value = true
+    try {
       if (isAdmin.value) {
         await adminUpdateAttendanceRequest(editTargetId.value, formData.value)
       } else {
         await updateAttendanceRequest(editTargetId.value, formData.value)
       }
       showToast('수정되었습니다.')
-    } else {
-      await createAttendanceRequest(
-        formData.value,
-        currentUserId.value,
-        formData.value.selectedEmployeeName,
-        formData.value.selectedDepartment,
-      )
-      showToast('휴가 신청이 접수되었습니다.')
+      markLocalAttendanceMutation()
+      formVisible.value = false
+      await refreshAttendanceAfterMutation()
+    } catch {
+      showToast('처리 중 오류가 발생했습니다.', 'error')
+    } finally {
+      formLoading.value = false
     }
+    return
+  }
+
+  // 신규 신청 → 서명 다이얼로그 표시
+  signatureRequestVisible.value = true
+}
+
+async function handleSignatureConfirm(blob: Blob) {
+  signatureRequestVisible.value = false
+  formLoading.value = true
+  try {
+    await createAttendanceRequest(
+      formData.value,
+      currentUserId.value,
+      formData.value.selectedEmployeeName,
+      formData.value.selectedDepartment,
+      blob,
+    )
+    showToast('휴가 신청이 접수되었습니다.')
     markLocalAttendanceMutation()
     formVisible.value = false
     await refreshAttendanceAfterMutation()
@@ -372,9 +369,13 @@ async function submitForm() {
   }
 }
 
+function handleSignatureCancel() {
+  signatureRequestVisible.value = false
+}
+
 // ─── 신청 삭제 (일반 사용자, 대기중만) ────────────────────────────────────────
 async function handleDelete(item: AttendanceRequest) {
-  if (!confirm('신청을 취소하시겠습니까?')) return
+  if (!await confirm('신청을 취소하시겠습니까?')) return
   try {
     await deleteAttendanceRequest(item.id)
     markLocalAttendanceMutation()
@@ -407,11 +408,11 @@ function handleAdminEdit(item: AttendanceRequest) {
 
 // ─── 관리자 삭제 (상태 무관) ───────────────────────────────────────────────────
 async function handleAdminDelete(item: AttendanceRequest) {
-  if (item.status === '승인') {
+  if (item.status === '승인' && !isRootAdminUser.value) {
     showToast('승인 완료 건은 삭제할 수 없습니다.', 'error')
     return
   }
-  if (!confirm(`'${item.userName}' 신청을 삭제하시겠습니까?`)) return
+  if (!await confirm(`'${item.userName}' 신청을 삭제하시겠습니까?`)) return
   try {
     await adminDeleteAttendanceRequest(item.id)
     markLocalAttendanceMutation()
@@ -422,9 +423,35 @@ async function handleAdminDelete(item: AttendanceRequest) {
   }
 }
 
+// ─── 대표 최종 승인 ────────────────────────────────────────────────────────────
+async function handleDaepyoApprove(item: AttendanceRequest) {
+  if (!await confirm(`${item.userName}의 신청을 최종 승인하시겠습니까?`)) return
+  try {
+    await daepyoApproveAttendanceRequest(item.id, currentUserName.value)
+    markLocalAttendanceMutation()
+    showToast('최종 승인 처리되었습니다.')
+    await refreshAttendanceAfterMutation()
+  } catch {
+    showToast('최종 승인 중 오류가 발생했습니다.', 'error')
+  }
+}
+
+// ─── 경유 ──────────────────────────────────────────────────────────────────────
+async function handleGyeongyu(item: AttendanceRequest) {
+  if (!await confirm(`${item.userName}의 신청을 경유 처리하시겠습니까?`)) return
+  try {
+    await gyeongyuAttendanceRequest(item.id, currentUserName.value)
+    markLocalAttendanceMutation()
+    showToast('경유 처리되었습니다.')
+    await refreshAttendanceAfterMutation()
+  } catch {
+    showToast('경유 처리 중 오류가 발생했습니다.', 'error')
+  }
+}
+
 // ─── 승인 ──────────────────────────────────────────────────────────────────────
 async function handleApprove(item: AttendanceRequest) {
-  if (!confirm(`${item.userName}의 신청을 승인하시겠습니까?`)) return
+  if (!await confirm(`${item.userName}의 신청을 승인하시겠습니까?`)) return
   try {
     await approveAttendanceRequest(item.id, currentUserName.value)
     markLocalAttendanceMutation()
@@ -516,6 +543,10 @@ async function handleDeleteEmployee(id: number) {
     :summary-detail-requests="summaryDetailRequests"
     :current-user-id="currentUserId"
     :is-admin="isAdmin"
+    :is-root-admin="isRootAdminUser"
+    :approval-pending-count="items.filter(i => i.status === '대기중').length"
+    :daepyo-pending-count="items.filter(i => i.status === '부서장승인').length"
+    :gyeongyu-pending-count="items.filter(i => !i.gyeongyuBy).length"
     :loading="loading"
     :form-visible="formVisible"
     :form-loading="formLoading"
@@ -539,21 +570,20 @@ async function handleDeleteEmployee(id: number) {
     @edit="openEditForm"
     @delete="handleDelete"
     @approve="handleApprove"
+    @daepyo-approve="handleDaepyoApprove"
+    @gyeongyu="handleGyeongyu"
     @open-reject="openRejectDialog"
     @close-reject="closeRejectDialog"
     @submit-reject="submitReject"
     @admin-edit="handleAdminEdit"
     @admin-delete="handleAdminDelete"
+    :signature-request-visible="signatureRequestVisible"
+    @signature-confirm="handleSignatureConfirm"
+    @signature-cancel="handleSignatureCancel"
     :detail-item="detailItem"
     :detail-signatures="detailSignatures"
-    :signature-modal-visible="signatureModalVisible"
-    :signature-profiles="signatureProfiles"
-    :signature-saving="signatureSaving"
     @open-detail="openDetail"
     @close-detail="closeDetail"
-    @open-signature="openSignatureModal"
-    @close-signature="closeSignatureModal"
-    @save-signature="handleSaveSignature"
     @create-employee="handleCreateEmployee"
     @update-employee="handleUpdateEmployee"
     @delete-employee="handleDeleteEmployee"

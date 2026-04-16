@@ -14,7 +14,6 @@ export const productTableColumns = [
   { label: '티&면치', key: 'beveling', width: 70, align: 'center' },
   { label: '메인', key: 'main_work', width: 70, align: 'center' },
   { label: '무용접', key: 'nasa', width: 70, align: 'center' },
-  { label: '용접', key: 'welding', width: 70, align: 'center' },
   { label: '메뉴', key: 'call_action', width: 60, align: 'center' },
 ]
 

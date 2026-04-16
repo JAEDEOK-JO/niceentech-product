@@ -7,6 +7,9 @@ import { useProfile } from '@/composables/useProfile'
 import { supabase } from '@/lib/supabase'
 import { normalizeCompanyType } from '@/constants/companyTypes'
 import { isAdminRole, isDesignDepartment } from '@/utils/adminAccess'
+import { useDialog } from '@/composables/useDialog'
+
+const { confirm, alert } = useDialog()
 
 const router = useRouter()
 const { session } = useAuth()
@@ -261,12 +264,7 @@ const deleteRow = async (rowId) => {
   const target = rows.value.find((item) => item.id === rowId)
   if (!target) return
 
-  const confirmed = typeof window === 'undefined'
-    ? true
-    : window.confirm(
-        `${target.company} ${target.place} 회사를 삭제할까요?\n생산계획/검수리스트 데이터는 삭제되지 않고 회사 연결만 해제됩니다.`,
-      )
-  if (!confirmed) return
+  if (!await confirm(`${target.company} ${target.place} 회사를 삭제할까요?\n생산계획/검수리스트 데이터는 삭제되지 않고 회사 연결만 해제됩니다.`)) return
 
   deletingIds.value = [...deletingIds.value, rowId]
   const { error } = await supabase.from('company_list').delete().eq('id', rowId)

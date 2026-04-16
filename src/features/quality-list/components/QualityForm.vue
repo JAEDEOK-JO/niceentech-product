@@ -17,6 +17,9 @@ import {
   saveQualityForm,
   searchCompanies,
 } from '../services/quality.service'
+import { useDialog } from '@/composables/useDialog'
+
+const { confirm, alert } = useDialog()
 
 const props = defineProps<{
   mode: 'create' | 'update'
@@ -81,7 +84,7 @@ async function loadCompanies() {
   try {
     companyResults.value = await searchCompanies(companyKeyword.value)
   } catch (error) {
-    window.alert(error instanceof Error ? error.message : '회사 검색에 실패했습니다.')
+    await alert(error instanceof Error ? error.message : '회사 검색에 실패했습니다.')
   } finally {
     loadingCompanies.value = false
   }
@@ -97,7 +100,7 @@ async function loadLotInfos() {
       selectLotInfo(filteredLotInfos.value[0])
     }
   } catch (error) {
-    window.alert(error instanceof Error ? error.message : '로트 정보를 불러오지 못했습니다.')
+    await alert(error instanceof Error ? error.message : '로트 정보를 불러오지 못했습니다.')
   } finally {
     loadingLots.value = false
   }
@@ -105,7 +108,7 @@ async function loadLotInfos() {
 
 async function saveLotInfo() {
   if (!lotInfoForm.lotName.trim() || !Number.isFinite(Number(lotInfoForm.lotNum))) {
-    window.alert('로트 이름과 번호를 입력해 주세요.')
+    await alert('로트 이름과 번호를 입력해 주세요.')
     return
   }
 
@@ -118,13 +121,13 @@ async function saveLotInfo() {
     lotInfoForm.lotNum = 0
     await loadLotInfos()
   } catch (error) {
-    window.alert(error instanceof Error ? error.message : '로트 정보 저장에 실패했습니다.')
+    await alert(error instanceof Error ? error.message : '로트 정보 저장에 실패했습니다.')
   }
 }
 
 async function submit() {
   if (!form.company.trim() || !form.place.trim() || !form.area.trim()) {
-    window.alert('회사명, 현장명, 구역명은 필수입니다.')
+    await alert('회사명, 현장명, 구역명은 필수입니다.')
     return
   }
 
@@ -135,7 +138,7 @@ async function submit() {
     const id = await saveQualityForm(form)
     emit('saved', id)
   } catch (error) {
-    window.alert(error instanceof Error ? error.message : '저장에 실패했습니다.')
+    await alert(error instanceof Error ? error.message : '저장에 실패했습니다.')
   } finally {
     saving.value = false
   }

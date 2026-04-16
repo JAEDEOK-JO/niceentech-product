@@ -5,6 +5,9 @@ import '@/features/quality-list/quality.css'
 import QualityForm from '@/features/quality-list/components/QualityForm.vue'
 import { buildFormFromRow, fetchQualityItem } from '@/features/quality-list/services/quality.service'
 import type { QualityFormState } from '@/features/quality-list/types/quality'
+import { useDialog } from '@/composables/useDialog'
+
+const { confirm, alert } = useDialog()
 
 const route = useRoute()
 const router = useRouter()
@@ -20,7 +23,7 @@ async function load() {
     const item = await fetchQualityItem(id.value)
     form.value = item ? buildFormFromRow(item) : null
   } catch (error) {
-    window.alert(error instanceof Error ? error.message : '수정 데이터를 불러오지 못했습니다.')
+    await alert(error instanceof Error ? error.message : '수정 데이터를 불러오지 못했습니다.')
   } finally {
     loading.value = false
   }

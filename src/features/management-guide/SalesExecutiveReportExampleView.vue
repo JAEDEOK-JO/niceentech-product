@@ -5,6 +5,9 @@ import { supabase } from '@/lib/supabase'
 import Button from '@/components/ui/button/Button.vue'
 import Input from '@/components/ui/input/Input.vue'
 import { normalizeCompanyType } from '@/constants/companyTypes'
+import { useDialog } from '@/composables/useDialog'
+
+const { confirm, alert } = useDialog()
 
 const COMPANY_LIST_TABLE = 'company_list'
 const SALES_WEEKLY_TABLE = 'sales_weekly_entries'
@@ -257,8 +260,7 @@ const saveWeeklySales = async () => {
 
 const deleteWeeklySales = async () => {
   weeklySalesError.value = ''
-  const confirmed = typeof window === 'undefined' ? true : window.confirm(`${salesDialogMonthLabel.value} 매출 데이터를 삭제할까요?`)
-  if (!confirmed) return
+  if (!await confirm(`${salesDialogMonthLabel.value} 매출 데이터를 삭제할까요?`)) return
   deletingWeeklySales.value = true
 
   const monthValue = salesDialogMonthValue.value
@@ -342,8 +344,7 @@ const saveAsEntry = async () => {
 const deleteAsEntry = async (rowId) => {
   asEntriesError.value = ''
   const targetRow = asRows.value.find((row) => row.id === rowId)
-  const confirmed = typeof window === 'undefined' ? true : window.confirm(`${targetRow?.company || '선택한'} AS 데이터를 삭제할까요?`)
-  if (!confirmed) return
+  if (!await confirm(`${targetRow?.company || '선택한'} AS 데이터를 삭제할까요?`)) return
   deletingAsEntry.value = true
 
   const { error } = await supabase.from(SALES_AS_TABLE).delete().eq('id', rowId)

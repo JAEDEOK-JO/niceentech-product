@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useDialog } from '@/composables/useDialog'
 import type { Employee } from '../types/attendance'
 import type { EmployeeFormData } from '../services/attendance.service'
+
+const { confirm } = useDialog()
 
 const props = defineProps<{
   employees: Employee[]
@@ -108,8 +111,8 @@ function submitForm() {
   formVisible.value = false
 }
 
-function handleDelete(emp: Employee) {
-  if (!confirm(`'${emp.name}' 직원을 삭제하시겠습니까?`)) return
+async function handleDelete(emp: Employee) {
+  if (!await confirm(`'${emp.name}' 직원을 삭제하시겠습니까?`)) return
   emit('delete', emp.id)
 }
 

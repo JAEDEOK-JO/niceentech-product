@@ -22,7 +22,33 @@ const tableBorderStyle = {
   borderWidth: '0.1px',
 }
 
-const emit = defineEmits(['open-row-menu', 'cell-click'])
+const emit = defineEmits(['open-row-menu', 'cell-click', 'cell-long-press'])
+
+const LONG_PRESS_MS = 700
+let longPressTimer = null
+let longPressTriggered = false
+
+const onCellPointerDown = (row, columnKey) => {
+  longPressTriggered = false
+  longPressTimer = setTimeout(() => {
+    longPressTimer = null
+    longPressTriggered = true
+    emit('cell-long-press', { row, columnKey })
+  }, LONG_PRESS_MS)
+}
+const onCellPointerUp = () => {
+  if (longPressTimer) {
+    clearTimeout(longPressTimer)
+    longPressTimer = null
+  }
+}
+const onCellClick = (row, columnKey) => {
+  if (longPressTriggered) {
+    longPressTriggered = false
+    return
+  }
+  emit('cell-click', { row, columnKey })
+}
 </script>
 
 <template>
@@ -167,7 +193,12 @@ const emit = defineEmits(['open-row-menu', 'cell-click'])
                 v-else-if="clickableColumns.includes(column.key)"
                 type="button"
                 class="flex h-full w-full items-center justify-center bg-transparent p-0 text-inherit"
-                @click="emit('cell-click', { row, columnKey: column.key })"
+                @click="column.key === 'worker_welding' ? onCellClick(row, column.key) : emit('cell-click', { row, columnKey: column.key })"
+                @mousedown="column.key === 'worker_welding' ? onCellPointerDown(row, column.key) : undefined"
+                @mouseup="column.key === 'worker_welding' ? onCellPointerUp() : undefined"
+                @mouseleave="column.key === 'worker_welding' ? onCellPointerUp() : undefined"
+                @touchstart.prevent="column.key === 'worker_welding' ? onCellPointerDown(row, column.key) : undefined"
+                @touchend="column.key === 'worker_welding' ? onCellPointerUp() : undefined"
               >
                 <span class="cell-fixed-text block w-full" :class="isStatusCompactColumn(column.key) ? 'text-center text-[11px] font-bold' : ''">{{ getCellText(row, column.key) }}</span>
               </button>

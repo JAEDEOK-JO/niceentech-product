@@ -4,6 +4,9 @@ import { useRoute, useRouter } from 'vue-router'
 import '@/features/quality-list/quality.css'
 import QualityFilters from '@/features/quality-list/components/QualityFilters.vue'
 import QualityTable from '@/features/quality-list/components/QualityTable.vue'
+import { useDialog } from '@/composables/useDialog'
+
+const { confirm, alert } = useDialog()
 import {
   copyQualityItem,
   deleteQualityItem,
@@ -49,7 +52,7 @@ async function load() {
       showAllRecords: showAllRecords.value,
     })
   } catch (error) {
-    window.alert(error instanceof Error ? error.message : '검수리스트를 불러오지 못했습니다.')
+    await alert(error instanceof Error ? error.message : '검수리스트를 불러오지 못했습니다.')
   } finally {
     loading.value = false
   }
@@ -112,7 +115,7 @@ function goCountCheck(item: QualityListRow) {
 }
 
 async function onDelete(item: QualityListRow) {
-  if (!window.confirm(`${item.company} ${item.place} 항목을 삭제할까요?`)) return
+  if (!await confirm(`${item.company} ${item.place} 항목을 삭제할까요?`)) return
   await deleteQualityItem(item.id)
   await load()
 }

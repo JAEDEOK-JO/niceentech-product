@@ -154,8 +154,58 @@ const handleShipRow = async (row) => {
   await updatePlanRowFields({ rowId: row.id, updates })
 }
 
+const formatIsoDate = (date = new Date()) => {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+const formatWorkerDate = (date = new Date()) => {
+  const year = String(date.getFullYear()).slice(2)
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}.${month}.${day}`
+}
+
+const handleWeldingLongPress = async (row) => {
+  if (!row?.id) return
+  await updatePlanRowFields({
+    rowId: row.id,
+    updates: {
+      welding_status: '없음',
+      worker_welding: '없음',
+      worker_welding_time: '',
+      welding_started_on: null,
+      welding_completed_on: null,
+      welding_inspector: '',
+    },
+  })
+}
+
 const handleCellAction = async ({ row, columnKey }) => {
   if (!row?.id || !columnKey) return
+
+  if (columnKey === 'worker_welding') {
+    const current = String(row.welding_status ?? '').trim()
+    let next = ''
+    const updates = {}
+    if (!current || current === '없음' || current === '작업전') {
+      next = '작업중'
+      updates.welding_started_on = formatIsoDate()
+      updates.worker_welding_time = ''
+    } else if (current === '작업중') {
+      next = '작업완료'
+      updates.welding_completed_on = formatIsoDate()
+      updates.worker_welding_time = formatWorkerDate()
+    } else {
+      return
+    }
+    updates.welding_status = next
+    updates.worker_welding = next
+    await updatePlanRowFields({ rowId: row.id, updates })
+    return
+  }
 
   if (columnKey === 'initial') {
     await updatePlanRowFields({
@@ -290,6 +340,7 @@ watch(
     @ship-row="handleShipRow"
     @cancel-ship-row="handleCancelShipRow"
     @cell-action="handleCellAction"
+    @welding-long-press="handleWeldingLongPress"
     @move-test-date="handleMoveTestDate"
     @load-drawing-files="handleLoadDrawingFiles"
     @upload-drawing-files="handleUploadDrawingFiles"
