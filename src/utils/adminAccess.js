@@ -13,7 +13,7 @@ export const isAdminWorkMan = (value) => {
 export const isAdminRole = (value) => {
   const normalized = normalizeRole(value)
   if (!normalized) return false
-  return normalized.includes(normalizeRole('관리자'))
+  return normalized.includes(normalizeRole('관리자')) || normalized.toLowerCase().includes('admin')
 }
 
 export const isDesignDepartment = (value) => {

@@ -1,44 +1,61 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import approvalStampUrl from '../approval-stamp.svg?url'
 import type { AttendanceRequest } from '../types/attendance'
 import type { SignatureInfo } from '../services/attendance.service'
+import { formatAttendanceReasonText } from '../utils/attendanceReason'
 
 const props = defineProps<{
   item: AttendanceRequest
-  signatures: SignatureInfo[]  // [쩌민튼, 조재덕, 이지형] 순서
+  signatures: SignatureInfo[]
 }>()
 
 const emit = defineEmits<{
   (e: 'close'): void
 }>()
 
-// 서명자 3인: 담당(쩌민튼), 부서장(조재덕), 승인(이지형)
 const SIGNERS = [
-  { role: '담당', name: '쩌민튼' },
-  { role: '부서장', name: '조재덕' },
-  { role: '승인', name: '이지형' },
+  { role: '담당', profileName: '쩌민튼', displayName: '쩌민튼' },
+  { role: '부서장', profileName: 'duko777@niceentech.kr', displayName: '조재덕' },
+  { role: '승인', profileName: '', displayName: '' },
 ] as const
 
-// 서명 표시 여부
-// - 대기중/반려 → 담당(쩌민튼)만
-// - 승인 → 전원
 const isApproved = computed(() => props.item.status === '승인')
 
 const shouldShowSignature = (name: string) => {
-  if (name === '쩌민튼') return true          // 신청하면 담당 서명
-  return isApproved.value                     // 승인되면 부서장·승인도 표시
+  if (!name) return false
+  if (name === '쩌민튼') return true
+  if (name === 'duko777@niceentech.kr') return isApproved.value
+  return false
 }
 
-const getSignaturePath = (name: string) =>
-  props.signatures.find((s) => s.name === name)?.signaturePath ?? null
-
 const fmt = (d: string) => (d ? d.slice(0, 10) : '-')
+const formatSignerDate = (value: string | null) => {
+  const raw = String(value ?? '').trim()
+  if (!raw) return ''
+  const matched = raw.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (!matched) return raw
+  const [, year, month, day] = matched
+  return `${year.slice(2)}.${month}.${day}`
+}
+const getSignerDate = (profileName: string) => {
+  if (profileName === '쩌민튼') return formatSignerDate(props.item.createdAt)
+  if (profileName === 'duko777@niceentech.kr' && isApproved.value) return formatSignerDate(props.item.approvedAt)
+  return ''
+}
 
 const period = computed(() => {
   const s = fmt(props.item.startDate)
   const e = fmt(props.item.endDate)
   return s === e ? s : `${s} ~ ${e}`
 })
+const reasonText = computed(() =>
+  formatAttendanceReasonText({
+    leaveType: props.item.leaveType,
+    daysCount: props.item.daysCount,
+    reason: props.item.reason,
+  }),
+)
 
 const today = new Date().toLocaleDateString('ko-KR', {
   year: 'numeric', month: 'long', day: 'numeric',
@@ -99,30 +116,30 @@ const statusClass = computed(() => {
               <tr>
                 <td
                   v-for="signer in SIGNERS"
-                  :key="signer.name"
-                  class="border border-slate-300 px-4 py-2 text-center"
+                  :key="signer.role"
+                  class="border border-slate-300 p-[2px] text-center"
                   style="width: 80px; height: 64px;"
                 >
-                  <template v-if="shouldShowSignature(signer.name)">
-                    <img
-                      v-if="getSignaturePath(signer.name)"
-                      :src="getSignaturePath(signer.name)!"
-                      :alt="`${signer.name} 서명`"
-                      class="mx-auto h-10 w-full object-contain"
-                    />
-                    <!-- 서명 이미지 없을 때 이름으로 대체 -->
-                    <span v-else class="text-xs font-bold text-slate-500">{{ signer.name }}</span>
+                  <template v-if="shouldShowSignature(signer.profileName)">
+                    <div class="flex h-[58px] w-full flex-col items-center justify-center gap-0.5 overflow-hidden">
+                      <img
+                        :src="approvalStampUrl"
+                        :alt="`${signer.displayName} 승인 도장`"
+                        class="block h-[42px] w-full object-contain"
+                      />
+                      <span class="text-[10px] leading-none font-bold text-slate-700">{{ signer.displayName }}</span>
+                    </div>
                   </template>
                 </td>
               </tr>
-              <!-- 이름 행 -->
+              <!-- 날짜 행 -->
               <tr>
                 <td
                   v-for="signer in SIGNERS"
-                  :key="signer.name + '_name'"
+                  :key="signer.role + '_date'"
                   class="border border-slate-300 px-2 py-1 text-center text-xs text-slate-500"
                 >
-                  {{ signer.name }}
+                  {{ getSignerDate(signer.profileName) || '-' }}
                 </td>
               </tr>
             </tbody>
@@ -150,7 +167,7 @@ const statusClass = computed(() => {
             </tr>
             <tr>
               <th class="border border-slate-300 bg-slate-50 px-4 py-2.5 text-left text-xs font-bold text-slate-600">사유</th>
-              <td class="border border-slate-300 px-4 py-2.5 text-slate-700" colspan="3">{{ item.reason || '-' }}</td>
+              <td class="border border-slate-300 px-4 py-2.5 text-slate-700" colspan="3">{{ reasonText || '-' }}</td>
             </tr>
             <tr>
               <th class="border border-slate-300 bg-slate-50 px-4 py-2.5 text-left text-xs font-bold text-slate-600">처리 상태</th>

@@ -2,8 +2,15 @@
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useAuth } from '@/composables/useAuth'
 import { useMessenger } from '@/composables/useMessenger'
+import { useMessengerUnread } from '@/composables/useMessengerUnread'
 
 const { session } = useAuth()
+const {
+  getRoomUnreadCount,
+  markRoomAsRead,
+  refreshUnreadCounts,
+  startUnreadTracking,
+} = useMessengerUnread()
 const {
   rooms,
   messages,
@@ -42,11 +49,30 @@ const snackMessage = ref('')
 let snackTimer = null
 const sidebarOpen = ref(true)
 const myId = computed(() => session.value?.user?.id ?? '')
+const imageViewerOpen = ref(false)
+const imageViewerUrls = ref([])
+const imageViewerIndex = ref(0)
+const imageZoom = ref(1)
+const imageOffset = ref({ x: 0, y: 0 })
+const isImageDragging = ref(false)
+const imageDragStart = ref({ x: 0, y: 0 })
+const imageDragOrigin = ref({ x: 0, y: 0 })
+const currentImageViewerUrl = computed(() => imageViewerUrls.value[imageViewerIndex.value] ?? '')
+const deleteDialogVisible = ref(false)
+const deleteDialogTitle = ref('삭제 확인')
+const deleteDialogMessage = ref('삭제하시겠습니까?')
+const deleteTarget = ref(null)
+const deleteTargetType = ref('')
 
 const showSnack = (msg) => {
   snackMessage.value = msg
   if (snackTimer) clearTimeout(snackTimer)
   snackTimer = setTimeout(() => { snackMessage.value = '' }, 2200)
+}
+
+const formatUnreadCount = (count) => {
+  const normalized = Math.max(0, Number(count) || 0)
+  return normalized > 99 ? '99+' : String(normalized)
 }
 
 const scrollToBottom = async () => {
@@ -71,9 +97,33 @@ const formatDate = (iso) => {
 const groupedMessages = computed(() => {
   const groups = []
   let lastDate = ''
-  for (const msg of messages.value) {
+  const isImageOnlyMessage = (msg) => msg?.file_type === 'image' && msg?.file_url && !String(msg?.content ?? '').trim()
+
+  for (let index = 0; index < messages.value.length; index += 1) {
+    const msg = messages.value[index]
     const date = formatDate(msg.created_at)
     if (date !== lastDate) { groups.push({ type: 'date', date }); lastDate = date }
+
+    if (isImageOnlyMessage(msg)) {
+      const imageGroup = [msg]
+      let nextIndex = index + 1
+      while (nextIndex < messages.value.length) {
+        const nextMsg = messages.value[nextIndex]
+        const nextDate = formatDate(nextMsg.created_at)
+        if (nextDate !== date) break
+        if (!isImageOnlyMessage(nextMsg)) break
+        if (nextMsg.sender_id !== msg.sender_id) break
+        imageGroup.push(nextMsg)
+        nextIndex += 1
+      }
+
+      if (imageGroup.length >= 2) {
+        groups.push({ type: 'image-group', messages: imageGroup, sender_id: msg.sender_id, sender_name: msg.sender_name })
+        index = nextIndex - 1
+        continue
+      }
+    }
+
     groups.push({ type: 'message', msg })
   }
   return groups
@@ -116,7 +166,10 @@ const clearPendingFiles = () => {
   pendingFiles.value = []
 }
 
-const handleSelectRoom = async (room) => { await selectRoom(room.id) }
+const handleSelectRoom = async (room) => {
+  await selectRoom(room.id)
+  await markRoomAsRead(room.id)
+}
 
 const handleCreateRoom = async () => {
   const title = newRoomTitle.value.trim()
@@ -133,9 +186,11 @@ const handleCreateRoom = async () => {
 }
 
 const handleDeleteRoom = async (room) => {
-  if (!confirm(`"${room.title}" 채팅방을 삭제할까요?`)) return
-  const result = await deleteRoom(room.id)
-  if (!result.ok) showSnack('삭제 실패')
+  deleteDialogTitle.value = '채팅방 삭제'
+  deleteDialogMessage.value = `"${room.title}" 채팅방을 삭제하시겠습니까?`
+  deleteTargetType.value = 'room'
+  deleteTarget.value = room
+  deleteDialogVisible.value = true
 }
 
 const handleSend = async () => {
@@ -160,16 +215,145 @@ const handleKeydown = (e) => {
 
 const handleDeleteMessage = async (msg) => {
   if (msg.sender_id !== myId.value) return
-  await deleteMessage(msg.id)
+  deleteDialogTitle.value = '메시지 삭제'
+  deleteDialogMessage.value = '삭제하시겠습니까?'
+  deleteTargetType.value = 'message'
+  deleteTarget.value = msg
+  deleteDialogVisible.value = true
 }
 
+const closeDeleteDialog = () => {
+  deleteDialogVisible.value = false
+  deleteDialogTitle.value = '삭제 확인'
+  deleteDialogMessage.value = '삭제하시겠습니까?'
+  deleteTargetType.value = ''
+  deleteTarget.value = null
+}
+
+const confirmDelete = async () => {
+  if (!deleteTarget.value || !deleteTargetType.value) return
+
+  if (deleteTargetType.value === 'room') {
+    const result = await deleteRoom(deleteTarget.value.id)
+    if (!result.ok) showSnack('삭제 실패')
+  } else if (deleteTargetType.value === 'message') {
+    const result = await deleteMessage(deleteTarget.value.id)
+    if (!result.ok) showSnack('삭제 실패')
+  }
+
+  closeDeleteDialog()
+}
+
+const openImageViewer = (url, urls = []) => {
+  const viewerUrls = Array.isArray(urls) && urls.length > 0 ? urls.filter(Boolean) : [url].filter(Boolean)
+  if (!viewerUrls.length) return
+  imageViewerUrls.value = viewerUrls
+  imageViewerIndex.value = Math.max(0, viewerUrls.findIndex((item) => item === url))
+  imageZoom.value = 1
+  imageOffset.value = { x: 0, y: 0 }
+  imageViewerOpen.value = true
+}
+
+const closeImageViewer = () => {
+  imageViewerOpen.value = false
+  imageViewerUrls.value = []
+  imageViewerIndex.value = 0
+  imageZoom.value = 1
+  imageOffset.value = { x: 0, y: 0 }
+  isImageDragging.value = false
+}
+
+const zoomImage = (delta) => {
+  const next = imageZoom.value + delta
+  imageZoom.value = Math.min(3, Math.max(0.5, Number(next.toFixed(2))))
+}
+
+const resetImageViewer = () => {
+  imageZoom.value = 1
+  imageOffset.value = { x: 0, y: 0 }
+  isImageDragging.value = false
+}
+
+const canMovePrevImage = computed(() => imageViewerIndex.value > 0)
+const canMoveNextImage = computed(() => imageViewerIndex.value < imageViewerUrls.value.length - 1)
+const moveImageViewer = (delta) => {
+  const next = imageViewerIndex.value + delta
+  if (next < 0 || next >= imageViewerUrls.value.length) return
+  imageViewerIndex.value = next
+  resetImageViewer()
+}
+
+const getImageGroupGridStyle = (count) => ({
+  gridTemplateColumns: `repeat(${Math.min(Math.max(Number(count) || 1, 1), 4)}, minmax(0, 120px))`,
+})
+
+const handleImageWheel = (e) => {
+  e.preventDefault()
+  zoomImage(e.deltaY < 0 ? 0.2 : -0.2)
+}
+
+const startImageDrag = (e) => {
+  if (!imageViewerOpen.value) return
+  isImageDragging.value = true
+  imageDragStart.value = { x: e.clientX, y: e.clientY }
+  imageDragOrigin.value = { ...imageOffset.value }
+}
+
+const moveImageDrag = (e) => {
+  if (!isImageDragging.value) return
+  const dx = e.clientX - imageDragStart.value.x
+  const dy = e.clientY - imageDragStart.value.y
+  imageOffset.value = {
+    x: imageDragOrigin.value.x + dx,
+    y: imageDragOrigin.value.y + dy,
+  }
+}
+
+const endImageDrag = () => {
+  isImageDragging.value = false
+}
+
+const handleViewerKeydown = (e) => {
+  if (!imageViewerOpen.value) return
+  if (e.key === 'Escape') closeImageViewer()
+  if (e.key === 'ArrowLeft') moveImageViewer(-1)
+  if (e.key === 'ArrowRight') moveImageViewer(1)
+}
+
+const syncActiveRoomReadState = async () => {
+  if (!activeRoomId.value) return
+  if (document.visibilityState === 'hidden') return
+  await markRoomAsRead(activeRoomId.value)
+}
+
+const handleVisibilityChange = () => {
+  void syncActiveRoomReadState()
+}
+
+watch(
+  () => messages.value[messages.value.length - 1]?.id ?? '',
+  () => {
+    const latestMessage = messages.value[messages.value.length - 1]
+    if (!latestMessage) return
+    if (!activeRoomId.value) return
+    if (latestMessage.sender_id === myId.value) return
+    void syncActiveRoomReadState()
+  },
+)
+
 onMounted(async () => {
+  if (myId.value) await startUnreadTracking(myId.value)
   await fetchRooms()
+  await refreshUnreadCounts()
   subscribeToRooms()
+  window.addEventListener('keydown', handleViewerKeydown)
+  document.addEventListener('visibilitychange', handleVisibilityChange)
 })
 onBeforeUnmount(() => {
   clearPendingFiles()
   unsubscribeAll()
+  window.removeEventListener('keydown', handleViewerKeydown)
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
 })
 </script>
 
@@ -204,7 +388,15 @@ onBeforeUnmount(() => {
         >
           <div class="flex items-start justify-between gap-2">
             <div class="min-w-0">
-              <p class="truncate text-sm font-bold text-slate-900">{{ room.title }}</p>
+              <div class="flex items-center gap-2">
+                <p class="truncate text-sm font-bold text-slate-900">{{ room.title }}</p>
+                <span
+                  v-if="getRoomUnreadCount(room.id) > 0"
+                  class="inline-flex shrink-0 items-center justify-center rounded-full bg-red-500 px-2 py-0.5 text-[11px] font-extrabold leading-none text-white"
+                >
+                  {{ formatUnreadCount(getRoomUnreadCount(room.id)) }}
+                </span>
+              </div>
               <p v-if="room.description" class="mt-0.5 truncate text-xs text-slate-400">{{ room.description }}</p>
               <p class="mt-0.5 text-[11px] text-slate-400">{{ room.owner_name }}</p>
             </div>
@@ -267,32 +459,69 @@ onBeforeUnmount(() => {
 
             <!-- 메시지 -->
             <div
-              v-else-if="item.type === 'message'"
+              v-else-if="item.type === 'message' || item.type === 'image-group'"
               class="group flex items-end gap-2"
-              :class="item.msg.sender_id === myId ? 'flex-row-reverse' : ''"
+              :class="(item.type === 'message' ? item.msg.sender_id : item.sender_id) === myId ? 'flex-row-reverse' : ''"
             >
               <!-- 아바타 (상대방) -->
               <div
-                v-if="item.msg.sender_id !== myId"
+                v-if="(item.type === 'message' ? item.msg.sender_id : item.sender_id) !== myId"
                 class="mb-4 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-200 text-xs font-bold text-slate-600"
               >
-                {{ String(item.msg.sender_name ?? '?').charAt(0) }}
+                {{ String(item.type === 'message' ? item.msg.sender_name : item.sender_name ?? '?').charAt(0) }}
               </div>
 
               <div
                 class="flex max-w-[70%] flex-col gap-1"
-                :class="item.msg.sender_id === myId ? 'items-end' : 'items-start'"
+                :class="(item.type === 'message' ? item.msg.sender_id : item.sender_id) === myId ? 'items-end' : 'items-start'"
               >
                 <!-- 이름 (상대방) -->
-                <p v-if="item.msg.sender_id !== myId" class="text-[11px] font-semibold text-slate-500">{{ item.msg.sender_name }}</p>
+                <p
+                  v-if="(item.type === 'message' ? item.msg.sender_id : item.sender_id) !== myId"
+                  class="text-[11px] font-semibold text-slate-500"
+                >
+                  {{ item.type === 'message' ? item.msg.sender_name : item.sender_name }}
+                </p>
+
+                <div
+                  v-if="item.type === 'image-group'"
+                  class="grid max-w-[520px] gap-1.5 rounded-2xl"
+                  :class="item.sender_id === myId ? 'rounded-br-sm' : 'rounded-bl-sm'"
+                  :style="getImageGroupGridStyle(item.messages.length)"
+                >
+                  <button
+                    v-for="(imageMsg, imageIndex) in item.messages"
+                    :key="imageMsg.id"
+                    type="button"
+                    class="group/image relative overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
+                    :class="item.sender_id === myId && imageIndex === item.messages.length - 1 ? 'rounded-br-sm' : item.sender_id !== myId && imageIndex === item.messages.length - 1 ? 'rounded-bl-sm' : ''"
+                    @click="openImageViewer(imageMsg.file_url, item.messages.map((msg) => msg.file_url))"
+                  >
+                    <img
+                      :src="imageMsg.file_url"
+                      class="h-[120px] w-[120px] object-cover transition hover:opacity-90"
+                      :alt="`chat-image-${imageMsg.id}`"
+                    />
+                    <button
+                      v-if="item.sender_id === myId"
+                      type="button"
+                      class="absolute right-1.5 top-1.5 hidden h-6 w-6 items-center justify-center rounded-full bg-black/65 text-white group-hover/image:flex hover:bg-red-500"
+                      @click.stop="handleDeleteMessage(imageMsg)"
+                    >
+                      <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M18 6L6 18M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </button>
+                </div>
 
                 <!-- 이미지 -->
                 <img
-                  v-if="item.msg.file_type === 'image' && item.msg.file_url"
+                  v-else-if="item.msg.file_type === 'image' && item.msg.file_url"
                   :src="item.msg.file_url"
-                  class="max-w-[260px] cursor-pointer rounded-2xl border border-slate-200 object-cover shadow-sm transition hover:opacity-90"
+                  class="max-w-[312px] cursor-pointer rounded-2xl border border-slate-200 object-cover shadow-sm transition hover:opacity-90"
                   :class="item.msg.sender_id === myId ? 'rounded-br-sm' : 'rounded-bl-sm'"
-                  @click="window.open(item.msg.file_url, '_blank')"
+                  @click="openImageViewer(item.msg.file_url)"
                 />
 
                 <!-- 동영상 -->
@@ -320,7 +549,7 @@ onBeforeUnmount(() => {
 
                 <!-- 텍스트 버블 -->
                 <div
-                  v-if="item.msg.content"
+                  v-if="item.type === 'message' && item.msg.content"
                   class="rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed shadow-sm"
                   :class="
                     item.msg.sender_id === myId
@@ -332,10 +561,13 @@ onBeforeUnmount(() => {
                 </div>
 
                 <!-- 시간 + 삭제 -->
-                <div class="flex items-center gap-1.5" :class="item.msg.sender_id === myId ? 'flex-row-reverse' : ''">
-                  <span class="text-[10px] text-slate-400">{{ formatTime(item.msg.created_at) }}</span>
+                <div
+                  class="flex items-center gap-1.5"
+                  :class="(item.type === 'message' ? item.msg.sender_id : item.sender_id) === myId ? 'flex-row-reverse' : ''"
+                >
+                  <span class="text-[10px] text-slate-400">{{ formatTime(item.type === 'message' ? item.msg.created_at : item.messages[item.messages.length - 1]?.created_at) }}</span>
                   <button
-                    v-if="item.msg.sender_id === myId"
+                    v-if="item.type === 'message' && item.msg.sender_id === myId"
                     type="button"
                     class="hidden rounded p-0.5 text-slate-300 hover:text-red-400 group-hover:block"
                     @click="handleDeleteMessage(item.msg)"
@@ -519,6 +751,116 @@ onBeforeUnmount(() => {
       class="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 rounded-xl bg-slate-900/95 px-8 py-5 text-lg font-bold text-white shadow-2xl"
     >
       {{ snackMessage }}
+    </div>
+
+    <div
+      v-if="deleteDialogVisible"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
+      @click.self="closeDeleteDialog"
+    >
+      <div class="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+        <h3 class="text-lg font-extrabold text-slate-900">{{ deleteDialogTitle }}</h3>
+        <p class="mt-3 text-sm leading-6 text-slate-600">{{ deleteDialogMessage }}</p>
+        <div class="mt-6 flex justify-end gap-2">
+          <button
+            type="button"
+            class="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
+            @click="closeDeleteDialog"
+          >
+            취소
+          </button>
+          <button
+            type="button"
+            class="rounded-xl bg-red-500 px-4 py-2 text-sm font-bold text-white hover:bg-red-600"
+            @click="confirmDelete"
+          >
+            삭제
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div
+      v-if="imageViewerOpen"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/95"
+      @click.self="closeImageViewer"
+    >
+      <div class="flex h-full w-full flex-col">
+        <div class="flex items-center justify-between border-b border-white/10 px-4 py-3">
+          <div class="flex items-center gap-2">
+            <button
+              type="button"
+              class="rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm font-bold text-white hover:bg-white/20 disabled:opacity-40"
+              :disabled="!canMovePrevImage"
+              @click="moveImageViewer(-1)"
+            >
+              이전
+            </button>
+            <button
+              type="button"
+              class="rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm font-bold text-white hover:bg-white/20"
+              @click="zoomImage(-0.2)"
+            >
+              축소
+            </button>
+            <span class="text-sm font-semibold text-white">{{ Math.round(imageZoom * 100) }}%</span>
+            <button
+              type="button"
+              class="rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm font-bold text-white hover:bg-white/20"
+              @click="zoomImage(0.2)"
+            >
+              확대
+            </button>
+            <button
+              type="button"
+              class="rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm font-bold text-white hover:bg-white/20"
+              @click="resetImageViewer"
+            >
+              원본
+            </button>
+            <button
+              type="button"
+              class="rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm font-bold text-white hover:bg-white/20 disabled:opacity-40"
+              :disabled="!canMoveNextImage"
+              @click="moveImageViewer(1)"
+            >
+              다음
+            </button>
+          </div>
+          <div class="flex items-center gap-3">
+            <span v-if="imageViewerUrls.length > 1" class="text-sm font-semibold text-white">
+              {{ imageViewerIndex + 1 }} / {{ imageViewerUrls.length }}
+            </span>
+            <button
+              type="button"
+              class="rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm font-bold text-white hover:bg-white/20"
+              @click="closeImageViewer"
+            >
+              닫기
+            </button>
+          </div>
+        </div>
+        <div
+          class="flex min-h-0 flex-1 items-center justify-center overflow-hidden"
+          @mousemove="moveImageDrag"
+          @mouseup="endImageDrag"
+          @mouseleave="endImageDrag"
+          @wheel="handleImageWheel"
+        >
+          <img
+            :src="currentImageViewerUrl"
+            alt="chat-image-preview"
+            class="max-h-none max-w-none select-none rounded-xl shadow-2xl"
+            :class="isImageDragging ? 'cursor-grabbing' : 'cursor-grab'"
+            :style="{
+              transform: `translate(${imageOffset.x}px, ${imageOffset.y}px) scale(${imageZoom})`,
+              transformOrigin: 'center center',
+            }"
+            draggable="false"
+            @mousedown.prevent="startImageDrag"
+          />
+        </div>
+      </div>
     </div>
   </section>
 </template>

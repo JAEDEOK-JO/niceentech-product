@@ -1,14 +1,28 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
+import { useMessengerUnread } from '@/composables/useMessengerUnread'
 import { useProfile } from '@/composables/useProfile'
 import { isAdminRole, isDesignDepartment } from '@/utils/adminAccess'
 
 const route = useRoute()
 const router = useRouter()
 const { session } = useAuth()
+const { totalUnreadCount, startUnreadTracking, stopUnreadTracking } = useMessengerUnread()
 const { profile } = useProfile(session)
+
+watch(
+  () => session.value?.user?.id ?? '',
+  (userId) => {
+    if (userId) {
+      void startUnreadTracking(userId)
+      return
+    }
+    stopUnreadTracking()
+  },
+  { immediate: true },
+)
 
 const profileSummary = computed(() => {
   const name = String(profile.value?.name ?? '').trim() || '사용자'
@@ -28,7 +42,12 @@ const navItems = computed(() => {
     items.push({ key: 'company-register', label: '회사등록', to: { name: 'company-register' } })
     items.push({ key: 'company-list', label: '회사리스트', to: { name: 'company-list' } })
   }
-  items.push({ key: 'messenger', label: '메신저', to: { name: 'messenger' } })
+  items.push({
+    key: 'messenger',
+    label: '메신저',
+    to: { name: 'messenger' },
+    badgeCount: totalUnreadCount.value,
+  })
   items.push({ key: 'attendance', label: '근태관리', to: { name: 'attendance' } })
   return items
 })
@@ -83,7 +102,15 @@ const goSettings = () => {
             "
             @click="goTo(item.to)"
           >
-            {{ item.label }}
+            <span class="inline-flex items-center gap-2">
+              <span>{{ item.label }}</span>
+              <span
+                v-if="Number(item.badgeCount) > 0"
+                class="inline-flex min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1.5 py-0.5 text-[11px] font-extrabold leading-none text-white"
+              >
+                {{ Number(item.badgeCount) > 99 ? '99+' : item.badgeCount }}
+              </span>
+            </span>
           </button>
         </nav>
       </div>

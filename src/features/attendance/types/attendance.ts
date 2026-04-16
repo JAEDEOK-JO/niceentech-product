@@ -58,6 +58,7 @@ const toNum = (v: unknown) => {
   const n = Number(v ?? 0)
   return Number.isFinite(n) ? n : 0
 }
+const normalizeApprovedBy = (value: unknown) => toStr(value).replace(/\(t\)/gi, '').trim()
 
 export function mapAttendanceRequest(raw: Record<string, unknown>): AttendanceRequest {
   return {
@@ -71,7 +72,7 @@ export function mapAttendanceRequest(raw: Record<string, unknown>): AttendanceRe
     daysCount: toNum(raw.days_count),
     reason: toStr(raw.reason),
     status: toStr(raw.status),
-    approvedBy: raw.approved_by != null ? toStr(raw.approved_by) : null,
+    approvedBy: raw.approved_by != null ? normalizeApprovedBy(raw.approved_by) : null,
     approvedAt: raw.approved_at != null ? toStr(raw.approved_at) : null,
     rejectReason: raw.reject_reason != null ? toStr(raw.reject_reason) : null,
     createdAt: toStr(raw.created_at),
@@ -144,4 +145,16 @@ export interface AttendanceDashboardStats {
   thisMonthTotal: number
   pendingCount: number
   myRemainingDays: number
+}
+
+export interface AttendanceMonthlySummary {
+  userId: string
+  userName: string
+  department: string
+  annualCount: number
+  halfDayCount: number
+  sickCount: number
+  otherCount: number
+  totalApprovedCount: number
+  totalUsedDays: number
 }

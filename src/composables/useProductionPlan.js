@@ -180,6 +180,16 @@ const resolveWorkerWeldingStatus = (row) => {
   if (status === '작업중') return '작업중'
   return '없음'
 }
+const resolveWorkerNasaStatus = (row) => {
+  if (normalizeWorkType(row?.work_type) !== '나사') {
+    return String(row?.worker_nasa ?? '').trim()
+  }
+
+  const status = normalizeProgressState(row?.marking_laser_1_status)
+  if (status === '작업완료') return '작업완료'
+  if (status === '작업중') return '작업중'
+  return '없음'
+}
 const areAllStatusesNone = (row, fields) =>
   fields.every((field) => normalizeStatus(row?.[field]) === '없음')
 
@@ -405,7 +415,15 @@ export function useProductionPlan(session) {
     const worker_t = resolveWorkerTStatus(nextRow)
     const worker_main = resolveWorkerMainStatus(nextRow)
     const worker_welding = resolveWorkerWeldingStatus(nextRow)
-    const updatePayload = { [field]: next, worker_t, worker_main, worker_welding }
+    const isNasaLaserBridgeRow = normalizeWorkType(row?.work_type) === '나사' && field === 'marking_laser_1_status'
+    const worker_nasa = isNasaLaserBridgeRow ? resolveWorkerNasaStatus(nextRow) : String(row?.worker_nasa ?? '').trim()
+    const updatePayload = {
+      [field]: next,
+      worker_t,
+      worker_main,
+      worker_welding,
+      ...(isNasaLaserBridgeRow ? { worker_nasa } : {}),
+    }
 
     // 용접 inspector 추적: 작업중 → 저장, 없음(롱클릭 초기화) → 완전 클리어
     if (field === 'welding_status') {
@@ -453,6 +471,9 @@ export function useProductionPlan(session) {
     }
     if (field === 'nasa_status' && next !== '작업완료' && row.worker_nasa === '작업완료') {
       updatePayload.worker_nasa_time = ''
+    }
+    if (isNasaLaserBridgeRow) {
+      updatePayload.worker_nasa_time = worker_nasa === '작업완료' ? todayText : ''
     }
     if ((field === 'marking_weld_a_status' || field === 'marking_weld_b_status') && next === '작업완료' && row.worker_welding !== '작업완료') {
       updatePayload.worker_welding_time = todayText

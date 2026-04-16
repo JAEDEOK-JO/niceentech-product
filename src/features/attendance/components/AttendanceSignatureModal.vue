@@ -9,7 +9,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'close'): void
-  (e: 'save', userId: string, blob: Blob): void
+  (e: 'save', payload: { userId: string; blob: Blob }): void
 }>()
 
 // ─── 프로필 선택 ───────────────────────────────────────────────────────────────
@@ -30,6 +30,8 @@ let isDrawing = false
 let lastX = 0
 let lastY = 0
 let hasDrawn = ref(false)
+const SIGNATURE_OUTPUT_WIDTH = 320
+const SIGNATURE_OUTPUT_HEIGHT = 256
 
 function initCanvas() {
   const canvas = canvasRef.value
@@ -93,8 +95,55 @@ function clearCanvas() {
 }
 
 async function getCanvasBlob(): Promise<Blob | null> {
+  const sourceCanvas = canvasRef.value
+  if (!sourceCanvas) return null
+
+  const sourceCtx = sourceCanvas.getContext('2d')
+  if (!sourceCtx) return null
+
+  const { width, height } = sourceCanvas
+  const imageData = sourceCtx.getImageData(0, 0, width, height)
+  const pixels = imageData.data
+
+  let minX = width
+  let minY = height
+  let maxX = -1
+  let maxY = -1
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const alpha = pixels[(y * width + x) * 4 + 3]
+      if (alpha === 0) continue
+      if (x < minX) minX = x
+      if (y < minY) minY = y
+      if (x > maxX) maxX = x
+      if (y > maxY) maxY = y
+    }
+  }
+
+  if (maxX < minX || maxY < minY) return null
+
+  const cropWidth = maxX - minX + 1
+  const cropHeight = maxY - minY + 1
+  const outputCanvas = document.createElement('canvas')
+  outputCanvas.width = SIGNATURE_OUTPUT_WIDTH
+  outputCanvas.height = SIGNATURE_OUTPUT_HEIGHT
+  const outputCtx = outputCanvas.getContext('2d')
+  if (!outputCtx) return null
+
+  const padding = 16
+  const availableWidth = SIGNATURE_OUTPUT_WIDTH - padding * 2
+  const availableHeight = SIGNATURE_OUTPUT_HEIGHT - padding * 2
+  const scale = Math.min(availableWidth / cropWidth, availableHeight / cropHeight)
+  const drawWidth = cropWidth * scale
+  const drawHeight = cropHeight * scale
+  const drawX = (SIGNATURE_OUTPUT_WIDTH - drawWidth) / 2
+  const drawY = (SIGNATURE_OUTPUT_HEIGHT - drawHeight) / 2
+
   return new Promise((resolve) => {
-    canvasRef.value?.toBlob(resolve, 'image/png')
+    outputCtx.clearRect(0, 0, SIGNATURE_OUTPUT_WIDTH, SIGNATURE_OUTPUT_HEIGHT)
+    outputCtx.drawImage(sourceCanvas, minX, minY, cropWidth, cropHeight, drawX, drawY, drawWidth, drawHeight)
+    outputCanvas.toBlob(resolve, 'image/png')
   })
 }
 
@@ -130,7 +179,7 @@ async function handleSave() {
   }
 
   if (!blob) return
-  emit('save', selectedUserId.value, blob)
+  emit('save', { userId: selectedUserId.value, blob })
 }
 
 const canSave = () => {
@@ -208,11 +257,11 @@ onMounted(() => {
 
         <!-- 캔버스 서명 -->
         <div v-show="activeTab === 'draw'">
-          <div class="relative overflow-hidden rounded-xl border-2 border-dashed border-slate-200 bg-slate-50">
+          <div class="relative mx-auto max-w-[260px] overflow-hidden rounded-xl border-2 border-dashed border-slate-200 bg-slate-50">
             <canvas
               ref="canvasRef"
-              width="460"
-              height="180"
+              :width="SIGNATURE_OUTPUT_WIDTH"
+              :height="SIGNATURE_OUTPUT_HEIGHT"
               class="block w-full touch-none cursor-crosshair"
               @mousedown="onPointerDown"
               @mousemove="onPointerMove"
@@ -223,7 +272,7 @@ onMounted(() => {
               @touchend="onPointerUp"
             />
             <span v-if="!hasDrawn" class="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-slate-300">
-              여기에 서명하세요
+              결재칸 크기에 맞춰 서명하세요
             </span>
           </div>
           <button

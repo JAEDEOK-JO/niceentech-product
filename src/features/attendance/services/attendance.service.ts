@@ -8,12 +8,14 @@ import {
   type AttendanceFormState,
   type AttendanceRequest,
   type AttendanceAnnualQuota,
+  type AttendanceMonthlySummary,
   type Employee,
   type LeaveType,
 } from '../types/attendance'
 
 // 연차 차감 일수 계산 (연차/병가만 일수 차감)
 const DEDUCTED_LEAVE_TYPES: string[] = ['연차', '반차(오전)', '반차(오후)', '병가']
+const normalizeAttendanceApproverName = (value: string) => String(value ?? '').replace(/\(t\)/gi, '').trim()
 
 // ─── 신청 목록 조회 ────────────────────────────────────────────────────────────
 export async function fetchAttendanceRequests(
@@ -167,7 +169,11 @@ export async function approveAttendanceRequest(
 
   const { error } = await supabase
     .from('attendance_requests')
-    .update({ status: '승인', approved_by: approverName, approved_at: new Date().toISOString() })
+    .update({
+      status: '승인',
+      approved_by: normalizeAttendanceApproverName(approverName),
+      approved_at: new Date().toISOString(),
+    })
     .eq('id', id)
 
   if (error) throw error
@@ -188,7 +194,7 @@ export async function rejectAttendanceRequest(
     .from('attendance_requests')
     .update({
       status: '반려',
-      approved_by: approverName,
+      approved_by: normalizeAttendanceApproverName(approverName),
       approved_at: new Date().toISOString(),
       reject_reason: rejectReason,
     })
@@ -266,6 +272,93 @@ export async function fetchAllAnnualQuotas(year: number): Promise<AttendanceAnnu
 
   if (error) throw error
   return (data ?? []).map((row) => mapAnnualQuota(row as Record<string, unknown>))
+}
+
+export async function fetchAttendanceMonthlySummary(
+  year: number,
+  month: number,
+): Promise<AttendanceMonthlySummary[]> {
+  const safeMonth = Math.min(12, Math.max(1, Number(month) || 1))
+  const monthText = String(safeMonth).padStart(2, '0')
+  const startDate = `${year}-${monthText}-01`
+  const endDate = `${year}-${monthText}-${String(new Date(year, safeMonth, 0).getDate()).padStart(2, '0')}`
+
+  const { data, error } = await supabase
+    .from('attendance_requests')
+    .select('user_id,user_name,department,leave_type,days_count,status,start_date')
+    .eq('status', '승인')
+    .gte('start_date', startDate)
+    .lte('start_date', endDate)
+    .order('user_name')
+
+  if (error) throw error
+
+  const summaryMap = new Map<string, AttendanceMonthlySummary>()
+  for (const row of data ?? []) {
+    const userId = String(row.user_id ?? '')
+    const userName = String(row.user_name ?? '').trim()
+    const department = String(row.department ?? '').trim()
+    const leaveType = String(row.leave_type ?? '').trim()
+    const daysCount = Number(row.days_count ?? 0) || 0
+    const key = `${userName}:${department}`
+
+    const current =
+      summaryMap.get(key) ??
+      {
+        userId,
+        userName,
+        department,
+        annualCount: 0,
+        halfDayCount: 0,
+        sickCount: 0,
+        otherCount: 0,
+        totalApprovedCount: 0,
+        totalUsedDays: 0,
+      }
+
+    current.totalApprovedCount += 1
+    current.totalUsedDays += daysCount
+
+    if (leaveType === '연차') {
+      current.annualCount += 1
+    } else if (leaveType.startsWith('반차')) {
+      current.halfDayCount += 1
+    } else if (leaveType === '병가') {
+      current.sickCount += 1
+    } else {
+      current.otherCount += 1
+    }
+
+    summaryMap.set(key, current)
+  }
+
+  return [...summaryMap.values()].sort((left, right) => {
+    if (right.totalUsedDays !== left.totalUsedDays) return right.totalUsedDays - left.totalUsedDays
+    if (right.totalApprovedCount !== left.totalApprovedCount) return right.totalApprovedCount - left.totalApprovedCount
+    return left.userName.localeCompare(right.userName, 'ko')
+  })
+}
+
+export async function fetchApprovedAttendanceRequestsByMonth(
+  year: number,
+  month: number,
+): Promise<AttendanceRequest[]> {
+  const safeMonth = Math.min(12, Math.max(1, Number(month) || 1))
+  const monthText = String(safeMonth).padStart(2, '0')
+  const startDate = `${year}-${monthText}-01`
+  const endDate = `${year}-${monthText}-${String(new Date(year, safeMonth, 0).getDate()).padStart(2, '0')}`
+
+  const { data, error } = await supabase
+    .from('attendance_requests')
+    .select('*')
+    .eq('status', '승인')
+    .gte('start_date', startDate)
+    .lte('start_date', endDate)
+    .order('start_date', { ascending: false })
+    .order('created_at', { ascending: false })
+
+  if (error) throw error
+  return (data ?? []).map((row) => mapAttendanceRequest(row as Record<string, unknown>))
 }
 
 // ─── 직원 목록 ─────────────────────────────────────────────────────────────────
@@ -369,11 +462,11 @@ export async function fetchProfilesList(): Promise<ProfileItem[]> {
 
 // ─── 서명 이미지 업로드 + profiles 저장 ───────────────────────────────────────
 export async function uploadAndSaveSignature(userId: string, file: Blob): Promise<string> {
-  const fileName = `${userId}.png`
+  const fileName = `${userId}/signature`
 
   const { error: uploadError } = await supabase.storage
     .from('signatures')
-    .upload(fileName, file, { upsert: true, contentType: 'image/png' })
+    .upload(fileName, file, { upsert: true, contentType: file.type || 'image/png' })
 
   if (uploadError) throw uploadError
 
@@ -398,12 +491,11 @@ export interface SignatureInfo {
 export async function fetchSignatures(names: string[]): Promise<SignatureInfo[]> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('name, signature_path')
-    .in('name', names)
+    .select('name, email, signature_path')
 
   if (error) throw error
   return names.map((name) => {
-    const row = (data ?? []).find((r: Record<string, unknown>) => r.name === name)
+    const row = (data ?? []).find((r: Record<string, unknown>) => r.name === name || r.email === name)
     return { name, signaturePath: row?.signature_path ? String(row.signature_path) : null }
   })
 }

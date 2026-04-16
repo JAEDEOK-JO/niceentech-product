@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import type {
   AttendanceRequest,
   AttendanceFilters,
@@ -12,7 +12,10 @@ import type { EmployeeFormData } from '../services/attendance.service'
 import AttendanceFiltersComp from './AttendanceFilters.vue'
 import AttendanceForm from './AttendanceForm.vue'
 import AttendanceEmployeeList from './AttendanceEmployeeList.vue'
+import AttendanceSummaryBoard from './AttendanceSummaryBoard.vue'
+import AttendanceSummaryDetailModal from './AttendanceSummaryDetailModal.vue'
 import AttendanceDetailModal from './AttendanceDetailModal.vue'
+import AttendanceSignatureModal from './AttendanceSignatureModal.vue'
 
 const props = defineProps<{
   items: AttendanceRequest[]
@@ -22,6 +25,14 @@ const props = defineProps<{
   stats: AttendanceDashboardStats
   employees: Employee[]
   employeesLoading: boolean
+  summaryYear: number
+  summaryMonth: number
+  summaryLoading: boolean
+  monthlySummaries: import('../types/attendance').AttendanceMonthlySummary[]
+  summaryDetailVisible: boolean
+  summaryDetailUserName: string
+  summaryDetailDepartment: string
+  summaryDetailRequests: AttendanceRequest[]
   currentUserId: string
   isAdmin: boolean
   loading: boolean
@@ -35,12 +46,20 @@ const props = defineProps<{
   rejectReason: string
   detailItem: AttendanceRequest | null
   detailSignatures: import('../services/attendance.service').SignatureInfo[]
+  signatureModalVisible: boolean
+  signatureProfiles: import('../services/attendance.service').ProfileItem[]
+  signatureSaving: boolean
 }>()
 
 const emit = defineEmits<{
   (e: 'update:filters', value: AttendanceFilters): void
+  (e: 'update:summaryYear', value: number): void
+  (e: 'update:summaryMonth', value: number): void
   (e: 'update:formData', value: AttendanceFormState): void
   (e: 'update:rejectReason', value: string): void
+  (e: 'openSummaryDetail', summary: import('../types/attendance').AttendanceMonthlySummary): void
+  (e: 'closeSummaryDetail'): void
+  (e: 'openSummaryRequestDetail', item: AttendanceRequest): void
   (e: 'openForm'): void
   (e: 'closeForm'): void
   (e: 'submitForm'): void
@@ -54,13 +73,18 @@ const emit = defineEmits<{
   (e: 'closeDetail'): void
   (e: 'closeReject'): void
   (e: 'submitReject'): void
+  (e: 'openSignature'): void
+  (e: 'closeSignature'): void
+  (e: 'saveSignature', payload: { userId: string; blob: Blob }): void
   (e: 'createEmployee', data: EmployeeFormData): void
   (e: 'updateEmployee', payload: { id: number; data: EmployeeFormData }): void
   (e: 'deleteEmployee', id: number): void
 }>()
 
 // 관리자 탭
-const activeTab = ref<'requests' | 'employees'>('requests')
+const activeTab = ref<'requests' | 'employees' | 'summary'>('requests')
+const REQUESTS_PER_PAGE = 10
+const requestsPage = ref(1)
 
 // 대기중 항목 (관리자 빠른처리)
 const pendingItems = computed(() =>
@@ -97,6 +121,26 @@ const thisMonthLabel = computed(() => {
   const now = new Date()
   return `${now.getFullYear()}년 ${now.getMonth() + 1}월`
 })
+
+const totalRequestPages = computed(() => Math.max(1, Math.ceil(props.items.length / REQUESTS_PER_PAGE)))
+const pagedRequestItems = computed(() => {
+  const start = (requestsPage.value - 1) * REQUESTS_PER_PAGE
+  return props.items.slice(start, start + REQUESTS_PER_PAGE)
+})
+const canGoPrevPage = computed(() => requestsPage.value > 1)
+const canGoNextPage = computed(() => requestsPage.value < totalRequestPages.value)
+const moveRequestPage = (delta: number) => {
+  const next = requestsPage.value + delta
+  requestsPage.value = Math.min(totalRequestPages.value, Math.max(1, next))
+}
+
+watch(
+  () => props.items,
+  () => {
+    requestsPage.value = 1
+  },
+  { deep: true },
+)
 </script>
 
 <template>
@@ -109,14 +153,23 @@ const thisMonthLabel = computed(() => {
           <h1 class="text-2xl font-extrabold text-slate-900">생산부 근태관리</h1>
           <p class="mt-1 text-sm text-slate-500">{{ thisMonthLabel }} 휴가 신청 및 근태 현황</p>
         </div>
-        <button
-          v-if="activeTab === 'requests'"
-          type="button"
-          class="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-slate-700"
-          @click="emit('openForm')"
-        >
-          + 휴가 신청
-        </button>
+        <div v-if="activeTab === 'requests'" class="flex flex-wrap items-center gap-2">
+          <button
+            v-if="isAdmin"
+            type="button"
+            class="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50"
+            @click="emit('openSignature')"
+          >
+            싸인
+          </button>
+          <button
+            type="button"
+            class="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-slate-700"
+            @click="emit('openForm')"
+          >
+            + 휴가 신청
+          </button>
+        </div>
       </div>
 
       <!-- 통계 카드 4개 -->
@@ -158,6 +211,12 @@ const thisMonthLabel = computed(() => {
         <button
           type="button"
           class="rounded-lg px-5 py-2 text-sm font-bold transition-colors"
+          :class="activeTab === 'summary' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-800'"
+          @click="activeTab = 'summary'"
+        >근태요약</button>
+        <button
+          type="button"
+          class="rounded-lg px-5 py-2 text-sm font-bold transition-colors"
           :class="activeTab === 'employees' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-800'"
           @click="activeTab = 'employees'"
         >직원 목록</button>
@@ -171,6 +230,17 @@ const thisMonthLabel = computed(() => {
         @create="emit('createEmployee', $event)"
         @update="emit('updateEmployee', $event)"
         @delete="emit('deleteEmployee', $event)"
+      />
+
+      <AttendanceSummaryBoard
+        v-if="isAdmin && activeTab === 'summary'"
+        :summaries="monthlySummaries"
+        :loading="summaryLoading"
+        :year="summaryYear"
+        :month="summaryMonth"
+        @update:year="emit('update:summaryYear', $event)"
+        @update:month="emit('update:summaryMonth', $event)"
+        @open-detail="emit('openSummaryDetail', $event)"
       />
 
       <!-- ═══ 신청 현황 탭 ═══ -->
@@ -195,55 +265,70 @@ const thisMonthLabel = computed(() => {
         <template v-else>
 
           <!-- ── 관리자 뷰: 2컬럼 ── -->
-          <div v-if="isAdmin" class="grid grid-cols-1 gap-6 lg:grid-cols-3">
-            <!-- 전체 신청 현황 (2/3) -->
-            <div class="lg:col-span-2">
+          <div v-if="isAdmin" class="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.8fr)_minmax(280px,0.8fr)]">
+            <!-- 전체 신청 현황 -->
+            <div class="min-w-0">
               <h2 class="mb-3 text-sm font-extrabold text-slate-700">신청 현황</h2>
-              <div v-if="items.length === 0" class="rounded-2xl border border-dashed border-slate-200 bg-white py-14 text-center text-sm text-slate-400">
+              <div v-if="items.length === 0" class="rounded-xl border border-dashed border-slate-200 bg-white py-14 text-center text-sm text-slate-400">
                 신청 내역이 없습니다.
               </div>
-              <div v-else class="space-y-3">
+              <div v-else class="space-y-2">
                 <div
-                  v-for="item in items"
+                  v-for="item in pagedRequestItems"
                   :key="item.id"
-                  class="cursor-pointer rounded-2xl border border-l-4 border-slate-200 bg-white p-4 transition-shadow hover:shadow-md"
+                  class="cursor-pointer rounded-xl border border-l-4 border-slate-200 bg-white px-4 py-3 transition-shadow hover:shadow-sm"
                   :class="statusBorder(item.status)"
                   @click.self="emit('openDetail', item)"
                 >
                   <div class="flex flex-wrap items-start justify-between gap-2" @click="emit('openDetail', item)">
-                    <div class="flex flex-wrap items-center gap-2">
-                      <span class="rounded-full px-2.5 py-0.5 text-xs font-bold" :class="leaveTypeBadge(item.leaveType)">
+                    <div class="min-w-0 flex flex-wrap items-center gap-2">
+                      <span class="font-bold text-slate-900">{{ item.userName }}</span>
+                      <span class="rounded-full px-2 py-0.5 text-[11px] font-bold" :class="leaveTypeBadge(item.leaveType)">
                         {{ item.leaveType }}
                       </span>
-                      <span class="font-bold text-slate-900">{{ item.userName }}</span>
-                      <span class="text-xs text-slate-400">{{ item.department }}</span>
+                      <span class="text-xs font-bold text-slate-700">{{ item.daysCount }}일</span>
                     </div>
-                    <span class="rounded-full px-2.5 py-0.5 text-xs font-bold" :class="statusBadge(item.status)">
-                      {{ item.status }}
-                    </span>
+                    <div class="flex items-center gap-2" @click.stop>
+                      <span class="rounded-full px-2 py-0.5 text-[11px] font-bold" :class="statusBadge(item.status)">
+                        {{ item.status }}
+                      </span>
+                      <template v-if="item.status !== '승인'">
+                        <button type="button" class="rounded border border-slate-200 px-2 py-1 text-xs font-bold text-slate-600 hover:bg-slate-50" @click="emit('adminEdit', item)">수정</button>
+                        <button type="button" class="rounded border border-red-200 px-2 py-1 text-xs font-bold text-red-500 hover:bg-red-50" @click="emit('adminDelete', item)">삭제</button>
+                      </template>
+                    </div>
                   </div>
-                  <div class="mt-2 flex flex-wrap items-center gap-3 text-sm text-slate-600" @click="emit('openDetail', item)">
+                  <div class="mt-1.5 flex flex-wrap items-center gap-3 text-xs text-slate-500" @click="emit('openDetail', item)">
                     <span>{{ formatPeriod(item) }}</span>
-                    <span class="font-bold text-slate-800">{{ item.daysCount }}일</span>
-                    <span v-if="item.reason" class="truncate text-slate-400">{{ item.reason }}</span>
+                    <span v-if="item.status === '승인' && item.approvedBy" class="text-slate-400">승인: {{ item.approvedBy }}</span>
+                    <span v-else-if="item.status === '반려' && item.rejectReason" class="text-red-500">반려: {{ item.rejectReason }}</span>
+                    <span class="truncate">{{ item.reason || '-' }}</span>
                   </div>
-                  <div v-if="item.status === '반려' && item.rejectReason" class="mt-1.5 text-xs text-red-500">
-                    반려 사유: {{ item.rejectReason }}
-                  </div>
-                  <div v-if="item.status === '승인' && item.approvedBy" class="mt-1.5 text-xs text-slate-400">
-                    승인: {{ item.approvedBy }}
-                  </div>
-                  <!-- 관리자 수정/삭제 -->
-                  <div class="mt-2 flex gap-2">
-                    <button type="button" class="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-bold text-slate-600 hover:bg-slate-50" @click="emit('adminEdit', item)">수정</button>
-                    <button type="button" class="rounded-lg border border-red-200 px-2.5 py-1 text-xs font-bold text-red-500 hover:bg-red-50" @click="emit('adminDelete', item)">삭제</button>
-                  </div>
+                </div>
+                <div class="flex items-center justify-center gap-2 pt-2">
+                  <button
+                    type="button"
+                    class="rounded border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+                    :disabled="!canGoPrevPage"
+                    @click="moveRequestPage(-1)"
+                  >
+                    이전
+                  </button>
+                  <span class="text-xs font-semibold text-slate-500">{{ requestsPage }} / {{ totalRequestPages }}</span>
+                  <button
+                    type="button"
+                    class="rounded border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+                    :disabled="!canGoNextPage"
+                    @click="moveRequestPage(1)"
+                  >
+                    다음
+                  </button>
                 </div>
               </div>
             </div>
 
-            <!-- 빠른 처리 패널 (1/3) -->
-            <div>
+            <!-- 빠른 처리 패널 -->
+            <div class="min-w-0">
               <h2 class="mb-3 text-sm font-extrabold text-slate-700">
                 승인 대기
                 <span v-if="pendingItems.length" class="ml-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-700">
@@ -294,36 +379,61 @@ const thisMonthLabel = computed(() => {
             </div>
 
             <!-- 전체 신청 목록 -->
-            <div v-if="items.length === 0" class="rounded-2xl border border-dashed border-slate-200 bg-white py-14 text-center text-sm text-slate-400">
+            <div v-if="items.length === 0" class="rounded-xl border border-dashed border-slate-200 bg-white py-14 text-center text-sm text-slate-400">
               신청 내역이 없습니다.
             </div>
             <div v-else class="space-y-2">
               <div
-                v-for="item in items"
+                v-for="item in pagedRequestItems"
                 :key="item.id"
-                class="flex cursor-pointer items-center gap-3 rounded-2xl border border-l-4 border-slate-200 bg-white px-4 py-3 transition-shadow hover:shadow-sm"
+                class="cursor-pointer rounded-xl border border-l-4 border-slate-200 bg-white px-4 py-3 transition-shadow hover:shadow-sm"
                 :class="statusBorder(item.status)"
                 @click="emit('openDetail', item)"
               >
-                <!-- 이름 + 부서 -->
-                <div class="min-w-0 flex-1">
-                  <div class="flex flex-wrap items-center gap-2">
-                    <span class="font-bold text-slate-900">{{ item.userName }}</span>
-                    <span v-if="item.userId === currentUserId" class="rounded-full bg-slate-900 px-2 py-0.5 text-xs font-bold text-white">나</span>
-                    <span class="text-xs text-slate-400">{{ item.department }}</span>
-                    <span class="rounded-full px-2 py-0.5 text-xs font-bold" :class="leaveTypeBadge(item.leaveType)">{{ item.leaveType }}</span>
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                  <div class="min-w-0 flex-1">
+                    <div class="flex flex-wrap items-center gap-2">
+                      <span class="font-bold text-slate-900">{{ item.userName }}</span>
+                      <span v-if="item.userId === currentUserId" class="rounded-full bg-slate-900 px-2 py-0.5 text-xs font-bold text-white">나</span>
+                      <span class="rounded-full px-2 py-0.5 text-xs font-bold" :class="leaveTypeBadge(item.leaveType)">{{ item.leaveType }}</span>
+                      <span class="text-xs font-bold text-slate-700">{{ item.daysCount }}일</span>
+                    </div>
+                    <p class="mt-1 text-xs text-slate-500">
+                      {{ formatPeriod(item) }}
+                      <span v-if="item.status === '승인' && item.approvedBy"> · 승인: {{ item.approvedBy }}</span>
+                      <span v-else-if="item.status === '반려' && item.rejectReason"> · 반려: {{ item.rejectReason }}</span>
+                      <span v-if="item.reason"> · {{ item.reason }}</span>
+                    </p>
                   </div>
-                  <p class="mt-0.5 text-xs text-slate-500">{{ formatPeriod(item) }} · {{ item.daysCount }}일<span v-if="item.reason"> · {{ item.reason }}</span></p>
-                </div>
 
-                <!-- 상태 + 본인 액션 -->
-                <div class="flex shrink-0 items-center gap-2" @click.stop>
-                  <span class="rounded-full px-2.5 py-0.5 text-xs font-bold" :class="statusBadge(item.status)">{{ item.status }}</span>
-                  <template v-if="item.userId === currentUserId && item.status === '대기중'">
-                    <button type="button" class="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-bold text-slate-600 hover:bg-slate-50" @click="emit('edit', item)">수정</button>
-                    <button type="button" class="rounded-lg border border-red-200 px-2.5 py-1 text-xs font-bold text-red-500 hover:bg-red-50" @click="emit('delete', item)">취소</button>
-                  </template>
+                  <!-- 상태 + 본인 액션 -->
+                  <div class="flex shrink-0 items-center gap-2" @click.stop>
+                    <span class="rounded-full px-2.5 py-0.5 text-xs font-bold" :class="statusBadge(item.status)">{{ item.status }}</span>
+                    <template v-if="item.userId === currentUserId && item.status === '대기중'">
+                      <button type="button" class="rounded border border-slate-200 px-2 py-1 text-xs font-bold text-slate-600 hover:bg-slate-50" @click="emit('edit', item)">수정</button>
+                      <button type="button" class="rounded border border-red-200 px-2 py-1 text-xs font-bold text-red-500 hover:bg-red-50" @click="emit('delete', item)">취소</button>
+                    </template>
+                  </div>
                 </div>
+              </div>
+              <div class="flex items-center justify-center gap-2 pt-2">
+                <button
+                  type="button"
+                  class="rounded border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+                  :disabled="!canGoPrevPage"
+                  @click="moveRequestPage(-1)"
+                >
+                  이전
+                </button>
+                <span class="text-xs font-semibold text-slate-500">{{ requestsPage }} / {{ totalRequestPages }}</span>
+                <button
+                  type="button"
+                  class="rounded border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+                  :disabled="!canGoNextPage"
+                  @click="moveRequestPage(1)"
+                >
+                  다음
+                </button>
               </div>
             </div>
           </div>
@@ -385,11 +495,32 @@ const thisMonthLabel = computed(() => {
 
     <!-- 디테일 모달 -->
     <Teleport to="body">
+      <AttendanceSummaryDetailModal
+        :visible="summaryDetailVisible"
+        :user-name="summaryDetailUserName"
+        :department="summaryDetailDepartment"
+        :requests="summaryDetailRequests"
+        @close="emit('closeSummaryDetail')"
+        @select="emit('openSummaryRequestDetail', $event)"
+      />
+    </Teleport>
+
+    <Teleport to="body">
       <AttendanceDetailModal
         v-if="detailItem"
         :item="detailItem"
         :signatures="detailSignatures"
         @close="emit('closeDetail')"
+      />
+    </Teleport>
+
+    <Teleport to="body">
+      <AttendanceSignatureModal
+        v-if="signatureModalVisible"
+        :profiles="signatureProfiles"
+        :saving="signatureSaving"
+        @close="emit('closeSignature')"
+        @save="emit('saveSignature', $event)"
       />
     </Teleport>
 

@@ -126,11 +126,15 @@ const getCellText = (row, key) => {
 }
 
 const normalizeWorkType = (value) => String(value ?? '').replaceAll(' ', '').trim()
+const NASA_HOME_STAGE_KEY = 'marking_laser_1'
+const NASA_HOME_ONLY_STAGE_MESSAGE = '레이저1을 클릭해주세요.'
 const canReorderRows = computed(() => isAdminRole(props.currentRole))
 const isHoleBasedRow = (row) => {
   const workType = normalizeWorkType(row?.work_type)
   return workType.includes('전실/입상') || workType.includes('전실입상')
 }
+const isNasaHomeRow = (row) => normalizeWorkType(row?.work_type) === '나사'
+const isNasaHomeRestrictedStage = (row, stageKey) => isNasaHomeRow(row) && stageKey !== NASA_HOME_STAGE_KEY
 const mobileStageRows = [
   ['marking_weld_a', 'marking_weld_b', 'marking_laser_1', 'marking_laser_2'],
   ['beveling', 'main_work', 'nasa', 'welding'],
@@ -313,6 +317,10 @@ const weldingDialogButtons = computed(() => {
 })
 
 const openWeldingDialog = (row) => {
+  if (isNasaHomeRow(row)) {
+    showSnack(NASA_HOME_ONLY_STAGE_MESSAGE)
+    return
+  }
   if (isRowDisabled(row)) {
     showSnack('도면 배포전 입니다')
     return
@@ -391,9 +399,11 @@ const startLongPress = ({ row, stageKey, currentWorkMan }) => {
     if (stageKey === 'row') {
       const resolvedStageKey = resolveRowStageKey(currentWorkMan, { withSnack: false })
       if (!resolvedStageKey) return
+      if (isNasaHomeRestrictedStage(row, resolvedStageKey)) return
       emitToggleWorkStatus(row, resolvedStageKey, LONG_PRESS_REQUIRED_MS)
       return
     }
+    if (isNasaHomeRestrictedStage(row, stageKey)) return
     if (!canControlStageByWorkMan(currentWorkMan, stageKey)) return
     emitToggleWorkStatus(row, stageKey, LONG_PRESS_REQUIRED_MS)
   }, LONG_PRESS_REQUIRED_MS)
@@ -432,6 +442,10 @@ const handleRowClick = (row, currentWorkMan) => {
 
   const stageKey = resolveRowStageKey(currentWorkMan)
   if (!stageKey) return
+  if (isNasaHomeRestrictedStage(row, stageKey)) {
+    showSnack(NASA_HOME_ONLY_STAGE_MESSAGE)
+    return
+  }
 
   const pressKey = getPressKey(row.id, 'row')
   if (consumeIgnoredClick(pressKey)) return
@@ -443,6 +457,10 @@ const handleRowClick = (row, currentWorkMan) => {
 const handleStageClick = (row, stageKey, currentWorkMan) => {
   if (isRowDisabled(row)) {
     showSnack('도면 배포전 입니다')
+    return
+  }
+  if (isNasaHomeRestrictedStage(row, stageKey)) {
+    showSnack(NASA_HOME_ONLY_STAGE_MESSAGE)
     return
   }
 

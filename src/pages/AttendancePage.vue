@@ -26,13 +26,18 @@ import {
   fetchDepartments,
   fetchEmployeeCount,
   fetchEmployees,
+  fetchAttendanceMonthlySummary,
+  fetchApprovedAttendanceRequestsByMonth,
   createEmployee,
   updateEmployee,
   deleteEmployee,
+  fetchProfilesList,
   fetchSignatures,
   subscribeAttendanceRequests,
   unsubscribeAttendance,
+  uploadAndSaveSignature,
   type EmployeeFormData,
+  type ProfileItem,
   type SignatureInfo,
 } from '@/features/attendance/services/attendance.service'
 import {
@@ -42,6 +47,7 @@ import {
   type AttendanceFormState,
   type AttendanceAnnualQuota,
   type AttendanceDashboardStats,
+  type AttendanceMonthlySummary,
   type Employee,
 } from '@/features/attendance/types/attendance'
 import AttendanceView from '@/features/attendance/components/AttendanceView.vue'
@@ -89,6 +95,17 @@ const stats = computed<AttendanceDashboardStats>(() => {
 const employees = ref<Employee[]>([])
 const employeesLoading = ref(false)
 
+// ─── 근태요약 상태 ──────────────────────────────────────────────────────────────
+const summaryYear = ref(thisYear)
+const summaryMonth = ref(thisMonth)
+const summaryLoading = ref(false)
+const monthlySummaries = ref<AttendanceMonthlySummary[]>([])
+const monthlySummaryRequests = ref<AttendanceRequest[]>([])
+const summaryDetailVisible = ref(false)
+const summaryDetailUserName = ref('')
+const summaryDetailDepartment = ref('')
+const summaryDetailRequests = ref<AttendanceRequest[]>([])
+
 // ─── 신청 폼 상태 ──────────────────────────────────────────────────────────────
 const formVisible = ref(false)
 const formLoading = ref(false)
@@ -99,7 +116,12 @@ const formData = ref<AttendanceFormState>(createEmptyForm())
 // ─── 디테일 모달 ───────────────────────────────────────────────────────────────
 const detailItem = ref<AttendanceRequest | null>(null)
 const detailSignatures = ref<SignatureInfo[]>([])
-const SIGNATURE_NAMES = ['쩌민튼', '조재덕', '이지형'] as const
+const SIGNATURE_NAMES = ['쩌민튼', 'duko777@niceentech.kr'] as const
+
+// ─── 서명 관리 모달 ──────────────────────────────────────────────────────────────
+const signatureModalVisible = ref(false)
+const signatureProfiles = ref<ProfileItem[]>([])
+const signatureSaving = ref(false)
 
 async function openDetail(item: AttendanceRequest) {
   detailItem.value = item
@@ -113,6 +135,33 @@ async function openDetail(item: AttendanceRequest) {
 function closeDetail() {
   detailItem.value = null
   detailSignatures.value = []
+}
+
+async function openSignatureModal() {
+  signatureModalVisible.value = true
+  try {
+    signatureProfiles.value = await fetchProfilesList()
+  } catch {
+    signatureProfiles.value = []
+    showToast('서명 대상 목록을 불러오지 못했습니다.', 'error')
+  }
+}
+
+function closeSignatureModal() {
+  signatureModalVisible.value = false
+}
+
+async function handleSaveSignature(payload: { userId: string; blob: Blob }) {
+  signatureSaving.value = true
+  try {
+    await uploadAndSaveSignature(payload.userId, payload.blob)
+    signatureProfiles.value = await fetchProfilesList()
+    showToast('서명이 저장되었습니다.')
+  } catch {
+    showToast('서명 저장 중 오류가 발생했습니다.', 'error')
+  } finally {
+    signatureSaving.value = false
+  }
 }
 
 // ─── 반려 다이얼로그 ───────────────────────────────────────────────────────────
@@ -133,8 +182,8 @@ function showToast(message: string, type: 'success' | 'error' = 'success') {
 }
 
 // ─── 데이터 로드 ───────────────────────────────────────────────────────────────
-async function loadItems() {
-  loading.value = true
+async function loadItems({ silent = false } = {}) {
+  if (!silent) loading.value = true
   try {
     // 관리자: 필터 적용 전체, 일반: 전체 목록(필터 없이) 조회
     if (isAdmin.value) {
@@ -145,7 +194,7 @@ async function loadItems() {
   } catch {
     showToast('목록을 불러오지 못했습니다.', 'error')
   } finally {
-    loading.value = false
+    if (!silent) loading.value = false
   }
 }
 
@@ -177,14 +226,73 @@ async function loadEmployees() {
   }
 }
 
+async function loadMonthlySummary({ silent = false } = {}) {
+  if (!isAdmin.value) {
+    monthlySummaries.value = []
+    monthlySummaryRequests.value = []
+    return
+  }
+
+  if (!silent) summaryLoading.value = true
+  try {
+    const [summaries, requests] = await Promise.all([
+      fetchAttendanceMonthlySummary(summaryYear.value, summaryMonth.value),
+      fetchApprovedAttendanceRequestsByMonth(summaryYear.value, summaryMonth.value),
+    ])
+    monthlySummaries.value = summaries
+    monthlySummaryRequests.value = requests
+  } catch {
+    monthlySummaries.value = []
+    monthlySummaryRequests.value = []
+    showToast('근태요약을 불러오지 못했습니다.', 'error')
+  } finally {
+    if (!silent) summaryLoading.value = false
+  }
+}
+
+let suppressRealtimeRefreshUntil = 0
+
+function markLocalAttendanceMutation() {
+  suppressRealtimeRefreshUntil = Date.now() + 1500
+}
+
+async function refreshAttendanceAfterMutation() {
+  await Promise.all([loadItems({ silent: true }), loadQuota(), loadMonthlySummary({ silent: true })])
+}
+
+function openSummaryDetail(summary: AttendanceMonthlySummary) {
+  summaryDetailUserName.value = summary.userName
+  summaryDetailDepartment.value = summary.department
+  summaryDetailRequests.value = monthlySummaryRequests.value.filter(
+    (item) => item.userName === summary.userName && item.department === summary.department,
+  )
+  summaryDetailVisible.value = true
+}
+
+function closeSummaryDetail() {
+  summaryDetailVisible.value = false
+  summaryDetailUserName.value = ''
+  summaryDetailDepartment.value = ''
+  summaryDetailRequests.value = []
+}
+
+async function openSummaryRequestDetail(item: AttendanceRequest) {
+  closeSummaryDetail()
+  await openDetail(item)
+}
+
 watch(() => ({ ...filters }), () => {
   void loadItems()
   void loadQuota()
 }, { deep: true })
 
+watch([summaryYear, summaryMonth, isAdmin], () => {
+  void loadMonthlySummary()
+})
+
 watch(() => profile.value, async (p) => {
   if (!p) return
-  await Promise.all([loadItems(), loadQuota(), loadMeta(), loadEmployees()])
+  await Promise.all([loadItems(), loadQuota(), loadMeta(), loadEmployees(), loadMonthlySummary()])
 }, { immediate: true })
 
 // ─── 실시간 구독 ───────────────────────────────────────────────────────────────
@@ -192,8 +300,10 @@ let channel: ReturnType<typeof subscribeAttendanceRequests> | null = null
 
 onMounted(() => {
   channel = subscribeAttendanceRequests(() => {
-    void loadItems()
+    if (Date.now() < suppressRealtimeRefreshUntil) return
+    void loadItems({ silent: true })
     void loadQuota()
+    void loadMonthlySummary({ silent: true })
   })
 })
 
@@ -252,8 +362,9 @@ async function submitForm() {
       )
       showToast('휴가 신청이 접수되었습니다.')
     }
+    markLocalAttendanceMutation()
     formVisible.value = false
-    await Promise.all([loadItems(), loadQuota()])
+    await refreshAttendanceAfterMutation()
   } catch {
     showToast('처리 중 오류가 발생했습니다.', 'error')
   } finally {
@@ -266,8 +377,9 @@ async function handleDelete(item: AttendanceRequest) {
   if (!confirm('신청을 취소하시겠습니까?')) return
   try {
     await deleteAttendanceRequest(item.id)
+    markLocalAttendanceMutation()
     showToast('취소되었습니다.')
-    await Promise.all([loadItems(), loadQuota()])
+    await refreshAttendanceAfterMutation()
   } catch {
     showToast('취소 중 오류가 발생했습니다.', 'error')
   }
@@ -275,6 +387,10 @@ async function handleDelete(item: AttendanceRequest) {
 
 // ─── 관리자 수정 ───────────────────────────────────────────────────────────────
 function handleAdminEdit(item: AttendanceRequest) {
+  if (item.status === '승인') {
+    showToast('승인 완료 건은 수정할 수 없습니다.', 'error')
+    return
+  }
   formData.value = {
     selectedDepartment: item.department,
     selectedEmployeeName: item.userName,
@@ -291,11 +407,16 @@ function handleAdminEdit(item: AttendanceRequest) {
 
 // ─── 관리자 삭제 (상태 무관) ───────────────────────────────────────────────────
 async function handleAdminDelete(item: AttendanceRequest) {
+  if (item.status === '승인') {
+    showToast('승인 완료 건은 삭제할 수 없습니다.', 'error')
+    return
+  }
   if (!confirm(`'${item.userName}' 신청을 삭제하시겠습니까?`)) return
   try {
     await adminDeleteAttendanceRequest(item.id)
+    markLocalAttendanceMutation()
     showToast('삭제되었습니다.')
-    await loadItems()
+    await refreshAttendanceAfterMutation()
   } catch {
     showToast('삭제 중 오류가 발생했습니다.', 'error')
   }
@@ -306,8 +427,9 @@ async function handleApprove(item: AttendanceRequest) {
   if (!confirm(`${item.userName}의 신청을 승인하시겠습니까?`)) return
   try {
     await approveAttendanceRequest(item.id, currentUserName.value)
+    markLocalAttendanceMutation()
     showToast('승인 처리되었습니다.')
-    await loadItems()
+    await refreshAttendanceAfterMutation()
   } catch {
     showToast('승인 중 오류가 발생했습니다.', 'error')
   }
@@ -334,9 +456,10 @@ async function submitReject() {
   }
   try {
     await rejectAttendanceRequest(rejectTarget.value.id, currentUserName.value, rejectReason.value.trim())
+    markLocalAttendanceMutation()
     showToast('반려 처리되었습니다.')
     closeRejectDialog()
-    await loadItems()
+    await refreshAttendanceAfterMutation()
   } catch {
     showToast('반려 처리 중 오류가 발생했습니다.', 'error')
   }
@@ -383,6 +506,14 @@ async function handleDeleteEmployee(id: number) {
     :stats="stats"
     :employees="employees"
     :employees-loading="employeesLoading"
+    :summary-year="summaryYear"
+    :summary-month="summaryMonth"
+    :summary-loading="summaryLoading"
+    :monthly-summaries="monthlySummaries"
+    :summary-detail-visible="summaryDetailVisible"
+    :summary-detail-user-name="summaryDetailUserName"
+    :summary-detail-department="summaryDetailDepartment"
+    :summary-detail-requests="summaryDetailRequests"
     :current-user-id="currentUserId"
     :is-admin="isAdmin"
     :loading="loading"
@@ -395,8 +526,13 @@ async function handleDeleteEmployee(id: number) {
     :reject-target="rejectTarget"
     :reject-reason="rejectReason"
     @update:filters="Object.assign(filters, $event)"
+    @update:summary-year="summaryYear = $event"
+    @update:summary-month="summaryMonth = $event"
     @update:form-data="formData = $event"
     @update:reject-reason="rejectReason = $event"
+    @open-summary-detail="openSummaryDetail"
+    @close-summary-detail="closeSummaryDetail"
+    @open-summary-request-detail="openSummaryRequestDetail"
     @open-form="openForm"
     @close-form="closeForm"
     @submit-form="submitForm"
@@ -410,8 +546,14 @@ async function handleDeleteEmployee(id: number) {
     @admin-delete="handleAdminDelete"
     :detail-item="detailItem"
     :detail-signatures="detailSignatures"
+    :signature-modal-visible="signatureModalVisible"
+    :signature-profiles="signatureProfiles"
+    :signature-saving="signatureSaving"
     @open-detail="openDetail"
     @close-detail="closeDetail"
+    @open-signature="openSignatureModal"
+    @close-signature="closeSignatureModal"
+    @save-signature="handleSaveSignature"
     @create-employee="handleCreateEmployee"
     @update-employee="handleUpdateEmployee"
     @delete-employee="handleDeleteEmployee"

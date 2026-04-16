@@ -15,6 +15,30 @@ export const useMessenger = (session) => {
   let roomSubscription = null
 
   const activeRoom = computed(() => rooms.value.find((r) => r.id === activeRoomId.value) ?? null)
+  const MEDIA_PUBLIC_PREFIX = '/storage/v1/object/public/media/'
+
+  const extractMediaStoragePath = (fileUrl) => {
+    const raw = String(fileUrl ?? '').trim()
+    if (!raw) return ''
+
+    try {
+      const parsed = new URL(raw)
+      const markerIndex = parsed.pathname.indexOf(MEDIA_PUBLIC_PREFIX)
+      if (markerIndex < 0) return ''
+      return decodeURIComponent(parsed.pathname.slice(markerIndex + MEDIA_PUBLIC_PREFIX.length))
+    } catch {
+      return ''
+    }
+  }
+
+  const removeMediaFiles = async (fileUrls = []) => {
+    const storagePaths = [...new Set(fileUrls.map(extractMediaStoragePath).filter(Boolean))]
+    if (storagePaths.length === 0) return { ok: true }
+
+    const { error: removeErr } = await supabase.storage.from('media').remove(storagePaths)
+    if (removeErr) return { ok: false, reason: removeErr.message }
+    return { ok: true }
+  }
 
   const fetchRooms = async () => {
     roomsLoading.value = true
@@ -48,8 +72,18 @@ export const useMessenger = (session) => {
   }
 
   const deleteRoom = async (roomId) => {
+    const { data: roomMessages, error: fetchErr } = await supabase
+      .from('chat_messages')
+      .select('file_url')
+      .eq('room_id', roomId)
+    if (fetchErr) return { ok: false, reason: fetchErr.message }
+
     const { error: err } = await supabase.from('chat_rooms').delete().eq('id', roomId)
     if (err) return { ok: false }
+
+    const storageResult = await removeMediaFiles((roomMessages ?? []).map((item) => item.file_url))
+    if (!storageResult.ok) return { ok: false, reason: storageResult.reason }
+
     rooms.value = rooms.value.filter((r) => r.id !== roomId)
     if (activeRoomId.value === roomId) {
       activeRoomId.value = null
@@ -169,8 +203,13 @@ export const useMessenger = (session) => {
   }
 
   const deleteMessage = async (messageId) => {
+    const targetMessage = messages.value.find((m) => m.id === messageId) ?? null
     const { error: err } = await supabase.from('chat_messages').delete().eq('id', messageId)
     if (err) return { ok: false }
+
+    const storageResult = await removeMediaFiles([targetMessage?.file_url])
+    if (!storageResult.ok) return { ok: false, reason: storageResult.reason }
+
     messages.value = messages.value.filter((m) => m.id !== messageId)
     return { ok: true }
   }
