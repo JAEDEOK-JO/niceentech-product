@@ -1,10 +1,10 @@
 import { ref, computed } from 'vue'
 import { supabase } from '@/lib/supabase'
 
-const sendPush = async ({ excludeUserId, title, body, url }) => {
+const sendPush = async ({ roomId, excludeUserId, title, body, url }) => {
   try {
     const { data, error } = await supabase.functions.invoke('send-push', {
-      body: { exclude_user_id: excludeUserId, title, body, url },
+      body: { room_id: roomId, exclude_user_id: excludeUserId, title, body, url },
     })
     if (error) {
       console.error('send-push invoke failed:', error)
@@ -58,15 +58,43 @@ export const useMessenger = (session) => {
   }
 
   const fetchRooms = async () => {
+    const userId = session.value?.user?.id
+    if (!userId) { rooms.value = []; return }
     roomsLoading.value = true
     error.value = ''
-    const { data, error: err } = await supabase
-      .from('chat_rooms')
-      .select('*')
-      .order('created_at', { ascending: false })
+
+    // 두 쿼리를 병렬로 실행: 내가 만든 방 + 멤버로 초대된 방
+    const [ownedRes, memberRes] = await Promise.all([
+      // 내가 owner인 방
+      supabase.from('chat_rooms').select('*').eq('owner_id', userId),
+      // 내가 chat_room_members에 등록된 방 ID 조회
+      supabase.from('chat_room_members').select('room_id').eq('user_id', userId),
+    ])
+
     roomsLoading.value = false
-    if (err) { error.value = '채팅방 목록 조회 실패'; return }
-    rooms.value = data ?? []
+    if (ownedRes.error) { error.value = '채팅방 목록 조회 실패'; return }
+
+    const ownedRooms = ownedRes.data ?? []
+    const ownedIds = new Set(ownedRooms.map((r) => r.id))
+
+    // 멤버로 초대된 방 중 내가 owner가 아닌 것만 추가 조회
+    const memberIds = (memberRes.data ?? [])
+      .map((r) => r.room_id)
+      .filter((id) => !ownedIds.has(id))
+
+    let invitedRooms = []
+    if (memberIds.length > 0) {
+      const { data: inv } = await supabase
+        .from('chat_rooms')
+        .select('*')
+        .in('id', memberIds)
+      invitedRooms = inv ?? []
+    }
+
+    // 합치고 생성일 내림차순 정렬
+    const combined = [...ownedRooms, ...invitedRooms]
+    combined.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    rooms.value = combined
   }
 
   const createRoom = async ({ title, description = '' }) => {
@@ -84,8 +112,56 @@ export const useMessenger = (session) => {
       .select()
       .single()
     if (err) return { ok: false, reason: err.message }
+
+    // 방 생성자를 멤버로 자동 등록
+    const { error: memberErr } = await supabase.from('chat_room_members').insert(
+      { room_id: data.id, user_id: userId, display_name: ownerName, role: 'owner' },
+    )
+    if (memberErr) console.warn('chat_room_members 등록 실패:', memberErr.message)
+
     rooms.value = [data, ...rooms.value]
     return { ok: true, room: data }
+  }
+
+  // ─── 멤버 조회 ───────────────────────────────────────────────────────────
+  const fetchMembers = async (roomId) => {
+    const { data, error: err } = await supabase
+      .from('chat_room_members')
+      .select('user_id, display_name, role, joined_at')
+      .eq('room_id', roomId)
+      .order('joined_at', { ascending: true })
+    if (err) return []
+    return data ?? []
+  }
+
+  // ─── 멤버 초대 ───────────────────────────────────────────────────────────
+  const inviteMember = async (roomId, targetUserId) => {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('name')
+      .eq('id', targetUserId)
+      .maybeSingle()
+    const displayName = String(profile?.name ?? '').trim() || '알 수 없음'
+
+    const { error: err } = await supabase
+      .from('chat_room_members')
+      .upsert(
+        { room_id: roomId, user_id: targetUserId, display_name: displayName, role: 'member' },
+        { onConflict: 'room_id,user_id' },
+      )
+    if (err) return { ok: false, reason: err.message }
+    return { ok: true }
+  }
+
+  // ─── 멤버 내보내기 ────────────────────────────────────────────────────────
+  const removeMember = async (roomId, targetUserId) => {
+    const { error: err } = await supabase
+      .from('chat_room_members')
+      .delete()
+      .eq('room_id', roomId)
+      .eq('user_id', targetUserId)
+    if (err) return { ok: false, reason: err.message }
+    return { ok: true }
   }
 
   const deleteRoom = async (roomId) => {
@@ -182,6 +258,7 @@ export const useMessenger = (session) => {
 
     const textPreview = content.trim() ? content.trim().slice(0, 60) : '파일을 보냈습니다.'
     sendPush({
+      roomId,
       excludeUserId: userId,
       title: `💬 ${senderName}`,
       body: textPreview,
@@ -230,6 +307,7 @@ export const useMessenger = (session) => {
       ? content.trim().slice(0, 60)
       : `파일 ${files.length}개를 보냈습니다.`
     sendPush({
+      roomId,
       excludeUserId: userId,
       title: `💬 ${senderName}`,
       body: textPreview,
@@ -331,5 +409,8 @@ export const useMessenger = (session) => {
     selectRoom,
     subscribeToRooms,
     unsubscribeAll,
+    fetchMembers,
+    inviteMember,
+    removeMember,
   }
 }

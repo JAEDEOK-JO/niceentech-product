@@ -134,8 +134,15 @@ onMounted(async () => {
 
   // 로그인 이벤트마다 구독 갱신
   const { data } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
-    if (newSession?.user?.id) {
-      await subscribeIfPermitted(newSession.user.id)
+    const userId = newSession?.user?.id ?? null
+
+    // Electron 메인 프로세스에 유저 ID 전달 (백그라운드 알림용)
+    if (typeof window !== 'undefined' && window.electronAPI?.setAuthUserId) {
+      window.electronAPI.setAuthUserId(userId)
+    }
+
+    if (userId) {
+      await subscribeIfPermitted(userId)
     } else {
       await pushOnLogout()
       await refreshSubscriptionState()

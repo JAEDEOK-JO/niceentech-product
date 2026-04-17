@@ -5,6 +5,7 @@ import { useAuth } from '@/composables/useAuth'
 import { useMessengerUnread } from '@/composables/useMessengerUnread'
 import { useProfile } from '@/composables/useProfile'
 import { useElectronBridge } from '@/composables/useElectronBridge'
+import { useElectronNotifications } from '@/composables/useElectronNotifications'
 import { isAdminRole, isDesignDepartment } from '@/utils/adminAccess'
 
 const route = useRoute()
@@ -13,8 +14,10 @@ const { session } = useAuth()
 const { totalUnreadCount, startUnreadTracking, stopUnreadTracking } = useMessengerUnread()
 const { profile } = useProfile(session)
 
-// Electron 환경에서 트레이 아이콘 및 배지 업데이트
+// Electron: 트레이 아이콘/배지 업데이트
 useElectronBridge(totalUnreadCount)
+// Electron: 새 메시지 네이티브 알림 (OneSignal 대신 Supabase 리얼타임 사용)
+useElectronNotifications(session)
 
 watch(
   () => session.value?.user?.id ?? '',

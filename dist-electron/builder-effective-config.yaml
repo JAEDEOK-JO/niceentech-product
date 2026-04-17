@@ -1,0 +1,25 @@
+directories:
+  output: dist-electron
+  buildResources: build
+appId: com.niceentech.product
+productName: NICEENTECH
+copyright: Copyright © 2025 NICEENTECH
+files:
+  - filter:
+      - dist/**/*
+      - electron/**/*
+      - build/**/*
+      - node_modules/**/*
+      - package.json
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: build/icon.png
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+electronVersion: 36.9.5

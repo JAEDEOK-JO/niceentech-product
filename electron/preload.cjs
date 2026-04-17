@@ -36,4 +36,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   removeNavigateListener: () => {
     ipcRenderer.removeAllListeners('navigate-to')
   },
+
+  /**
+   * 로그인/로그아웃 시 유저 ID를 메인 프로세스에 전달
+   * → 메인 프로세스 Supabase 리스너 시작/중지
+   * @param {string | null} userId
+   */
+  setAuthUserId: (userId) => {
+    ipcRenderer.send('auth-user-id', userId || null)
+  },
 })

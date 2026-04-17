@@ -2,7 +2,7 @@ import { createClient } from 'npm:@supabase/supabase-js'
 
 const jsonHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, content-type',
+  'Access-Control-Allow-Headers': 'authorization, content-type, x-client-info, apikey',
   'Content-Type': 'application/json',
 }
 
@@ -37,7 +37,14 @@ Deno.serve(async (req) => {
 
   const supabase = createClient(config.SUPABASE_URL, config.SUPABASE_SERVICE_ROLE_KEY)
 
-  let requestBody: { user_ids?: string[]; exclude_user_id?: string; title?: string; body?: string; url?: string }
+  let requestBody: {
+    room_id?: string
+    user_ids?: string[]
+    exclude_user_id?: string
+    title?: string
+    body?: string
+    url?: string
+  }
   try {
     requestBody = await req.json()
   } catch (error) {
@@ -48,8 +55,9 @@ Deno.serve(async (req) => {
     })
   }
 
-  const { user_ids, exclude_user_id, title, body, url = '/' } = requestBody
+  const { room_id, user_ids, exclude_user_id, title, body, url = '/' } = requestBody
   const excludedUserId = String(exclude_user_id ?? '').trim()
+  const roomId = String(room_id ?? '').trim()
 
   if (!title) {
     return new Response(JSON.stringify({ error: 'invalid_input' }), {
@@ -58,13 +66,34 @@ Deno.serve(async (req) => {
     })
   }
 
-  // 대상 user ID 목록 결정
+  // ─── 대상 user ID 목록 결정 ──────────────────────────────────────────────
   let targetUserIds: string[]
 
   if (Array.isArray(user_ids) && user_ids.length > 0) {
+    // 직접 지정된 user_ids
     targetUserIds = user_ids.map((v) => String(v ?? '').trim()).filter(Boolean)
+
+  } else if (roomId) {
+    // 채팅방 멤버 기반 (카카오톡 방식): 해당 방의 멤버만, 발신자 제외
+    const { data: members, error: membersError } = await supabase
+      .from('chat_room_members')
+      .select('user_id')
+      .eq('room_id', roomId)
+
+    if (membersError) {
+      console.error('send-push members query failed:', membersError)
+      return new Response(JSON.stringify({ error: 'members_query_failed' }), {
+        status: 500,
+        headers: jsonHeaders,
+      })
+    }
+
+    targetUserIds = (members ?? [])
+      .map((m) => String(m.user_id ?? '').trim())
+      .filter((id) => id && id !== excludedUserId)
+
   } else {
-    // profiles 테이블에서 전체 유저 조회 후 발신자 제외
+    // room_id 없을 경우 전체 유저 대상 (공지 등), 발신자 제외
     const { data: profiles, error: profilesError } = await supabase
       .from('profiles')
       .select('id')

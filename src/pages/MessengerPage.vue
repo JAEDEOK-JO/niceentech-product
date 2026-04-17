@@ -3,6 +3,7 @@ import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useAuth } from '@/composables/useAuth'
 import { useMessenger } from '@/composables/useMessenger'
 import { useMessengerUnread } from '@/composables/useMessengerUnread'
+import { supabase } from '@/lib/supabase'
 
 const { session } = useAuth()
 const {
@@ -28,6 +29,9 @@ const {
   selectRoom,
   subscribeToRooms,
   unsubscribeAll,
+  fetchMembers,
+  inviteMember,
+  removeMember,
 } = useMessenger(session)
 
 const MAX_FILES = 10
@@ -58,6 +62,59 @@ const isImageDragging = ref(false)
 const imageDragStart = ref({ x: 0, y: 0 })
 const imageDragOrigin = ref({ x: 0, y: 0 })
 const currentImageViewerUrl = computed(() => imageViewerUrls.value[imageViewerIndex.value] ?? '')
+// 멤버 관리 패널
+const memberPanelOpen = ref(false)
+const members = ref([])
+const membersLoading = ref(false)
+const allProfiles = ref([])
+const profilesLoading = ref(false)
+const inviting = ref(false)
+
+const openMemberPanel = async () => {
+  if (!activeRoomId.value) return
+  memberPanelOpen.value = true
+  membersLoading.value = true
+  profilesLoading.value = true
+  const [memberData, profileData] = await Promise.all([
+    fetchMembers(activeRoomId.value),
+    supabase.from('profiles').select('id, name, department').order('name'),
+  ])
+  members.value = memberData
+  allProfiles.value = profileData.data ?? []
+  membersLoading.value = false
+  profilesLoading.value = false
+}
+
+watch(activeRoomId, () => {
+  if (memberPanelOpen.value) openMemberPanel()
+})
+
+const isMember = (profileId) => members.value.some((m) => m.user_id === profileId)
+
+const handleInvite = async (profileId) => {
+  if (!activeRoomId.value || inviting.value) return
+  inviting.value = true
+  const result = await inviteMember(activeRoomId.value, profileId)
+  if (result.ok) {
+    members.value = await fetchMembers(activeRoomId.value)
+    showSnack('초대 완료')
+  } else {
+    showSnack('초대 실패')
+  }
+  inviting.value = false
+}
+
+const handleKick = async (userId) => {
+  if (!activeRoomId.value) return
+  const result = await removeMember(activeRoomId.value, userId)
+  if (result.ok) {
+    members.value = await fetchMembers(activeRoomId.value)
+    showSnack('멤버 제거 완료')
+  } else {
+    showSnack('제거 실패')
+  }
+}
+
 const deleteDialogVisible = ref(false)
 const deleteDialogTitle = ref('삭제 확인')
 const deleteDialogMessage = ref('삭제하시겠습니까?')
@@ -414,6 +471,8 @@ onBeforeUnmount(() => {
       </ul>
     </aside>
 
+    <!-- 채팅 영역 + 멤버 패널 wrapper -->
+    <div class="flex flex-1 min-w-0">
     <!-- 채팅 영역 -->
     <div class="flex flex-1 flex-col min-w-0">
 
@@ -428,11 +487,25 @@ onBeforeUnmount(() => {
             <path d="M3 12h18M3 6h18M3 18h18" />
           </svg>
         </button>
-        <div v-if="activeRoom" class="min-w-0">
+        <div v-if="activeRoom" class="min-w-0 flex-1">
           <h2 class="truncate text-base font-extrabold text-slate-900">{{ activeRoom.title }}</h2>
           <p v-if="activeRoom.description" class="truncate text-xs text-slate-400">{{ activeRoom.description }}</p>
         </div>
-        <p v-else class="text-sm text-slate-400">채팅방을 선택해주세요</p>
+        <p v-else class="flex-1 text-sm text-slate-400">채팅방을 선택해주세요</p>
+        <!-- 멤버 관리 버튼 -->
+        <button
+          v-if="activeRoom"
+          type="button"
+          class="flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-bold transition"
+          :class="memberPanelOpen ? 'border-indigo-300 bg-indigo-50 text-indigo-600' : 'border-slate-200 text-slate-500 hover:bg-slate-50'"
+          @click="memberPanelOpen ? memberPanelOpen = false : openMemberPanel()"
+        >
+          <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" />
+          </svg>
+          멤버
+          <span v-if="members.length > 0" class="rounded-full bg-indigo-100 px-1.5 text-[10px] font-extrabold text-indigo-700">{{ members.length }}</span>
+        </button>
       </div>
 
       <!-- 메시지 목록 -->
@@ -648,7 +721,7 @@ onBeforeUnmount(() => {
       </div>
 
       <!-- 입력창 -->
-      <div v-if="activeRoomId" class="border-t border-slate-200 bg-white px-4 py-3">
+      <div v-if="activeRoomId" class="border-t border-slate-200 bg-white px-4 py-3 flex-shrink-0">
         <div class="flex items-end gap-2">
           <!-- 파일 첨부 버튼 -->
           <button
@@ -699,6 +772,93 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
+    <!-- 멤버 관리 패널 -->
+    <aside
+      v-if="memberPanelOpen && activeRoom"
+      class="flex w-72 shrink-0 flex-col border-l border-slate-200 bg-white overflow-hidden"
+    >
+      <div class="flex items-center justify-between border-b border-slate-100 px-4 py-3.5">
+        <h3 class="text-sm font-extrabold text-slate-900">멤버 관리</h3>
+        <button type="button" class="text-slate-400 hover:text-slate-600" @click="memberPanelOpen = false">
+          <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
+        </button>
+      </div>
+
+      <div class="flex flex-1 flex-col overflow-y-auto divide-y divide-slate-100">
+
+        <!-- 현재 멤버 목록 -->
+        <div class="px-4 py-3">
+          <p class="mb-2 text-[11px] font-bold uppercase tracking-widest text-slate-400">현재 멤버 ({{ members.length }})</p>
+          <div v-if="membersLoading" class="text-xs text-slate-400">로딩 중...</div>
+          <ul v-else class="space-y-1">
+            <li
+              v-for="m in members"
+              :key="m.user_id"
+              class="flex items-center justify-between rounded-lg px-2 py-1.5 hover:bg-slate-50"
+            >
+              <div class="flex items-center gap-2 min-w-0">
+                <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-xs font-bold text-indigo-700">
+                  {{ String(m.display_name ?? '?').charAt(0) }}
+                </div>
+                <div class="min-w-0">
+                  <p class="truncate text-xs font-semibold text-slate-800">{{ m.display_name }}</p>
+                  <p class="text-[10px] text-slate-400">{{ m.role === 'owner' ? '관리자' : '멤버' }}</p>
+                </div>
+              </div>
+              <button
+                v-if="m.role !== 'owner' && m.user_id !== myId"
+                type="button"
+                class="shrink-0 rounded p-1 text-slate-300 hover:bg-red-50 hover:text-red-400"
+                title="내보내기"
+                @click="handleKick(m.user_id)"
+              >
+                <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </button>
+            </li>
+          </ul>
+        </div>
+
+        <!-- 초대할 직원 목록 -->
+        <div class="px-4 py-3">
+          <p class="mb-2 text-[11px] font-bold uppercase tracking-widest text-slate-400">초대하기</p>
+          <div v-if="profilesLoading" class="text-xs text-slate-400">로딩 중...</div>
+          <ul v-else class="space-y-1">
+            <li
+              v-for="p in allProfiles"
+              :key="p.id"
+              class="flex items-center justify-between rounded-lg px-2 py-1.5"
+              :class="isMember(p.id) ? 'opacity-40' : 'hover:bg-slate-50'"
+            >
+              <div class="flex items-center gap-2 min-w-0">
+                <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-600">
+                  {{ String(p.name ?? '?').charAt(0) }}
+                </div>
+                <div class="min-w-0">
+                  <p class="truncate text-xs font-semibold text-slate-800">{{ p.name }}</p>
+                  <p v-if="p.department" class="text-[10px] text-slate-400">{{ p.department }}</p>
+                </div>
+              </div>
+              <button
+                v-if="!isMember(p.id)"
+                type="button"
+                class="shrink-0 rounded-lg bg-indigo-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-indigo-700 disabled:opacity-40"
+                :disabled="inviting"
+                @click="handleInvite(p.id)"
+              >
+                초대
+              </button>
+              <span v-else class="text-[11px] font-semibold text-slate-400">참여중</span>
+            </li>
+          </ul>
+        </div>
+
+      </div>
+    </aside>
+
+    </div><!-- end 채팅 영역 + 멤버 패널 wrapper -->
+
     <!-- 새 채팅방 다이얼로그 -->
     <div
       v-if="showCreateRoomDialog"
@@ -714,7 +874,7 @@ onBeforeUnmount(() => {
               v-model="newRoomTitle"
               type="text"
               class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-indigo-400 focus:outline-none"
-              placeholder="예: 현장A 작업팀"
+              placeholder="채팅방 제목"
               @keydown.enter="handleCreateRoom"
             />
           </div>

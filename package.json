@@ -14,8 +14,9 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "build:icons": "node scripts/build-icons.mjs",
     "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
-    "build:electron": "vite build --base ./",
+    "build:electron": "node scripts/gen-electron-env.mjs && vite build --base ./",
     "electron:build": "npm run build:electron && electron-builder",
     "electron:start": "electron ."
   },
@@ -42,13 +43,11 @@
           ]
         }
       ],
-      "icon": "build/icon.ico"
+      "icon": "build/icon.png"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "installerIcon": "build/icon.ico",
-      "uninstallerIcon": "build/icon.ico",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
     }
@@ -65,6 +64,7 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "@tailwindcss/vite": "^4.2.0",
     "@vitejs/plugin-vue": "^6.0.2",
     "concurrently": "^9.1.2",

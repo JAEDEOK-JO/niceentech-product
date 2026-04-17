@@ -7,6 +7,7 @@ import packageJson from '../../package.json'
 const appVersion = packageJson.version
 const { session } = useAuth()
 const {
+  isElectron,
   isSupported,
   permission,
   isSubscribed,
@@ -17,6 +18,7 @@ const {
 } = usePushNotification()
 
 const notificationStatus = computed(() => {
+  if (isElectron) return 'PC 앱에서는 알림이 자동으로 활성화됩니다.'
   if (!isSupported.value) return '이 브라우저에서는 푸시 알림을 지원하지 않습니다.'
   if (permission.value === 'denied') return '브라우저에서 알림이 차단되어 있습니다.'
   if (permission.value === 'granted' && isSubscribed.value) return '메신저 푸시 알림이 켜져 있습니다.'
@@ -25,12 +27,14 @@ const notificationStatus = computed(() => {
 })
 
 const statusToneClass = computed(() => {
+  if (isElectron) return 'bg-emerald-100 text-emerald-700'
   if (permission.value === 'granted' && isSubscribed.value) return 'bg-emerald-100 text-emerald-700'
   if (permission.value === 'denied') return 'bg-red-100 text-red-600'
   return 'bg-amber-100 text-amber-700'
 })
 
 const canEnableNotification = computed(() => (
+  !isElectron &&
   isSupported.value &&
   Boolean(session.value?.user?.id) &&
   !loading.value &&
@@ -38,6 +42,7 @@ const canEnableNotification = computed(() => (
 ))
 
 const canDisableNotification = computed(() => (
+  !isElectron &&
   isSupported.value &&
   Boolean(session.value?.user?.id) &&
   !loading.value &&
@@ -92,11 +97,13 @@ onMounted(async () => {
                 :class="statusToneClass"
               >
                 {{
-                  permission === 'granted' && isSubscribed
-                    ? '켜짐'
-                    : permission === 'denied'
-                      ? '차단됨'
-                      : '꺼짐'
+                  isElectron
+                    ? '자동'
+                    : permission === 'granted' && isSubscribed
+                      ? '켜짐'
+                      : permission === 'denied'
+                        ? '차단됨'
+                        : '꺼짐'
                 }}
               </span>
             </div>
