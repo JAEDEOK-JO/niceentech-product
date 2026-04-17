@@ -33,12 +33,12 @@ const statusToneClass = computed(() => {
   return 'bg-amber-100 text-amber-700'
 })
 
+// 로그인된 상태 + 지원되는 브라우저 + 로딩 중 아님 + Electron 아님이면 항상 누를 수 있음
 const canEnableNotification = computed(() => (
   !isElectron &&
   isSupported.value &&
   Boolean(session.value?.user?.id) &&
-  !loading.value &&
-  !(permission.value === 'granted' && isSubscribed.value)
+  !loading.value
 ))
 
 const canDisableNotification = computed(() => (
