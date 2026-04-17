@@ -14,6 +14,7 @@ const {
   permission: pushPermission,
   requestPermission,
   subscribeIfPermitted,
+  linkExternalUserId,
   refreshSubscriptionState,
   onLogout: pushOnLogout,
 } = usePushNotification()
@@ -123,9 +124,11 @@ onMounted(async () => {
   setupSettingRealtime()
   window.addEventListener('beforeunload', blockClose)
 
-  // 로그인 상태이면 이미 허용된 알림 구독 자동 등록
+  // 로그인 상태이면 OneSignal에 external_user_id 매핑 (권한 여부와 무관하게)
+  // 이후 사용자가 알림을 켜는 즉시 서버 발송이 연결됨
   const { data: { session } } = await supabase.auth.getSession()
   if (session?.user?.id) {
+    await linkExternalUserId(session.user.id)
     await subscribeIfPermitted(session.user.id)
   } else {
     await refreshSubscriptionState()
@@ -142,6 +145,7 @@ onMounted(async () => {
     }
 
     if (userId) {
+      await linkExternalUserId(userId)
       await subscribeIfPermitted(userId)
     } else {
       await pushOnLogout()

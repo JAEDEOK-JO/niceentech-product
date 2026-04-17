@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useAuth } from '@/composables/useAuth'
 import { usePushNotification } from '@/composables/usePushNotification'
 import packageJson from '../../package.json'
@@ -16,6 +16,14 @@ const {
   removeSubscription,
   refreshSubscriptionState,
 } = usePushNotification()
+
+const snackMessage = ref('')
+let snackTimer = null
+const showSnack = (msg) => {
+  snackMessage.value = msg
+  if (snackTimer) clearTimeout(snackTimer)
+  snackTimer = setTimeout(() => { snackMessage.value = '' }, 3000)
+}
 
 const isIos = typeof window !== 'undefined' && /iphone|ipad|ipod/i.test(navigator.userAgent)
 const isInStandaloneMode = typeof window !== 'undefined' && window.matchMedia('(display-mode: standalone)').matches
@@ -55,16 +63,31 @@ const canDisableNotification = computed(() => (
 
 const handleEnableNotification = async () => {
   const userId = session.value?.user?.id ?? ''
-  if (!userId) return
-  await requestPermission(userId)
+  if (!userId) { showSnack('로그인 후 다시 시도해주세요.'); return }
+  const result = await requestPermission(userId)
   await refreshSubscriptionState()
+
+  if (result.ok) {
+    showSnack('알림이 활성화되었습니다.')
+    return
+  }
+
+  const reasonMap = {
+    denied: '브라우저에서 알림이 차단되어 있어요. 주소창 또는 시스템 설정에서 허용해주세요.',
+    default: '알림 권한 요청이 닫혔어요. 다시 시도해주세요.',
+    unsupported: '이 브라우저는 푸시 알림을 지원하지 않습니다.',
+    sdk_not_loaded: 'OneSignal SDK를 불러오지 못했습니다. 네트워크 확인 후 새로고침해주세요.',
+    no_user_id: '로그인 정보가 없습니다. 다시 로그인해주세요.',
+  }
+  showSnack(reasonMap[result.status] ?? result.reason ?? '알림 등록에 실패했습니다.')
 }
 
 const handleDisableNotification = async () => {
   const userId = session.value?.user?.id ?? ''
   if (!userId) return
-  await removeSubscription(userId)
+  const result = await removeSubscription(userId)
   await refreshSubscriptionState()
+  showSnack(result.ok ? '알림이 꺼졌습니다.' : '알림 끄기에 실패했습니다.')
 }
 
 // 세션이 로드된 후 구독 상태 확인 (새로고침 시 타이밍 대응)
@@ -143,6 +166,13 @@ watch(
           </article>
         </div>
       </section>
+    </div>
+
+    <div
+      v-if="snackMessage"
+      class="fixed left-1/2 bottom-10 z-50 -translate-x-1/2 rounded-xl bg-slate-900/95 px-6 py-3 text-sm font-bold text-white shadow-2xl max-w-[90vw] text-center"
+    >
+      {{ snackMessage }}
     </div>
   </main>
 </template>
