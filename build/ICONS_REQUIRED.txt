@@ -1,0 +1,17 @@
+이 폴더에 아래 아이콘 파일들이 필요합니다.
+기존 public/icon-192.svg 를 변환해서 사용하세요.
+
+[필수]
+icon.ico   - 앱 아이콘 (256x256, Windows 인스톨러/작업표시줄용)
+icon.png   - 앱 아이콘 (256x256, 개발 환경 fallback)
+
+[트레이 아이콘 - 16x16 또는 32x32]
+tray.png        - 기본 트레이 아이콘 (흰색/회색 배경)
+tray-notify.png - 새 메시지 있을 때 트레이 아이콘 (다른 색상)
+
+[작업표시줄 배지 - 16x16, 선택사항]
+badge.png  - 빨간 점/숫자 오버레이 이미지
+
+SVG → ICO/PNG 변환 추천 사이트:
+- https://cloudconvert.com/svg-to-ico
+- https://convertio.co/svg-png/

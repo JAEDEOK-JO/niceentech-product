@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
 import { useMessengerUnread } from '@/composables/useMessengerUnread'
 import { useProfile } from '@/composables/useProfile'
+import { useElectronBridge } from '@/composables/useElectronBridge'
 import { isAdminRole, isDesignDepartment } from '@/utils/adminAccess'
 
 const route = useRoute()
@@ -11,6 +12,9 @@ const router = useRouter()
 const { session } = useAuth()
 const { totalUnreadCount, startUnreadTracking, stopUnreadTracking } = useMessengerUnread()
 const { profile } = useProfile(session)
+
+// Electron 환경에서 트레이 아이콘 및 배지 업데이트
+useElectronBridge(totalUnreadCount)
 
 watch(
   () => session.value?.user?.id ?? '',

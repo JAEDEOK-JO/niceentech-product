@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHistory, createWebHashHistory } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import LoginPage from '@/pages/LoginPage.vue'
 import MainPage from '@/pages/MainPage.vue'
@@ -244,8 +244,11 @@ const routes = [
   },
 ]
 
+// Electron 환경에서는 file:// 프로토콜과 호환되는 hash 라우터 사용
+const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron === true
+
 const router = createRouter({
-  history: createWebHistory(),
+  history: isElectron ? createWebHashHistory() : createWebHistory(),
   routes,
 })
 

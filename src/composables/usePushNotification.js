@@ -1,14 +1,5 @@
 import { ref } from 'vue'
-import { supabase } from '@/lib/supabase'
-
-const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY
-
-const urlBase64ToUint8Array = (base64String) => {
-  const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
-  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
-  const rawData = window.atob(base64)
-  return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)))
-}
+import { useOneSignal } from '@onesignal/onesignal-vue3'
 
 export function usePushNotification() {
   const isSupported = ref(
@@ -21,20 +12,7 @@ export function usePushNotification() {
   const isSubscribed = ref(false)
   const loading = ref(false)
 
-  const saveSubscription = async (userId, subscription) => {
-    const json = subscription.toJSON()
-    await supabase
-      .from('push_subscriptions')
-      .upsert(
-        {
-          user_id: userId,
-          endpoint: json.endpoint,
-          p256dh: json.keys.p256dh,
-          auth: json.keys.auth,
-        },
-        { onConflict: 'user_id,endpoint' },
-      )
-  }
+  const oneSignal = useOneSignal()
 
   const syncPermissionState = () => {
     permission.value = typeof Notification !== 'undefined' ? Notification.permission : 'default'
@@ -47,91 +25,80 @@ export function usePushNotification() {
       isSubscribed.value = false
       return false
     }
+    isSubscribed.value = oneSignal.User?.PushSubscription?.optedIn ?? false
+    return isSubscribed.value
+  }
 
+  const ensureLoggedIn = async (userId) => {
+    if (!userId) return
     try {
-      const registration = await navigator.serviceWorker.ready
-      const sub = await registration.pushManager.getSubscription()
-      isSubscribed.value = Boolean(sub)
-      return isSubscribed.value
+      await oneSignal.login(userId)
     } catch {
-      isSubscribed.value = false
-      return false
+      // OneSignal login 실패는 무시 (구독에는 영향 없음)
     }
   }
 
-  const ensurePushSubscription = async (userId) => {
-    if (!isSupported.value || !userId || !VAPID_PUBLIC_KEY) return { ok: false, reason: 'unsupported' }
-
-    try {
-      const registration = await navigator.serviceWorker.ready
-      let sub = await registration.pushManager.getSubscription()
-      if (!sub) {
-        sub = await registration.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
-        })
-      }
-      await saveSubscription(userId, sub)
-      isSubscribed.value = true
-      return { ok: true }
-    } catch (error) {
-      isSubscribed.value = false
-      return { ok: false, reason: error instanceof Error ? error.message : 'subscribe_failed' }
-    }
-  }
-
-  const removeSubscription = async (userId) => {
-    if (!isSupported.value) return { ok: false, reason: 'unsupported' }
-    loading.value = true
-    try {
-      const registration = await navigator.serviceWorker.ready
-      const sub = await registration.pushManager.getSubscription()
-      if (sub) {
-        await sub.unsubscribe()
-        await supabase
-          .from('push_subscriptions')
-          .delete()
-          .eq('user_id', userId)
-          .eq('endpoint', sub.endpoint)
-      }
-      isSubscribed.value = false
-      return { ok: true }
-    } catch (error) {
-      return { ok: false, reason: error instanceof Error ? error.message : 'unsubscribe_failed' }
-    } finally {
-      loading.value = false
-    }
-  }
-
-  // 로그인 후 호출 - 이미 허용된 경우 자동 구독 등록
   const subscribeIfPermitted = async (userId) => {
     syncPermissionState()
-    await refreshSubscriptionState()
-    if (!isSupported.value || !userId || !VAPID_PUBLIC_KEY) return { ok: false, reason: 'unsupported' }
+    if (!isSupported.value || !userId) return { ok: false, reason: 'unsupported' }
     if (permission.value !== 'granted') return { ok: false, reason: permission.value }
-    return ensurePushSubscription(userId)
+
+    await ensureLoggedIn(userId)
+    try {
+      await oneSignal.User?.PushSubscription?.optIn()
+      isSubscribed.value = oneSignal.User?.PushSubscription?.optedIn ?? false
+      return { ok: true }
+    } catch (error) {
+      return { ok: false, reason: error instanceof Error ? error.message : 'optIn_failed' }
+    }
   }
 
-  // 사용자가 직접 알림 허용 요청 (설정 페이지 등에서 호출)
   const requestPermission = async (userId) => {
-    if (!isSupported.value || !userId || !VAPID_PUBLIC_KEY) return { ok: false, status: 'unsupported' }
+    if (!isSupported.value || !userId) return { ok: false, status: 'unsupported' }
 
     loading.value = true
+    await ensureLoggedIn(userId)
+
     const result = await Notification.requestPermission()
     permission.value = result
+
     if (result !== 'granted') {
       isSubscribed.value = false
       loading.value = false
       return { ok: false, status: result }
     }
 
-    const subscribeResult = await ensurePushSubscription(userId)
-    loading.value = false
-    if (!subscribeResult.ok) {
-      return { ok: false, status: result, reason: subscribeResult.reason }
+    try {
+      await oneSignal.User?.PushSubscription?.optIn()
+      isSubscribed.value = oneSignal.User?.PushSubscription?.optedIn ?? false
+    } catch {
+      // optIn 실패해도 permission은 granted이므로 일부 성공
     }
 
+    loading.value = false
     return { ok: true, status: result }
+  }
+
+  const removeSubscription = async (_userId) => {
+    loading.value = true
+    try {
+      await oneSignal.User?.PushSubscription?.optOut()
+      isSubscribed.value = false
+      return { ok: true }
+    } catch (error) {
+      return { ok: false, reason: error instanceof Error ? error.message : 'optOut_failed' }
+    } finally {
+      loading.value = false
+    }
+  }
+
+  const onLogout = async () => {
+    try {
+      await oneSignal.logout()
+      isSubscribed.value = false
+    } catch {
+      // 무시
+    }
   }
 
   return {
@@ -144,5 +111,6 @@ export function usePushNotification() {
     subscribeIfPermitted,
     requestPermission,
     removeSubscription,
+    onLogout,
   }
 }

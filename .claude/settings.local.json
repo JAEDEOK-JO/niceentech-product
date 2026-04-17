@@ -19,7 +19,9 @@
       "Bash(npx web-push *)",
       "Bash(ls *)",
       "Bash(supabase *)",
-      "mcp__supabase__deploy_edge_function"
+      "mcp__supabase__deploy_edge_function",
+      "Bash(npm uninstall *)",
+      "mcp__supabase__list_edge_functions"
     ]
   }
 }

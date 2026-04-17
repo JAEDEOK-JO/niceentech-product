@@ -15,6 +15,7 @@ const {
   requestPermission,
   subscribeIfPermitted,
   refreshSubscriptionState,
+  onLogout: pushOnLogout,
 } = usePushNotification()
 
 const currentVersion = packageJson.version
@@ -136,6 +137,7 @@ onMounted(async () => {
     if (newSession?.user?.id) {
       await subscribeIfPermitted(newSession.user.id)
     } else {
+      await pushOnLogout()
       await refreshSubscriptionState()
     }
     syncPushPrompt()
