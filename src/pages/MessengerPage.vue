@@ -398,11 +398,19 @@ watch(
   },
 )
 
-onMounted(async () => {
-  if (myId.value) await startUnreadTracking(myId.value)
+// 새로고침 시 세션이 onMounted보다 늦게 로드될 수 있어서
+// myId watch로 처리 (immediate: true → 이미 로드됐으면 즉시 실행)
+let roomsInitialized = false
+watch(myId, async (newId) => {
+  if (!newId || roomsInitialized) return
+  roomsInitialized = true
+  await startUnreadTracking(newId)
   await fetchRooms()
   await refreshUnreadCounts()
   subscribeToRooms()
+}, { immediate: true })
+
+onMounted(() => {
   window.addEventListener('keydown', handleViewerKeydown)
   document.addEventListener('visibilitychange', handleVisibilityChange)
 })
