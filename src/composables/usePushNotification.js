@@ -1,12 +1,24 @@
-import { ref, computed } from 'vue'
-import { useOneSignal } from '@onesignal/onesignal-vue3'
+import { ref } from 'vue'
 
 const isElectronEnv = typeof window !== 'undefined' && window.electronAPI?.isElectron === true
 
-export function usePushNotification() {
-  // Vue composition 규칙: 항상 최상단에서 호출
-  const oneSignal = useOneSignal()
+// OneSignal CDK 초기화 대기 (window.OneSignalDeferred 큐 활용)
+const waitForOS = () =>
+  new Promise((resolve) => {
+    // 이미 초기화됐으면 즉시 반환
+    if (window.OneSignal) { resolve(window.OneSignal); return }
 
+    // 아직 초기화 전이면 OneSignalDeferred 큐에 등록
+    // OneSignal SDK가 준비되면 자동으로 호출됨
+    window.OneSignalDeferred = window.OneSignalDeferred || []
+    const timeout = setTimeout(() => resolve(null), 6000)
+    window.OneSignalDeferred.push((os) => {
+      clearTimeout(timeout)
+      resolve(os)
+    })
+  })
+
+export function usePushNotification() {
   // ─── Electron: 웹 푸시 불필요 ────────────────────────────────────────────
   if (isElectronEnv) {
     return {
@@ -24,7 +36,7 @@ export function usePushNotification() {
     }
   }
 
-  // ─── 웹 브라우저 ──────────────────────────────────────────────────────────
+  // ─── 웹 브라우저 (OneSignal CDN) ─────────────────────────────────────────
   const isSupported = ref(
     typeof window !== 'undefined' &&
       'Notification' in window &&
@@ -40,25 +52,14 @@ export function usePushNotification() {
     return permission.value
   }
 
-  // OneSignal 초기화 대기 (최대 5초)
-  const waitForOneSignal = () => new Promise((resolve) => {
-    if (oneSignal.User !== undefined) { resolve(); return }
-    let elapsed = 0
-    const timer = setInterval(() => {
-      elapsed += 200
-      if (oneSignal.User !== undefined || elapsed >= 5000) {
-        clearInterval(timer)
-        resolve()
-      }
-    }, 200)
-  })
-
   const refreshSubscriptionState = async () => {
     syncPermissionState()
     if (!isSupported.value) { isSubscribed.value = false; return false }
 
-    await waitForOneSignal()
-    isSubscribed.value = oneSignal.User?.PushSubscription?.optedIn ?? false
+    const os = window.OneSignal
+    if (!os) { isSubscribed.value = false; return false }
+
+    isSubscribed.value = os.User?.PushSubscription?.optedIn ?? false
     return isSubscribed.value
   }
 
@@ -67,11 +68,13 @@ export function usePushNotification() {
     if (!isSupported.value || !userId) return { ok: false, reason: 'unsupported' }
     if (permission.value !== 'granted') return { ok: false, reason: permission.value }
 
+    const os = await waitForOS()
+    if (!os) return { ok: false, reason: 'sdk_not_loaded' }
+
     try {
-      await waitForOneSignal()
-      await oneSignal.login(userId)
-      await oneSignal.User?.PushSubscription?.optIn()
-      isSubscribed.value = oneSignal.User?.PushSubscription?.optedIn ?? false
+      await os.login(userId)
+      await os.User?.PushSubscription?.optIn()
+      isSubscribed.value = os.User?.PushSubscription?.optedIn ?? false
       return { ok: true }
     } catch (e) {
       return { ok: false, reason: e?.message ?? 'subscribe_failed' }
@@ -82,31 +85,26 @@ export function usePushNotification() {
     if (!isSupported.value || !userId) return { ok: false, status: 'unsupported' }
     loading.value = true
 
+    const os = await waitForOS()
+    if (!os) {
+      loading.value = false
+      return { ok: false, status: 'sdk_not_loaded' }
+    }
+
     try {
-      await waitForOneSignal()
+      // 1) Supabase 유저 ID와 OneSignal 구독 연결
+      await os.login(userId)
 
-      // OneSignal 공식 방식: login + requestPermission 한번에 처리
-      await oneSignal.login(userId)
-
-      // OneSignal SDK의 requestPermission 사용 (브라우저 팝업 + 구독 등록 자동 처리)
-      const granted = await oneSignal.Notifications.requestPermission()
+      // 2) OneSignal 공식 권한 요청 (브라우저 팝업 + 구독 등록 자동 처리)
+      const granted = await os.Notifications.requestPermission()
 
       permission.value = typeof Notification !== 'undefined' ? Notification.permission : 'default'
-
-      if (granted) {
-        // 구독이 자동 등록되지 않은 경우 명시적으로 optIn
-        if (!oneSignal.User?.PushSubscription?.optedIn) {
-          await oneSignal.User?.PushSubscription?.optIn()
-        }
-        isSubscribed.value = oneSignal.User?.PushSubscription?.optedIn ?? false
-      } else {
-        isSubscribed.value = false
-      }
+      isSubscribed.value = granted ? (os.User?.PushSubscription?.optedIn ?? false) : false
 
       loading.value = false
       return { ok: !!granted, status: granted ? 'granted' : 'denied' }
     } catch (e) {
-      console.warn('[PushNotification] requestPermission error:', e?.message)
+      console.warn('[PushNotification] requestPermission 실패:', e?.message)
       loading.value = false
       return { ok: false, status: 'error', reason: e?.message }
     }
@@ -114,8 +112,10 @@ export function usePushNotification() {
 
   const removeSubscription = async (_userId) => {
     loading.value = true
+    const os = window.OneSignal
+    if (!os) { loading.value = false; return { ok: false, reason: 'sdk_not_loaded' } }
     try {
-      await oneSignal.User?.PushSubscription?.optOut()
+      await os.User?.PushSubscription?.optOut()
       isSubscribed.value = false
       loading.value = false
       return { ok: true }
@@ -126,7 +126,10 @@ export function usePushNotification() {
   }
 
   const onLogout = async () => {
-    try { await oneSignal.logout() } catch {}
+    try {
+      const os = window.OneSignal
+      if (os) await os.logout()
+    } catch {}
     isSubscribed.value = false
   }
 
