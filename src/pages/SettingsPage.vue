@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, watch } from 'vue'
 import { useAuth } from '@/composables/useAuth'
 import { usePushNotification } from '@/composables/usePushNotification'
 import packageJson from '../../package.json'
@@ -17,13 +17,17 @@ const {
   refreshSubscriptionState,
 } = usePushNotification()
 
+const isIos = typeof window !== 'undefined' && /iphone|ipad|ipod/i.test(navigator.userAgent)
+const isInStandaloneMode = typeof window !== 'undefined' && window.matchMedia('(display-mode: standalone)').matches
+
 const notificationStatus = computed(() => {
   if (isElectron) return 'PC 앱에서는 알림이 자동으로 활성화됩니다.'
-  if (!isSupported.value) return '이 브라우저에서는 푸시 알림을 지원하지 않습니다.'
-  if (permission.value === 'denied') return '브라우저에서 알림이 차단되어 있습니다.'
+  if (isIos && !isInStandaloneMode) return 'iPhone에서 알림을 받으려면 Safari에서 "홈 화면에 추가" 후 앱을 열어 설정해주세요.'
+  if (!isSupported.value) return '이 브라우저는 푸시 알림을 지원하지 않습니다. Chrome 브라우저를 사용해주세요.'
+  if (permission.value === 'denied') return '브라우저에서 알림이 차단되어 있습니다. 브라우저 설정에서 알림을 허용해주세요.'
   if (permission.value === 'granted' && isSubscribed.value) return '메신저 푸시 알림이 켜져 있습니다.'
-  if (permission.value === 'granted' && !isSubscribed.value) return '브라우저 권한은 허용되어 있고 앱 알림은 꺼져 있습니다.'
-  return '아직 알림 권한을 설정하지 않았습니다.'
+  if (permission.value === 'granted' && !isSubscribed.value) return '브라우저 권한은 허용되어 있습니다. 알림 켜기를 눌러 등록해주세요.'
+  return '알림 켜기를 눌러 메신저 알림을 활성화하세요.'
 })
 
 const statusToneClass = computed(() => {
@@ -33,10 +37,10 @@ const statusToneClass = computed(() => {
   return 'bg-amber-100 text-amber-700'
 })
 
-// 로그인된 상태 + 지원되는 브라우저 + 로딩 중 아님 + Electron 아님이면 항상 누를 수 있음
+// 로그인 상태 + Electron 아님 + 로딩 중 아님이면 항상 누를 수 있음
+// (isSupported 체크 제거 - 누른 뒤 오류 메시지로 처리)
 const canEnableNotification = computed(() => (
   !isElectron &&
-  isSupported.value &&
   Boolean(session.value?.user?.id) &&
   !loading.value
 ))
@@ -63,9 +67,12 @@ const handleDisableNotification = async () => {
   await refreshSubscriptionState()
 }
 
-onMounted(async () => {
-  await refreshSubscriptionState()
-})
+// 세션이 로드된 후 구독 상태 확인 (새로고침 시 타이밍 대응)
+watch(
+  () => session.value?.user?.id ?? '',
+  async (userId) => { if (userId) await refreshSubscriptionState() },
+  { immediate: true },
+)
 </script>
 
 <template>
