@@ -82,20 +82,28 @@ export function usePushNotification() {
   }
 
   const requestPermission = async (userId) => {
-    if (!isSupported.value || !userId) return { ok: false, status: 'unsupported' }
+    if (!userId) return { ok: false, status: 'unsupported' }
     loading.value = true
 
     const os = await waitForOS()
-    if (!os) {
+
+    // OneSignal 초기화 실패 시 (AppID 불일치 등) → 페이지 새로고침으로 해결
+    if (!os || window.__oneSignalReady === false) {
       loading.value = false
-      return { ok: false, status: 'sdk_not_loaded' }
+      // 캐시 제거 후 자동 새로고침
+      if ('serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations()
+        for (const reg of regs) {
+          const url = reg.active?.scriptURL ?? ''
+          if (url.includes('OneSignal') || reg.scope.includes('/push/')) await reg.unregister()
+        }
+      }
+      window.location.reload()
+      return { ok: false, status: 'reloading' }
     }
 
     try {
-      // 1) Supabase 유저 ID와 OneSignal 구독 연결
       await os.login(userId)
-
-      // 2) OneSignal 공식 권한 요청 (브라우저 팝업 + 구독 등록 자동 처리)
       const granted = await os.Notifications.requestPermission()
 
       permission.value = typeof Notification !== 'undefined' ? Notification.permission : 'default'
