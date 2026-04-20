@@ -29,10 +29,16 @@ const rangeInputs = ref<Record<number, string>>({})
 watch(
   () => props.items,
   (items) => {
-    rangeInputs.value = items.reduce<Record<number, string>>((acc, item) => {
-      acc[item.id] = String(item.lotNumStartH ?? '')
-      return acc
-    }, {})
+    const currentIds = new Set(items.map((item) => item.id))
+    const next: Record<number, string> = {}
+    for (const item of items) {
+      const existing = rangeInputs.value[item.id]
+      next[item.id] = existing !== undefined ? existing : String(item.lotNumStartH ?? '')
+    }
+    for (const id of Object.keys(rangeInputs.value)) {
+      if (!currentIds.has(Number(id))) continue
+    }
+    rangeInputs.value = next
   },
   { immediate: true },
 )

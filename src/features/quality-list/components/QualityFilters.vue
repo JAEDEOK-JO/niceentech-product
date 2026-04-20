@@ -67,8 +67,8 @@ function openCalendar() {
         class="calendar-input sr-only"
         @input="emit('calendarChange', ($event.target as HTMLInputElement).value)"
       />
-      <button type="button" class="ghost-button" @click="emit('export')">리스트출력</button>
-      <button type="button" class="ghost-button" @click="emit('print')">메인관출력</button>
+      <button type="button" class="ghost-button" @click="emit('print')">리스트출력</button>
+      <button type="button" class="ghost-button" @click="emit('export')">메인관출력</button>
       <button type="button" class="ghost-button" @click="emit('calculation')">가지관 출력</button>
       <button type="button" class="primary-button" @click="emit('create')">등록</button>
       <input

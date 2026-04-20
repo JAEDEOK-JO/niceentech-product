@@ -133,13 +133,25 @@ export async function fetchQualityItem(id: number): Promise<QualityListRow | nul
   return response.data ? mapQualityListRow(response.data as Record<string, unknown>) : null
 }
 
-export function subscribeQualityList(onChange: () => void): RealtimeChannel {
+export interface QualityRealtimePayload {
+  eventType: 'INSERT' | 'UPDATE' | 'DELETE'
+  new: Record<string, unknown> | null
+  old: Record<string, unknown> | null
+}
+
+export function subscribeQualityList(
+  onChange: (payload: QualityRealtimePayload) => void,
+): RealtimeChannel {
   return supabase
     .channel(`quality-list-${Date.now()}`)
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'quality_list' },
-      () => onChange(),
+      (payload) => onChange({
+        eventType: payload.eventType as QualityRealtimePayload['eventType'],
+        new: (payload.new as Record<string, unknown>) ?? null,
+        old: (payload.old as Record<string, unknown>) ?? null,
+      }),
     )
     .subscribe()
 }

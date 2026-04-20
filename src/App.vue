@@ -30,14 +30,15 @@ const PUSH_PROMPT_DISMISSED_KEY = 'push_prompt_dismissed'
 
 const normalizeVersion = (value) => {
   const raw = String(value ?? '').trim()
-  const matched = raw.match(/^v?(\d+\.\d+\.\d+)$/)
+  const matched = raw.match(/^v?(\d+(?:\.\d+){0,3})$/)
   return matched ? matched[1] : ''
 }
 
 const compareVersion = (left, right) => {
   const leftParts = normalizeVersion(left).split('.').map((p) => Number(p) || 0)
   const rightParts = normalizeVersion(right).split('.').map((p) => Number(p) || 0)
-  for (let i = 0; i < 3; i++) {
+  const len = Math.max(leftParts.length, rightParts.length, 3)
+  for (let i = 0; i < len; i++) {
     const diff = (leftParts[i] ?? 0) - (rightParts[i] ?? 0)
     if (diff !== 0) return diff
   }
@@ -47,7 +48,6 @@ const compareVersion = (left, right) => {
 const isElectron = typeof window !== 'undefined' && Boolean(window.electronAPI?.isElectron)
 
 const hasNewVersion = computed(() => {
-  if (isElectron) return false
   if (!remoteVersion.value) return false
   return compareVersion(remoteVersion.value, currentVersion) !== 0
 })
@@ -83,6 +83,10 @@ const setupSettingRealtime = () => {
 }
 
 const handleUpdate = () => {
+  if (isElectron && typeof window.electronAPI?.checkForUpdate === 'function') {
+    window.electronAPI.checkForUpdate()
+    return
+  }
   window.location.reload()
 }
 
