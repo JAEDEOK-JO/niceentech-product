@@ -46,7 +46,7 @@ const compareVersion = (left, right) => {
 
 const hasNewVersion = computed(() => {
   if (!remoteVersion.value) return false
-  return compareVersion(remoteVersion.value, currentVersion) > 0
+  return compareVersion(remoteVersion.value, currentVersion) !== 0
 })
 
 const bannerMessage = computed(() => {
@@ -56,8 +56,8 @@ const bannerMessage = computed(() => {
 })
 
 const fetchSetting = async () => {
-  const { data } = await supabase.from('setting').select('version_desktop,update_message').limit(1).maybeSingle()
-  remoteVersion.value = normalizeVersion(data?.version_desktop)
+  const { data } = await supabase.from('setting').select('version,update_message').limit(1).maybeSingle()
+  remoteVersion.value = normalizeVersion(data?.version)
   updateMessage.value = String(data?.update_message ?? '').trim()
 }
 
@@ -225,11 +225,11 @@ onBeforeUnmount(() => {
 
           <div class="mt-5 grid grid-cols-2 gap-3 rounded-2xl bg-slate-50 p-4 text-sm">
             <div>
-              <p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">현재 버전</p>
+              <p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">설치 버전</p>
               <p class="mt-1 text-base font-extrabold text-slate-900">{{ currentVersion }}</p>
             </div>
             <div>
-              <p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">새 버전</p>
+              <p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">서버 버전</p>
               <p class="mt-1 text-base font-extrabold text-slate-900">{{ remoteVersion }}</p>
             </div>
           </div>

@@ -5,11 +5,11 @@
 앱이 실행될 때 두 버전을 비교합니다.
 
 ```
-package.json "version"           →  현재 설치된 앱의 버전
-Supabase setting.version_desktop →  서버에서 지정한 최신 버전
+package.json "version"    →  현재 설치된 앱의 버전
+Supabase setting.version  →  서버에서 지정한 최신 버전
 ```
 
-**Supabase 값 > package.json 값** 이면 업데이트 다이얼로그가 뜹니다.
+**두 값이 다르면** 업데이트 다이얼로그가 뜹니다. (두 값이 완전히 일치해야만 정상 사용 가능)
 
 ---
 
@@ -32,10 +32,10 @@ npm run electron:build
 ### 3단계 — Supabase setting 테이블 수정
 
 Supabase 대시보드 → Table Editor → `setting` 테이블  
-`version_desktop` 필드를 **배포한 버전과 동일하게** 수정합니다.
+`version` 필드를 **배포한 버전과 동일하게** 수정합니다.
 
 ```
-version_desktop: 1.0.8
+version: 1.0.8
 ```
 
 이 순간부터 구버전(`1.0.7`) 앱을 켜둔 사용자에게 업데이트 다이얼로그가 표시됩니다.
