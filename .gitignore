@@ -33,7 +33,7 @@ builder-debug.yml
 *.sln
 *.sw?
 
-업데이트 방법.md
+VERSION.md
 
 # Claude Code worktrees
 .claude/worktrees/
