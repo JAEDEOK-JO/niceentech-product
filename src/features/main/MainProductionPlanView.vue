@@ -37,6 +37,7 @@ const emit = defineEmits([
   'upload-drawing-files',
   'delete-drawing-file',
   'welding-long-press',
+  'welding-start',
 ])
 
 const overallTotals = computed(() =>
@@ -71,6 +72,23 @@ const shipmentMode = ref('ship') // 'ship' | 'cancel'
 const snackbarMessage = ref('')
 const snackbarVisible = ref(false)
 let snackbarTimer = null
+
+const isWeldingInspectorDialogOpen = ref(false)
+const weldingInspectorDialogRow = ref(null)
+
+const openWeldingInspectorDialog = (row) => {
+  weldingInspectorDialogRow.value = row
+  isWeldingInspectorDialogOpen.value = true
+}
+const closeWeldingInspectorDialog = () => {
+  isWeldingInspectorDialogOpen.value = false
+  weldingInspectorDialogRow.value = null
+}
+const selectWeldingInspector = (inspector) => {
+  if (!weldingInspectorDialogRow.value) return
+  emit('welding-start', { row: weldingInspectorDialogRow.value, inspector })
+  closeWeldingInspectorDialog()
+}
 
 const isDrawingDialogOpen = ref(false)
 const drawingFiles = ref([])
@@ -343,6 +361,12 @@ const handleCellClick = ({ row, columnKey }) => {
     return
   }
   if (columnKey === 'worker_welding') {
+    const weldingStatus = String(row.welding_status ?? '').trim()
+    const isInitial = !weldingStatus || weldingStatus === '없음' || weldingStatus === '작업전'
+    if (props.currentWorkMan === '용접반' && isInitial) {
+      openWeldingInspectorDialog(row)
+      return
+    }
     emit('cell-action', { row, columnKey })
     return
   }
@@ -866,6 +890,45 @@ const selectDrawingFile = (file) => {
             {{ shipmentMode === 'cancel' ? '출하완료 취소' : '출하완료' }}
           </Button>
         </div>
+      </div>
+    </div>
+
+    <div
+      v-if="isWeldingInspectorDialogOpen"
+      class="print-hide fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 px-4"
+      @click.self="closeWeldingInspectorDialog"
+    >
+      <div class="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+        <h3 class="text-base font-extrabold text-slate-900">용접 작업자 선택</h3>
+        <p v-if="weldingInspectorDialogRow" class="mt-3 truncate text-sm font-semibold text-slate-700">
+          {{ weldingInspectorDialogRow.company || '-' }} / {{ weldingInspectorDialogRow.place || '-' }}
+        </p>
+        <p v-if="weldingInspectorDialogRow" class="truncate text-sm text-slate-500">
+          {{ weldingInspectorDialogRow.area || '-' }}
+        </p>
+        <div class="mt-5 grid grid-cols-2 gap-3">
+          <button
+            type="button"
+            class="rounded-xl border-2 border-blue-300 bg-blue-50 py-4 text-base font-extrabold text-blue-800 transition hover:bg-blue-100 active:bg-blue-200"
+            @click="selectWeldingInspector('민뚜라')"
+          >
+            민뚜라
+          </button>
+          <button
+            type="button"
+            class="rounded-xl border-2 border-indigo-300 bg-indigo-50 py-4 text-base font-extrabold text-indigo-800 transition hover:bg-indigo-100 active:bg-indigo-200"
+            @click="selectWeldingInspector('진민택')"
+          >
+            진민택
+          </button>
+        </div>
+        <button
+          type="button"
+          class="mt-4 w-full rounded-xl border border-slate-200 py-2 text-sm text-slate-500 hover:bg-slate-50"
+          @click="closeWeldingInspectorDialog"
+        >
+          취소
+        </button>
       </div>
     </div>
 

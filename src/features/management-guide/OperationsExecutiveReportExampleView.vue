@@ -28,6 +28,23 @@ const reportMonthLabel = `${reportMonth}월`
 const reportMonthValue = `${reportYear}-${String(reportMonth).padStart(2, '0')}-01`
 const reportMonthEndValue = `${reportYear}-${String(reportMonth).padStart(2, '0')}-${String(new Date(reportYear, reportMonth, 0).getDate()).padStart(2, '0')}`
 
+const MONTH_COUNT = 3
+const last3Months = Array.from({ length: MONTH_COUNT }, (_, i) => {
+  const d = new Date(reportYear, reportMonth - 1 - (MONTH_COUNT - 1 - i), 1)
+  const y = d.getFullYear()
+  const m = d.getMonth() + 1
+  const lastDay = new Date(y, m, 0).getDate()
+  return {
+    label: `${m}월`,
+    key: `${y}-${String(m).padStart(2, '0')}`,
+    start: `${y}-${String(m).padStart(2, '0')}-01T00:00:00`,
+    end: `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}T23:59:59`,
+  }
+})
+const weldingFetchStart = last3Months[0].start
+const weldingFetchEnd = last3Months[last3Months.length - 1].end
+const weldingIssuePeriodKeys = last3Months.map((m) => m.key)
+
 const currentPage = ref(1)
 const loading = ref(false)
 const errorMessage = ref('')
@@ -173,13 +190,11 @@ const fetchLegacyInventoryEntriesByMonth = async (monthValue) => {
 }
 
 const fetchWeldingInspections = async () => {
-  const monthStart = reportMonthValue
-  const monthEnd = reportMonthEndValue
   const { data, error } = await supabase
     .from('welding_inspections')
     .select('id,inspector,welding_status,head_count,drawing_no,company,place,area,test_date,created_at')
-    .gte('created_at', `${monthStart}T00:00:00`)
-    .lte('created_at', `${monthEnd}T23:59:59`)
+    .gte('created_at', weldingFetchStart)
+    .lte('created_at', weldingFetchEnd)
     .order('created_at', { ascending: false })
   if (error) throw new Error(error.message ?? '용접 검수 데이터를 불러오지 못했습니다.')
   return data ?? []
@@ -189,7 +204,7 @@ const fetchWeldingIssues = async () => {
   const { data, error } = await supabase
     .from('welding_issues')
     .select('*')
-    .eq('period_month', reportPeriodMonth)
+    .in('period_month', weldingIssuePeriodKeys)
     .order('created_at', { ascending: false })
   if (error) throw new Error(error.message ?? '오제작/누락분 데이터를 불러오지 못했습니다.')
   return data ?? []
@@ -397,6 +412,8 @@ const weldingMetrics = computed(() => {
   }, {})
 
   for (const row of weldingInspections.value) {
+    const monthKey = String(row.created_at ?? '').slice(0, 7)
+    if (monthKey !== reportPeriodMonth) continue
     const inspector = MANAGERS.includes(row.inspector) ? row.inspector : null
     if (!inspector) continue
     if (row.welding_status === '작업중') state[inspector].inProgressHead += toNumber(row.head_count)
@@ -405,6 +422,7 @@ const weldingMetrics = computed(() => {
   }
 
   for (const row of weldingIssues.value) {
+    if (row.period_month !== reportPeriodMonth) continue
     const inspector = MANAGERS.includes(row.inspector) ? row.inspector : null
     if (!inspector) continue
     if (row.issue_type === 'misproduction') state[inspector].misproductionCount += 1
@@ -415,32 +433,32 @@ const weldingMetrics = computed(() => {
   return state
 })
 
-const weldingComparisonRows = computed(() => [
-  {
-    label: '작업중 헤드',
-    jinminTech: weldingMetrics.value['진민택'].inProgressHead,
-    minTura: weldingMetrics.value['민뚜라'].inProgressHead,
-    unit: 'EA',
-  },
-  {
-    label: '작업완료 헤드',
-    jinminTech: weldingMetrics.value['진민택'].completedHead,
-    minTura: weldingMetrics.value['민뚜라'].completedHead,
-    unit: 'EA',
-  },
-  {
-    label: '오제작',
-    jinminTech: weldingMetrics.value['진민택'].misproductionCount,
-    minTura: weldingMetrics.value['민뚜라'].misproductionCount,
-    unit: '건',
-  },
-  {
-    label: '누락분',
-    jinminTech: weldingMetrics.value['진민택'].shortageCount,
-    minTura: weldingMetrics.value['민뚜라'].shortageCount,
-    unit: '건',
-  },
-])
+const monthlyWeldingMetrics = computed(() =>
+  last3Months.map((month) => {
+    const state = MANAGERS.reduce((acc, m) => {
+      acc[m] = { completedHead: 0, misproductionCount: 0, shortageCount: 0 }
+      return acc
+    }, {})
+
+    for (const row of weldingInspections.value) {
+      const monthKey = String(row.created_at ?? '').slice(0, 7)
+      if (monthKey !== month.key) continue
+      const inspector = MANAGERS.includes(row.inspector) ? row.inspector : null
+      if (!inspector) continue
+      if (row.welding_status === '작업완료') state[inspector].completedHead += toNumber(row.head_count)
+    }
+
+    for (const row of weldingIssues.value) {
+      if (row.period_month !== month.key) continue
+      const inspector = MANAGERS.includes(row.inspector) ? row.inspector : null
+      if (!inspector) continue
+      if (row.issue_type === 'misproduction') state[inspector].misproductionCount += 1
+      if (row.issue_type === 'shortage') state[inspector].shortageCount += 1
+    }
+
+    return { ...month, metrics: state }
+  }),
+)
 
 const upsertMetricEntry = async ({
   metricKey,
@@ -650,46 +668,59 @@ onMounted(fetchReportData)
         </section>
 
         <section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
-          <!-- 헤더 -->
           <div class="flex items-center justify-between gap-3">
             <p class="text-[13px] font-extrabold text-slate-900">진민택 / 민뚜라 비교</p>
-            <p class="text-[12px] text-slate-500">{{ reportMonthLabel }} 기준</p>
+            <p class="text-[12px] text-slate-500">최근 3개월</p>
           </div>
 
-          <!-- 비교 테이블 -->
           <div class="mt-4 overflow-hidden rounded-2xl border border-slate-200">
             <table class="w-full border-collapse text-sm">
               <thead>
                 <tr class="bg-slate-50">
-                  <th class="border border-slate-200 px-4 py-3 text-left text-xs font-bold text-slate-600">구분</th>
-                  <th class="border border-slate-200 px-4 py-3 text-center text-xs font-bold text-slate-600">진민택</th>
-                  <th class="border border-slate-200 px-4 py-3 text-center text-xs font-bold text-slate-600">민뚜라</th>
+                  <th class="border border-slate-200 px-3 py-2.5 text-center text-xs font-bold text-slate-500">담당자</th>
+                  <th class="border border-slate-200 px-3 py-2.5 text-center text-xs font-bold text-slate-500">구분</th>
+                  <th
+                    v-for="month in monthlyWeldingMetrics"
+                    :key="month.key"
+                    class="border border-slate-200 px-4 py-2.5 text-center text-xs font-bold"
+                    :class="month.key === reportPeriodMonth ? 'bg-blue-50 text-blue-700' : 'text-slate-500'"
+                  >{{ month.label }}<span v-if="month.key === reportPeriodMonth" class="ml-1 text-[9px] opacity-60">현재까지</span></th>
                 </tr>
               </thead>
               <tbody>
-                <tr
-                  v-for="row in weldingComparisonRows"
-                  :key="row.label"
-                  class="hover:bg-slate-50/60"
-                >
-                  <td class="border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700">{{ row.label }}</td>
-                  <td class="border border-slate-200 px-4 py-4 text-center">
-                    <template v-if="row.jinminTech">
-                      <span class="text-2xl font-extrabold text-slate-900">{{ formatCount(row.jinminTech) }}</span>
-                      <span class="ml-1 text-xs text-slate-500">{{ row.unit }}</span>
-                    </template>
-                  </td>
-                  <td class="border border-slate-200 px-4 py-4 text-center">
-                    <template v-if="row.minTura">
-                      <span class="text-2xl font-extrabold text-slate-900">{{ formatCount(row.minTura) }}</span>
-                      <span class="ml-1 text-xs text-slate-500">{{ row.unit }}</span>
-                    </template>
-                  </td>
-                </tr>
+                <template v-for="(manager, mIdx) in MANAGERS" :key="manager">
+                  <tr :class="mIdx > 0 ? 'border-t-2 border-slate-300' : ''">
+                    <td class="border border-slate-200 px-3 text-center text-xs font-extrabold text-slate-800" rowspan="3">{{ manager }}</td>
+                    <td class="border border-slate-200 px-3 py-0 text-center text-xs font-semibold text-slate-600" style="height:48px">완료 헤드</td>
+                    <td v-for="month in monthlyWeldingMetrics" :key="month.key" class="border border-slate-200 px-4 py-0 text-center" style="height:48px">
+                      <template v-if="month.metrics[manager].completedHead > 0">
+                        <span class="text-lg font-extrabold text-slate-900">{{ formatCount(month.metrics[manager].completedHead) }}</span>
+                        <span class="ml-1 text-[11px] text-slate-400">EA</span>
+                      </template>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td class="border border-slate-200 px-3 py-0 text-center text-xs font-semibold text-slate-600" style="height:48px">오제작</td>
+                    <td v-for="month in monthlyWeldingMetrics" :key="month.key" class="border border-slate-200 px-4 py-0 text-center" style="height:48px">
+                      <template v-if="month.metrics[manager].misproductionCount > 0">
+                        <span class="text-lg font-extrabold text-amber-600">{{ month.metrics[manager].misproductionCount }}</span>
+                        <span class="ml-1 text-[11px] text-slate-400">건</span>
+                      </template>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td class="border border-slate-200 px-3 py-0 text-center text-xs font-semibold text-slate-600" style="height:48px">누락분</td>
+                    <td v-for="month in monthlyWeldingMetrics" :key="month.key" class="border border-slate-200 px-4 py-0 text-center" style="height:48px">
+                      <template v-if="month.metrics[manager].shortageCount > 0">
+                        <span class="text-lg font-extrabold text-rose-600">{{ month.metrics[manager].shortageCount }}</span>
+                        <span class="ml-1 text-[11px] text-slate-400">건</span>
+                      </template>
+                    </td>
+                  </tr>
+                </template>
               </tbody>
             </table>
           </div>
-
         </section>
 
         <!-- 오제작/누락분 입력 다이얼로그 -->

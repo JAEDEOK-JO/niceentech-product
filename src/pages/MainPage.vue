@@ -6,6 +6,7 @@ import { useAuth } from '@/composables/useAuth'
 import { useProfile } from '@/composables/useProfile'
 import { useProductionPlan } from '@/composables/useProductionPlan'
 import { isAdminRole, isDesignDepartment, normalizeDepartment } from '@/utils/adminAccess'
+import { supabase } from '@/lib/supabase'
 
 const router = useRouter()
 const route = useRoute()
@@ -168,6 +169,34 @@ const formatWorkerDate = (date = new Date()) => {
   return `${year}.${month}.${day}`
 }
 
+const handleWeldingStart = async ({ row, inspector }) => {
+  if (!row?.id) return
+  await updatePlanRowFields({
+    rowId: row.id,
+    updates: {
+      welding_status: '작업중',
+      worker_welding: '작업중',
+      welding_inspector: inspector,
+      welding_started_on: formatIsoDate(),
+      worker_welding_time: '',
+    },
+  })
+  await supabase.from('welding_inspections').upsert(
+    {
+      product_list_id: row.id,
+      company: row.company ?? '',
+      place: row.place ?? '',
+      area: row.area ?? '',
+      head_count: row.head ?? 0,
+      drawing_no: row.initial ?? '',
+      test_date: row.test_date ?? '',
+      inspector,
+      welding_status: '작업중',
+    },
+    { onConflict: 'product_list_id' },
+  )
+}
+
 const handleWeldingLongPress = async (row) => {
   if (!row?.id) return
   await updatePlanRowFields({
@@ -181,6 +210,7 @@ const handleWeldingLongPress = async (row) => {
       welding_inspector: '',
     },
   })
+  await supabase.from('welding_inspections').delete().eq('product_list_id', row.id)
 }
 
 const handleCellAction = async ({ row, columnKey }) => {
@@ -204,6 +234,11 @@ const handleCellAction = async ({ row, columnKey }) => {
     updates.welding_status = next
     updates.worker_welding = next
     await updatePlanRowFields({ rowId: row.id, updates })
+    if (next === '작업완료') {
+      await supabase.from('welding_inspections')
+        .update({ welding_status: '작업완료' })
+        .eq('product_list_id', row.id)
+    }
     return
   }
 
@@ -340,6 +375,7 @@ watch(
     @ship-row="handleShipRow"
     @cancel-ship-row="handleCancelShipRow"
     @cell-action="handleCellAction"
+    @welding-start="handleWeldingStart"
     @welding-long-press="handleWeldingLongPress"
     @move-test-date="handleMoveTestDate"
     @load-drawing-files="handleLoadDrawingFiles"

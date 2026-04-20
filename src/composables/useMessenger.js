@@ -352,19 +352,50 @@ export const useMessenger = (session) => {
   }
 
   const subscribeToRooms = () => {
+    const userId = session.value?.user?.id
+    if (!userId) return
+
+    // 이미 구독 중이면 재설정
+    if (roomSubscription) {
+      supabase.removeChannel(roomSubscription)
+      roomSubscription = null
+    }
+
     roomSubscription = supabase
-      .channel('chat_rooms_changes')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_rooms' }, (payload) => {
-        const exists = rooms.value.some((r) => r.id === payload.new.id)
-        if (!exists) rooms.value = [payload.new, ...rooms.value]
-      })
+      .channel(`chat_rooms_sync:${userId}`)
+      // 방 삭제: 내 목록에 있으면 제거
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'chat_rooms' }, (payload) => {
-        rooms.value = rooms.value.filter((r) => r.id !== payload.old.id)
-        if (activeRoomId.value === payload.old.id) {
+        const removedId = payload.old?.id
+        if (!removedId) return
+        rooms.value = rooms.value.filter((r) => r.id !== removedId)
+        if (activeRoomId.value === removedId) {
           activeRoomId.value = null
           messages.value = []
+          unsubscribeFromRoom()
         }
       })
+      // 방 생성/수정: 내가 멤버인지 확인이 필요하므로 전체 refetch
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_rooms' }, () => {
+        void fetchRooms()
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'chat_rooms' }, (payload) => {
+        const updated = payload.new
+        if (!updated?.id) return
+        const idx = rooms.value.findIndex((r) => r.id === updated.id)
+        if (idx >= 0) {
+          const next = [...rooms.value]
+          next[idx] = { ...next[idx], ...updated }
+          rooms.value = next
+        }
+      })
+      // 내 멤버십 변경 (초대/내보내짐): refetch
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'chat_room_members', filter: `user_id=eq.${userId}` },
+        () => {
+          void fetchRooms()
+        },
+      )
       .subscribe()
   }
 
