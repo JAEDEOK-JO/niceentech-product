@@ -45,4 +45,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setAuthUserId: (userId) => {
     ipcRenderer.send('auth-user-id', userId || null)
   },
+
+  /** 업데이트 체크 수동 트리거 (Supabase setting.version 변경 감지 시 호출) */
+  checkForUpdate: () => {
+    ipcRenderer.send('check-for-update')
+  },
 })

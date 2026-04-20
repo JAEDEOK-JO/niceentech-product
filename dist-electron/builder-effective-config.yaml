@@ -22,4 +22,8 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
+publish:
+  - provider: generic
+    url: https://joxfohziazjhscewifjj.supabase.co/storage/v1/object/public/update/
+    channel: latest
 electronVersion: 36.9.5

@@ -1,7 +1,8 @@
 'use strict'
 
-const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, Notification } = require('electron')
+const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, Notification, dialog } = require('electron')
 const path = require('path')
+const { autoUpdater } = require('electron-updater')
 const supabaseListener = require('./supabase-listener.cjs')
 
 // 빌드 시 gen-electron-env.mjs 가 생성한 파일 (Supabase 크리덴셜)
@@ -160,6 +161,14 @@ ipcMain.on('auth-user-id', (_, userId) => {
   }
 })
 
+// 렌더러(Supabase Realtime 구독)가 setting.version 변경을 감지하면 업데이트 체크 트리거
+ipcMain.on('check-for-update', () => {
+  if (isDev) return
+  autoUpdater.checkForUpdates().catch((err) => {
+    console.warn('[AutoUpdater] manual check failed:', err?.message || err)
+  })
+})
+
 ipcMain.on('unread-count', (_, count) => {
   const n = Number(count) || 0
   if (!mainWindow || mainWindow.isDestroyed()) return
@@ -181,6 +190,43 @@ ipcMain.on('unread-count', (_, count) => {
   }
 })
 
+// ─── 자동 업데이트 ──────────────────────────────────────────────────────────
+function setupAutoUpdater() {
+  if (isDev) return
+
+  autoUpdater.autoDownload = true
+  autoUpdater.autoInstallOnAppQuit = true
+
+  autoUpdater.on('error', (err) => {
+    console.error('[AutoUpdater]', err?.message || err)
+  })
+
+  autoUpdater.on('update-downloaded', async (info) => {
+    // 닫기 불가 — 재시작 버튼 외엔 모든 동작이 다이얼로그 재표시로 이어짐
+    while (true) {
+      const { response } = await dialog.showMessageBox(mainWindow, {
+        type: 'warning',
+        buttons: ['지금 재시작'],
+        defaultId: 0,
+        cancelId: 1, // ESC/X 로 닫으면 1이 반환되어 루프 재진입
+        noLink: true,
+        title: '업데이트 설치 필요',
+        message: `새 버전 ${info?.version || ''} 을 설치해야 합니다.`,
+        detail: '지금 재시작해야 계속 사용할 수 있습니다.',
+      })
+      if (response === 0) {
+        app.isQuitting = true
+        autoUpdater.quitAndInstall()
+        return
+      }
+    }
+  })
+
+  autoUpdater.checkForUpdates().catch((err) => {
+    console.warn('[AutoUpdater] check failed:', err?.message || err)
+  })
+}
+
 // ─── 앱 이벤트 ──────────────────────────────────────────────────────────────
 app.whenReady().then(() => {
   Menu.setApplicationMenu(null)
@@ -194,6 +240,7 @@ app.whenReady().then(() => {
 
   createWindow()
   createTray()
+  setupAutoUpdater()
   app.on('activate', () => {
     BrowserWindow.getAllWindows().length === 0 ? createWindow() : showWindow()
   })

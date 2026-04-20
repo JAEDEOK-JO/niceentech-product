@@ -44,7 +44,10 @@ const compareVersion = (left, right) => {
   return 0
 }
 
+const isElectron = typeof window !== 'undefined' && Boolean(window.electronAPI?.isElectron)
+
 const hasNewVersion = computed(() => {
+  if (isElectron) return false
   if (!remoteVersion.value) return false
   return compareVersion(remoteVersion.value, currentVersion) !== 0
 })
@@ -72,6 +75,9 @@ const setupSettingRealtime = () => {
     .channel('pwa-update-version-gate')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'setting' }, async () => {
       await fetchSetting()
+      if (isElectron) {
+        window.electronAPI?.checkForUpdate?.()
+      }
     })
     .subscribe()
 }
