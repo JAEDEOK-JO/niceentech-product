@@ -4,6 +4,7 @@ import Button from '@/components/ui/button/Button.vue'
 import Input from '@/components/ui/input/Input.vue'
 import MainProductionPlanGroupTable from '@/features/main/MainProductionPlanGroupTable.vue'
 import { useDialog } from '@/composables/useDialog'
+import { isAdminRole } from '@/utils/adminAccess'
 
 const { confirm, alert } = useDialog()
 
@@ -17,6 +18,7 @@ const props = defineProps({
   planError: { type: String, default: '' },
   groupedRows: { type: Array, default: () => [] },
   currentWorkMan: { type: String, default: '' },
+  currentRole: { type: String, default: '' },
 })
 
 const emit = defineEmits([
@@ -361,9 +363,15 @@ const handleCellClick = ({ row, columnKey }) => {
     return
   }
   if (columnKey === 'worker_welding') {
+    const isWeldingTeam = props.currentWorkMan === '용접반'
+    const isAdmin = isAdminRole(props.currentRole)
+    if (!isWeldingTeam && !isAdmin) {
+      showSnackbar('용접반만 작업할 수 있습니다.')
+      return
+    }
     const weldingStatus = String(row.welding_status ?? '').trim()
     const isInitial = !weldingStatus || weldingStatus === '없음' || weldingStatus === '작업전'
-    if (props.currentWorkMan === '용접반' && isInitial) {
+    if (isInitial) {
       openWeldingInspectorDialog(row)
       return
     }

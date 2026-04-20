@@ -363,6 +363,7 @@ watch(
     :plan-error="planError"
     :grouped-rows="groupedRows"
     :current-work-man="profile?.work_man || ''"
+    :current-role="profile?.role || ''"
     @move-week="moveWeek"
     @reset-week="resetWeek"
     @go-register="goRegister"
