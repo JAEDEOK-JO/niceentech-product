@@ -197,8 +197,9 @@ const onCellClick = (row, columnKey) => {
                 @mousedown="column.key === 'worker_welding' ? onCellPointerDown(row, column.key) : undefined"
                 @mouseup="column.key === 'worker_welding' ? onCellPointerUp() : undefined"
                 @mouseleave="column.key === 'worker_welding' ? onCellPointerUp() : undefined"
-                @touchstart.prevent="column.key === 'worker_welding' ? onCellPointerDown(row, column.key) : undefined"
+                @touchstart="column.key === 'worker_welding' ? onCellPointerDown(row, column.key) : undefined"
                 @touchend="column.key === 'worker_welding' ? onCellPointerUp() : undefined"
+                @touchcancel="column.key === 'worker_welding' ? onCellPointerUp() : undefined"
               >
                 <span class="cell-fixed-text block w-full" :class="isStatusCompactColumn(column.key) ? 'text-center text-[11px] font-bold' : ''">{{ getCellText(row, column.key) }}</span>
               </button>
