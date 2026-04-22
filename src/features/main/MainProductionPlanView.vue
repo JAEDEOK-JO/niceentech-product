@@ -121,6 +121,8 @@ const headerLegendBadges = [
   { label: '산출완료', className: 'border-lime-200 bg-lime-100 text-lime-900' },
   { label: '도면배포', className: 'border-slate-300 bg-slate-100 text-slate-700' },
   { label: '보류', className: 'border-orange-200 bg-orange-100 text-orange-900' },
+  { label: '민뚜라', className: 'border-pink-300 bg-pink-200 text-pink-900' },
+  { label: '진민택', className: 'border-purple-300 bg-purple-200 text-purple-900' },
 ]
 
 const formatKoreanDateLabel = (value) => {

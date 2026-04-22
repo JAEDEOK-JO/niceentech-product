@@ -2,8 +2,7 @@
 import {
   tableColumns,
   getCellText,
-  getStatusTone,
-  statusClass,
+  getWorkerStatusClass,
   isStatusCompactColumn,
   isCompactTextColumn,
   getColumnStyle,
@@ -94,7 +93,7 @@ const onCellClick = (row, columnKey) => {
             v-for="column in tableColumns.filter((column) => ['worker_t', 'worker_nasa', 'worker_main', 'worker_welding'].includes(column.key))"
             :key="`${row.id}-${column.key}`"
             class="min-w-0 rounded-lg border border-slate-200 px-1.5 py-2 text-center text-[10px] font-bold leading-tight sm:px-2 sm:py-3 sm:text-[11px]"
-            :class="statusClass(getStatusTone(row, column.key, getCellText(row, column.key)))"
+            :class="getWorkerStatusClass(row, column.key)"
           >
             <p class="whitespace-nowrap">{{ column.label }}</p>
             <p class="mt-1 whitespace-nowrap">{{ getCellText(row, column.key) }}</p>

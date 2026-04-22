@@ -182,6 +182,16 @@ export const statusClass = (status) => {
   return 'bg-transparent text-slate-700'
 }
 
+export const getWorkerStatusClass = (row, columnKey) => {
+  const tone = getStatusTone(row, columnKey, getCellText(row, columnKey))
+  if (columnKey === 'worker_welding' && (tone === '작업중' || tone === '작업완료')) {
+    const inspector = String(row?.welding_inspector ?? '').trim()
+    if (inspector === '민뚜라') return 'bg-pink-200 text-pink-900'
+    if (inspector === '진민택') return 'bg-purple-200 text-purple-900'
+  }
+  return statusClass(tone)
+}
+
 export const isStatusCompactColumn = (key) => ['worker_t', 'worker_nasa', 'worker_main', 'worker_welding'].includes(key)
 export const isCompactTextColumn = (key) => ['drawing'].includes(key)
 
@@ -203,7 +213,7 @@ export const getBodyCellClass = (row, column) => {
     } else if (Boolean(row?.outsourcing)) {
       classes.push('bg-slate-100')
     } else {
-      classes.push(statusClass(getStatusTone(row, column.key, getCellText(row, column.key))))
+      classes.push(getWorkerStatusClass(row, column.key))
     }
   } else if (column.key === 'name' && Boolean(row?.calculation)) {
     classes.push('bg-lime-100')
