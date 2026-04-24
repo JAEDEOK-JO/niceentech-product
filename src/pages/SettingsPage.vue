@@ -1,11 +1,31 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { useAuth } from '@/composables/useAuth'
+import { useProfile } from '@/composables/useProfile'
 import { usePushNotification } from '@/composables/usePushNotification'
+import { fetchEmployees } from '@/features/attendance/services/attendance.service'
+import AttendanceEmployeeMappingPanel from '@/features/attendance/components/AttendanceEmployeeMappingPanel.vue'
 import packageJson from '../../package.json'
 
 const appVersion = packageJson.version
 const { session } = useAuth()
+const { profile } = useProfile(session)
+
+const isRootAdmin = computed(() => profile.value?.role === 'admin')
+
+const employees = ref([])
+const loadEmployees = async () => {
+  try {
+    employees.value = await fetchEmployees()
+  } catch {
+    employees.value = []
+  }
+}
+watch(
+  isRootAdmin,
+  (v) => { if (v) loadEmployees() },
+  { immediate: true },
+)
 const {
   isElectron,
   isSupported,
@@ -165,6 +185,18 @@ watch(
             <p class="mt-2 text-sm text-slate-600">새 버전이 배포되면 화면 하단에 알림이 표시됩니다.</p>
           </article>
         </div>
+      </section>
+
+      <!-- 직원 ID 매칭 (role=admin 전용, 관리자 계정 제외) -->
+      <section v-if="isRootAdmin" class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div class="mb-4 flex flex-col gap-1">
+          <p class="text-xs font-bold uppercase tracking-[0.18em] text-red-500">ROOT ADMIN</p>
+          <h2 class="text-lg font-extrabold text-slate-900">직원 ID 매칭</h2>
+          <p class="text-sm text-slate-500">
+            근태 엑셀의 ID를 직원목록과 연결합니다. 최초 1회만 수행하세요.
+          </p>
+        </div>
+        <AttendanceEmployeeMappingPanel :employees="employees" @refresh-employees="loadEmployees" />
       </section>
     </div>
 

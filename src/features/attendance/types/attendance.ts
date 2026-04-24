@@ -121,9 +121,12 @@ export function createEmptyForm(): AttendanceFormState {
 // ─── 직원 ─────────────────────────────────────────────────────────────────────
 export interface Employee {
   id: number
+  employeeCode: string
   name: string
   department: string
   assignedDepartment: string
+  remainingAnnualLeaveCount: number
+  hourlyWage: number
   isFullTime: boolean
   nationality: string
   role: string
@@ -136,9 +139,12 @@ export interface Employee {
 export function mapEmployee(raw: Record<string, unknown>): Employee {
   return {
     id: toNum(raw.id),
+    employeeCode: raw.employee_code != null ? toStr(raw.employee_code) : '',
     name: toStr(raw.name),
     department: toStr(raw.department),
     assignedDepartment: toStr(raw.assigned_department),
+    remainingAnnualLeaveCount: toNum(raw.remaining_annual_leave_count),
+    hourlyWage: toNum(raw.hourly_wage),
     isFullTime: Boolean(raw.is_full_time),
     nationality: toStr(raw.nationality),
     role: toStr(raw.role),

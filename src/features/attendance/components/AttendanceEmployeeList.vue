@@ -35,7 +35,11 @@ const filtered = computed(() =>
       if (filterFull.value === 'part' && emp.isFullTime) return false
       if (searchQuery.value) {
         const q = searchQuery.value.trim().toLowerCase()
-        return emp.name.toLowerCase().includes(q) || emp.role.toLowerCase().includes(q)
+        return (
+          emp.name.toLowerCase().includes(q) ||
+          emp.role.toLowerCase().includes(q) ||
+          emp.employeeCode.toLowerCase().includes(q)
+        )
       }
       return true
     })
@@ -60,9 +64,12 @@ const ASSIGNED_DEPT_ORDER: Record<string, number> = { 가지관: 0, 메인관: 1
 const ASSIGNED_DEPARTMENTS = ['메인관', '가지관', '치부', '포장', '용접', '나사', 'CNC', '페인트'] as const
 
 const emptyForm = (): EmployeeFormData => ({
+  employeeCode: '',
   name: '',
   department: '생산부',
   assignedDepartment: '',
+  remainingAnnualLeaveCount: 10,
+  hourlyWage: 10000,
   isFullTime: true,
   nationality: '한국',
   role: '작업자',
@@ -70,6 +77,8 @@ const emptyForm = (): EmployeeFormData => ({
   homeLeaveStart: '',
   homeLeaveEnd: '',
 })
+
+const isValidEmployeeCode = (code: string) => /^\d{8}$/.test(code.trim())
 
 const form = ref<EmployeeFormData>(emptyForm())
 
@@ -82,9 +91,12 @@ function openCreate() {
 
 function openEdit(emp: Employee) {
   form.value = {
+    employeeCode: emp.employeeCode,
     name: emp.name,
     department: emp.department,
     assignedDepartment: emp.assignedDepartment,
+    remainingAnnualLeaveCount: emp.remainingAnnualLeaveCount,
+    hourlyWage: emp.hourlyWage,
     isFullTime: emp.isFullTime,
     nationality: emp.nationality,
     role: emp.role,
@@ -103,10 +115,26 @@ function closeForm() {
 
 function submitForm() {
   if (!form.value.name.trim()) return
+  const trimmedCode = form.value.employeeCode.trim()
+  if (trimmedCode && !isValidEmployeeCode(trimmedCode)) return
+  const normalizedHourlyWage = Math.min(
+    15000,
+    Math.max(10000, Math.round(Number(form.value.hourlyWage || 10000) / 100) * 100),
+  )
+  const normalizedAnnualLeaveCount = Math.max(
+    0,
+    Math.floor(Number(form.value.remainingAnnualLeaveCount || 0)),
+  )
+  const payload: EmployeeFormData = {
+    ...form.value,
+    employeeCode: trimmedCode,
+    hourlyWage: normalizedHourlyWage,
+    remainingAnnualLeaveCount: normalizedAnnualLeaveCount,
+  }
   if (isEditMode.value && editTargetId.value !== null) {
-    emit('update', { id: editTargetId.value, data: { ...form.value } })
+    emit('update', { id: editTargetId.value, data: payload })
   } else {
-    emit('create', { ...form.value })
+    emit('create', payload)
   }
   formVisible.value = false
 }
@@ -117,6 +145,7 @@ async function handleDelete(emp: Employee) {
 }
 
 const fmt = (d: string | null) => (d ? d.slice(0, 10) : null)
+const fmtCurrency = (value: number) => `${value.toLocaleString('ko-KR')}원`
 
 const homeLeaveLabel = (emp: Employee) => {
   const s = fmt(emp.homeLeaveStart)
@@ -142,7 +171,7 @@ const nationalityClass = (n: string) => {
         <input
           v-model="searchQuery"
           type="text"
-          placeholder="이름 / 역할 검색"
+          placeholder="이름 / 역할 / ID 검색"
           class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none"
         />
         <select
@@ -180,9 +209,12 @@ const nationalityClass = (n: string) => {
       <table class="w-full border-collapse text-sm">
         <thead>
           <tr class="border-b border-slate-200 bg-slate-50">
+            <th class="border-r border-slate-200 px-4 py-3 text-center font-bold text-slate-600">ID</th>
             <th class="border-r border-slate-200 px-4 py-3 text-center font-bold text-slate-600">이름</th>
             <th class="border-r border-slate-200 px-4 py-3 text-center font-bold text-slate-600">부서</th>
             <th class="border-r border-slate-200 px-4 py-3 text-center font-bold text-slate-600">담당부서</th>
+            <th class="border-r border-slate-200 px-4 py-3 text-center font-bold text-slate-600">남은연차</th>
+            <th class="border-r border-slate-200 px-4 py-3 text-center font-bold text-slate-600">시급</th>
             <th class="border-r border-slate-200 px-4 py-3 text-center font-bold text-slate-600">역할</th>
             <th class="border-r border-slate-200 px-4 py-3 text-center font-bold text-slate-600">구분</th>
             <th class="border-r border-slate-200 px-4 py-3 text-center font-bold text-slate-600">국적</th>
@@ -193,16 +225,19 @@ const nationalityClass = (n: string) => {
         </thead>
         <tbody>
           <tr v-if="filtered.length === 0">
-            <td colspan="9" class="py-12 text-center text-sm text-slate-400">등록된 직원이 없습니다.</td>
+            <td colspan="12" class="py-12 text-center text-sm text-slate-400">등록된 직원이 없습니다.</td>
           </tr>
           <tr
             v-for="emp in filtered"
             :key="emp.id"
             class="border-b border-slate-200 last:border-0 hover:bg-slate-50"
           >
+            <td class="border-r border-slate-200 px-4 py-3 text-center font-mono text-slate-700">{{ emp.employeeCode || '-' }}</td>
             <td class="border-r border-slate-200 px-4 py-3 text-center font-bold text-slate-900">{{ emp.name }}</td>
             <td class="border-r border-slate-200 px-4 py-3 text-center text-slate-700">{{ emp.department || '-' }}</td>
             <td class="border-r border-slate-200 px-4 py-3 text-center text-slate-700">{{ emp.assignedDepartment || '-' }}</td>
+            <td class="border-r border-slate-200 px-4 py-3 text-center text-slate-700">{{ emp.remainingAnnualLeaveCount }}회</td>
+            <td class="border-r border-slate-200 px-4 py-3 text-center text-slate-700">{{ fmtCurrency(emp.hourlyWage) }}</td>
             <td class="border-r border-slate-200 px-4 py-3 text-center text-slate-700">{{ emp.role || '-' }}</td>
             <td class="border-r border-slate-200 px-4 py-3 text-center">
               <span
@@ -249,6 +284,24 @@ const nationalityClass = (n: string) => {
           </h2>
           <form class="space-y-4" @submit.prevent="submitForm">
 
+            <!-- ID -->
+            <div>
+              <label class="mb-1 block text-xs font-bold text-slate-600">ID (8자리 숫자)</label>
+              <input
+                v-model="form.employeeCode"
+                type="text"
+                inputmode="numeric"
+                maxlength="8"
+                placeholder="00000085"
+                class="w-full rounded-lg border px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-slate-400"
+                :class="form.employeeCode && !isValidEmployeeCode(form.employeeCode.trim()) ? 'border-red-300' : 'border-slate-200'"
+                @input="form.employeeCode = form.employeeCode.replace(/\D/g, '').slice(0, 8)"
+              />
+              <p v-if="form.employeeCode && !isValidEmployeeCode(form.employeeCode.trim())" class="mt-1 text-xs text-red-500">
+                숫자 8자리로 입력해주세요.
+              </p>
+            </div>
+
             <!-- 이름 + 부서 -->
             <div class="grid grid-cols-2 gap-3">
               <div>
@@ -273,6 +326,30 @@ const nationalityClass = (n: string) => {
             </div>
 
             <!-- 역할 + 국적 -->
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="mb-1 block text-xs font-bold text-slate-600">남은연차</label>
+                <input
+                  v-model.number="form.remainingAnnualLeaveCount"
+                  type="number"
+                  min="0"
+                  step="1"
+                  class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+                />
+              </div>
+              <div>
+                <label class="mb-1 block text-xs font-bold text-slate-600">시급(원)</label>
+                <input
+                  v-model.number="form.hourlyWage"
+                  type="number"
+                  min="10000"
+                  max="15000"
+                  step="100"
+                  class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+                />
+              </div>
+            </div>
+
             <div class="grid grid-cols-2 gap-3">
               <div>
                 <label class="mb-1 block text-xs font-bold text-slate-600">역할</label>

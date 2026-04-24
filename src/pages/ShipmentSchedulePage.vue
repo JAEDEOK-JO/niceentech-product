@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 
 const SHIPMENT_SCHEDULE_TABLE = 'shipment_schedule'
 const COMPANY_LIST_TABLE = 'company_list'
+const PRODUCT_LIST_TABLE = 'product_list'
 const SCHEDULE_TYPE_OPTIONS = [
   { value: 'day', label: '당착' },
   { value: 'night', label: '야상' },
@@ -26,18 +27,23 @@ const formatIsoDate = (date = new Date()) => {
 const { session } = useAuth()
 
 const rows = ref([])
+const pendingRows = ref([])
 const companyOptions = ref([])
 const managerNameMap = ref({})
 const loading = ref(false)
+const pendingLoading = ref(false)
+const pendingError = ref('')
 const loadingCompanyOptions = ref(false)
 const saving = ref(false)
 const errorMessage = ref('')
 const saveError = ref('')
 const isDialogOpen = ref(false)
 const listSearchText = ref('')
+const pendingSearchText = ref('')
 const currentViewDate = ref(formatIsoDate())
 const companyPlaceSearchText = ref('')
 const companyPlaceResults = ref([])
+const activeTab = ref('shipment')
 
 const form = reactive({
   id: null,
@@ -192,6 +198,164 @@ const clearCompanyPlaceSelection = () => {
   form.place = ''
   companyPlaceSearchText.value = ''
   companyPlaceResults.value = []
+}
+
+const parseWorkerDate = (value) => {
+  const raw = normalizeText(value)
+  if (!raw) return null
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (iso) {
+    const [, y, m, d] = iso
+    const parsed = new Date(Number(y), Number(m) - 1, Number(d))
+    return Number.isNaN(parsed.getTime()) ? null : parsed
+  }
+  const dot = raw.match(/^(\d{2})\.(\d{1,2})\.(\d{1,2})/)
+  if (dot) {
+    const [, y, m, d] = dot
+    const parsed = new Date(2000 + Number(y), Number(m) - 1, Number(d))
+    return Number.isNaN(parsed.getTime()) ? null : parsed
+  }
+  return null
+}
+
+const formatShortYmd = (date) => {
+  if (!date) return ''
+  const yy = String(date.getFullYear()).slice(2)
+  const mm = String(date.getMonth() + 1).padStart(2, '0')
+  const dd = String(date.getDate()).padStart(2, '0')
+  return `${yy}.${mm}.${dd}`
+}
+
+const resolveCompletionYmd = (row) => {
+  const dates = [
+    parseWorkerDate(row?.worker_t_time),
+    parseWorkerDate(row?.worker_main_time),
+    parseWorkerDate(row?.worker_nasa_time),
+    parseWorkerDate(row?.worker_welding_time),
+  ].filter(Boolean)
+  if (dates.length === 0) return ''
+  const latest = dates.sort((a, b) => a.getTime() - b.getTime())[dates.length - 1]
+  return formatShortYmd(latest)
+}
+
+const formatTestDateShort = (value) => {
+  const raw = normalizeText(value)
+  if (!raw) return ''
+  const matched = raw.match(/^(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일$/)
+  if (matched) {
+    const [, y, m, d] = matched
+    return `${String(y).slice(2)}.${String(m).padStart(2, '0')}.${String(d).padStart(2, '0')}`
+  }
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (iso) {
+    const [, y, m, d] = iso
+    return `${String(y).slice(2)}.${m}.${d}`
+  }
+  return raw
+}
+
+const filteredPendingRows = computed(() => {
+  const keyword = normalizeText(pendingSearchText.value).toLowerCase()
+  const base = [...pendingRows.value].sort((left, right) => {
+    const leftDate = normalizeText(left.completeDate)
+    const rightDate = normalizeText(right.completeDate)
+    if (leftDate && !rightDate) return -1
+    if (!leftDate && rightDate) return 1
+    const byDate = leftDate.localeCompare(rightDate)
+    if (byDate !== 0) return byDate
+    const byCompany = normalizeText(left.company).localeCompare(normalizeText(right.company), 'ko')
+    if (byCompany !== 0) return byCompany
+    const byPlace = normalizeText(left.place).localeCompare(normalizeText(right.place), 'ko')
+    if (byPlace !== 0) return byPlace
+    return normalizeText(left.area).localeCompare(normalizeText(right.area), 'ko')
+  })
+  if (!keyword) return base
+  return base.filter((row) => {
+    const target = `${row.company} ${row.place} ${row.area} ${row.initial ?? ''} ${row.name ?? ''}`.toLowerCase()
+    return target.includes(keyword)
+  })
+})
+
+const fetchPendingShipments = async ({ silent = false } = {}) => {
+  if (!session.value) {
+    pendingRows.value = []
+    return
+  }
+
+  if (!silent) pendingLoading.value = true
+  pendingError.value = ''
+  const { data, error } = await supabase
+    .from(PRODUCT_LIST_TABLE)
+    .select('id,company,place,area,initial,name,test_date,complete_date,head,hole,groove,weight,work_type,worker_t_time,worker_main_time,worker_nasa_time,worker_welding_time')
+    .eq('complete', true)
+    .eq('shipment', false)
+    .eq('hold', false)
+    .order('company', { ascending: true })
+    .order('place', { ascending: true })
+    .order('area', { ascending: true })
+
+  if (!silent) pendingLoading.value = false
+  if (error) {
+    if (!silent) pendingRows.value = []
+    pendingError.value = `출하대기 조회 실패: ${error.message}`
+    return
+  }
+
+  pendingRows.value = (data ?? []).map((row) => ({
+    id: row.id,
+    company: normalizeText(row.company),
+    place: normalizeText(row.place),
+    area: normalizeText(row.area),
+    initial: normalizeText(row.initial),
+    name: normalizeText(row.name),
+    testDate: formatTestDateShort(row.test_date),
+    completeDate: resolveCompletionYmd(row) || normalizeText(row.complete_date),
+    head: Number(row.head ?? 0),
+    hole: Number(row.hole ?? 0),
+    groove: Number(row.groove ?? 0),
+    weight: Number(row.weight ?? 0),
+    workType: normalizeText(row.work_type),
+  }))
+}
+
+const markAsShipped = async (row) => {
+  if (!row?.id) return
+  const now = new Date()
+  const yy = String(now.getFullYear()).slice(2)
+  const mm = String(now.getMonth() + 1).padStart(2, '0')
+  const dd = String(now.getDate()).padStart(2, '0')
+  const HH = String(now.getHours()).padStart(2, '0')
+  const min = String(now.getMinutes()).padStart(2, '0')
+  const finalTimeStr = `${yy}.${mm}.${dd} ${HH}:${min}`
+
+  const updates = { shipment: true }
+  const workerFields = [
+    { status: 'worker_t', time: 'worker_t_time_final' },
+    { status: 'worker_nasa', time: 'worker_nasa_time_final' },
+    { status: 'worker_main', time: 'worker_main_time_final' },
+    { status: 'worker_welding', time: 'worker_welding_time_final' },
+  ]
+  const { data: current } = await supabase
+    .from(PRODUCT_LIST_TABLE)
+    .select('worker_t,worker_nasa,worker_main,worker_welding')
+    .eq('id', row.id)
+    .maybeSingle()
+  if (current) {
+    for (const f of workerFields) {
+      if (current[f.status] === '작업완료') {
+        updates[f.status] = '출하완료'
+        updates[f.time] = finalTimeStr
+      }
+    }
+  }
+  pendingRows.value = pendingRows.value.filter((item) => item.id !== row.id)
+  const { error } = await supabase.from(PRODUCT_LIST_TABLE).update(updates).eq('id', row.id)
+  if (error) {
+    pendingError.value = `출하 처리 실패: ${error.message}`
+    await fetchPendingShipments({ silent: true })
+    return
+  }
+  await fetchPendingShipments({ silent: true })
 }
 
 const fetchShipmentSchedules = async () => {
@@ -353,17 +517,18 @@ watch(
   async (nextSession) => {
     if (!nextSession) {
       rows.value = []
+      pendingRows.value = []
       companyOptions.value = []
       return
     }
-    await Promise.all([fetchShipmentSchedules(), fetchCompanyOptions()])
+    await Promise.all([fetchShipmentSchedules(), fetchCompanyOptions(), fetchPendingShipments()])
   },
   { immediate: true },
 )
 
 onMounted(async () => {
   if (!session.value) return
-  await Promise.all([fetchShipmentSchedules(), fetchCompanyOptions()])
+  await Promise.all([fetchShipmentSchedules(), fetchCompanyOptions(), fetchPendingShipments()])
 })
 </script>
 
@@ -377,14 +542,36 @@ onMounted(async () => {
             <h1 class="mt-1 text-2xl font-extrabold text-slate-900">출하일정</h1>
           </div>
           <div class="flex flex-wrap gap-2">
-            <Button variant="outline" @click="fetchShipmentSchedules">새로고침</Button>
-            <Button @click="openCreateDialog">출하일정 등록</Button>
-            <Button variant="outline" @click="printScheduleTable">인쇄</Button>
+            <Button v-if="activeTab === 'shipment'" variant="outline" @click="fetchShipmentSchedules">새로고침</Button>
+            <Button v-else variant="outline" @click="fetchPendingShipments({ silent: true })">새로고침</Button>
+            <Button v-if="activeTab === 'shipment'" @click="openCreateDialog">출하일정 등록</Button>
+            <Button v-if="activeTab === 'shipment'" variant="outline" @click="printScheduleTable">인쇄</Button>
           </div>
+        </div>
+        <div class="mt-5 flex gap-2 border-b border-slate-200">
+          <button
+            type="button"
+            class="px-5 py-3 text-sm font-bold transition-colors"
+            :class="activeTab === 'shipment' ? 'border-b-2 border-slate-900 text-slate-900' : 'text-slate-500 hover:text-slate-700'"
+            @click="activeTab = 'shipment'"
+          >
+            출하
+          </button>
+          <button
+            type="button"
+            class="px-5 py-3 text-sm font-bold transition-colors"
+            :class="activeTab === 'pending' ? 'border-b-2 border-slate-900 text-slate-900' : 'text-slate-500 hover:text-slate-700'"
+            @click="activeTab = 'pending'"
+          >
+            출하대기
+            <span class="ml-1 inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-600">
+              {{ pendingRows.length }}
+            </span>
+          </button>
         </div>
       </section>
 
-      <section class="shipment-print-shell rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      <section v-if="activeTab === 'shipment'" class="shipment-print-shell rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
         <div class="shipment-print-hide flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div class="flex flex-wrap items-center gap-2">
             <Button
@@ -466,6 +653,81 @@ onMounted(async () => {
                 <td class="border border-slate-200 px-3 py-3 text-center text-slate-700">{{ row.scheduleType === 'day' ? (row.arrivalTime || 'O') : '' }}</td>
                 <td class="border border-slate-200 px-3 py-3 text-center text-slate-700">{{ row.scheduleType === 'night' ? (row.arrivalTime || 'O') : '' }}</td>
                 <td class="border border-slate-200 px-3 py-3 text-center text-slate-700">{{ row.floatStatus || '' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section v-if="activeTab === 'pending'" class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div class="flex flex-wrap items-center gap-2">
+            <input
+              v-model="pendingSearchText"
+              type="text"
+              class="h-10 w-full min-w-[240px] rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-700 md:w-[320px]"
+              placeholder="회사명, 현장명, 구역, 도번, 담당자 검색"
+            />
+            <span class="rounded-full bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">{{ filteredPendingRows.length }}건</span>
+          </div>
+        </div>
+
+        <div v-if="pendingLoading" class="py-10 text-center text-sm text-slate-500">출하대기 목록을 불러오는 중입니다.</div>
+        <div v-else-if="pendingError" class="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">
+          {{ pendingError }}
+        </div>
+        <div v-else class="mt-4 overflow-x-auto rounded-2xl border border-slate-200">
+          <div class="border-b border-slate-200 bg-slate-50 px-4 py-3 text-center text-lg font-extrabold text-slate-900">
+            출하대기 목록
+          </div>
+          <table class="w-full border-collapse text-sm">
+            <colgroup>
+              <col style="width: 7%" />
+              <col style="width: 7%" />
+              <col style="width: 11%" />
+              <col style="width: 16%" />
+              <col style="width: 18%" />
+              <col style="width: 6%" />
+              <col style="width: 6%" />
+              <col style="width: 9%" />
+              <col style="width: 9%" />
+              <col style="width: 11%" />
+            </colgroup>
+            <thead class="bg-slate-50 text-slate-600">
+              <tr>
+                <th class="border border-slate-200 px-3 py-3 text-center font-bold">도번</th>
+                <th class="border border-slate-200 px-3 py-3 text-center font-bold">담당자</th>
+                <th class="border border-slate-200 px-3 py-3 text-center font-bold">회사명</th>
+                <th class="border border-slate-200 px-3 py-3 text-center font-bold">현장명</th>
+                <th class="border border-slate-200 px-3 py-3 text-center font-bold">구역명</th>
+                <th class="border border-slate-200 px-3 py-3 text-center font-bold">헤드</th>
+                <th class="border border-slate-200 px-3 py-3 text-center font-bold">홀</th>
+                <th class="border border-slate-200 px-3 py-3 text-center font-bold">검수일</th>
+                <th class="border border-slate-200 px-3 py-3 text-center font-bold">완료일</th>
+                <th class="border border-slate-200 px-3 py-3 text-center font-bold">출하처리</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-if="filteredPendingRows.length === 0">
+                <td colspan="10" class="border border-slate-200 px-3 py-8 text-center text-slate-400">출하대기 품목이 없습니다.</td>
+              </tr>
+              <tr
+                v-for="row in filteredPendingRows"
+                :key="row.id"
+                class="bg-white hover:bg-slate-50"
+              >
+                <td class="border border-slate-200 px-3 py-3 text-center text-slate-700">{{ row.initial || '-' }}</td>
+                <td class="border border-slate-200 px-3 py-3 text-center text-slate-700">{{ row.name || '-' }}</td>
+                <td class="border border-slate-200 px-3 py-3 text-center text-slate-700">{{ row.company || '-' }}</td>
+                <td class="border border-slate-200 px-3 py-3 text-center text-slate-700">{{ row.place || '-' }}</td>
+                <td class="border border-slate-200 px-3 py-3 text-center text-slate-700">{{ row.area || '-' }}</td>
+                <td class="border border-slate-200 px-3 py-3 text-center text-slate-700">{{ row.head || '' }}</td>
+                <td class="border border-slate-200 px-3 py-3 text-center text-slate-700">{{ row.hole || '' }}</td>
+                <td class="border border-slate-200 px-3 py-3 text-center text-slate-700">{{ row.testDate || '-' }}</td>
+                <td class="border border-slate-200 px-3 py-3 text-center text-slate-700">{{ row.completeDate || '-' }}</td>
+                <td class="border border-slate-200 px-3 py-3 text-center">
+                  <Button class="h-8 px-3 text-xs" @click="markAsShipped(row)">출하완료</Button>
+                </td>
               </tr>
             </tbody>
           </table>

@@ -435,9 +435,12 @@ export async function fetchEmployeeCount(): Promise<number> {
 }
 
 export interface EmployeeFormData {
+  employeeCode: string
   name: string
   department: string
   assignedDepartment: string
+  remainingAnnualLeaveCount: number
+  hourlyWage: number
   isFullTime: boolean
   nationality: string
   role: string
@@ -450,9 +453,12 @@ export async function createEmployee(data: EmployeeFormData): Promise<Employee> 
   const { data: row, error } = await supabase
     .from('employees')
     .insert({
+      employee_code: data.employeeCode || null,
       name: data.name,
       department: data.department,
       assigned_department: data.assignedDepartment,
+      remaining_annual_leave_count: data.remainingAnnualLeaveCount,
+      hourly_wage: data.hourlyWage,
       is_full_time: data.isFullTime,
       nationality: data.nationality,
       role: data.role,
@@ -467,13 +473,27 @@ export async function createEmployee(data: EmployeeFormData): Promise<Employee> 
   return mapEmployee(row as Record<string, unknown>)
 }
 
+export async function assignEmployeeCodesBulk(
+  mappings: Array<{ id: number; employeeCode: string; name?: string }>,
+): Promise<void> {
+  for (const m of mappings) {
+    const patch: Record<string, unknown> = { employee_code: m.employeeCode }
+    if (m.name && m.name.trim()) patch.name = m.name.trim()
+    const { error } = await supabase.from('employees').update(patch).eq('id', m.id)
+    if (error) throw error
+  }
+}
+
 export async function updateEmployee(id: number, data: EmployeeFormData): Promise<void> {
   const { error } = await supabase
     .from('employees')
     .update({
+      employee_code: data.employeeCode || null,
       name: data.name,
       department: data.department,
       assigned_department: data.assignedDepartment,
+      remaining_annual_leave_count: data.remainingAnnualLeaveCount,
+      hourly_wage: data.hourlyWage,
       is_full_time: data.isFullTime,
       nationality: data.nationality,
       role: data.role,

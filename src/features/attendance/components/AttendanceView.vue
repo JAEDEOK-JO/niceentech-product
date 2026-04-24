@@ -12,6 +12,7 @@ import type { EmployeeFormData } from '../services/attendance.service'
 import AttendanceFiltersComp from './AttendanceFilters.vue'
 import AttendanceForm from './AttendanceForm.vue'
 import AttendanceEmployeeList from './AttendanceEmployeeList.vue'
+import AttendanceAnalysisPanel from './AttendanceAnalysisPanel.vue'
 import AttendanceSummaryBoard from './AttendanceSummaryBoard.vue'
 import AttendanceSummaryDetailModal from './AttendanceSummaryDetailModal.vue'
 import AttendanceDetailModal from './AttendanceDetailModal.vue'
@@ -85,7 +86,7 @@ const emit = defineEmits<{
 }>()
 
 // 관리자 탭
-const activeTab = ref<'requests' | 'employees' | 'summary'>('requests')
+const activeTab = ref<'requests' | 'employees' | 'summary' | 'analysis' | 'approval' | 'daepyo' | 'gyeongyu'>('requests')
 const REQUESTS_PER_PAGE = 10
 const requestsPage = ref(1)
 
@@ -247,6 +248,12 @@ watch(
           :class="activeTab === 'employees' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-800'"
           @click="activeTab = 'employees'"
         >직원 목록</button>
+        <button
+          type="button"
+          class="rounded-lg px-4 py-2 text-sm font-bold transition-colors"
+          :class="activeTab === 'analysis' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-800'"
+          @click="activeTab = 'analysis'"
+        >근태 분석</button>
       </div>
 
       <!-- ═══ 직원 목록 탭 (관리자) ═══ -->
@@ -257,6 +264,12 @@ watch(
         @create="emit('createEmployee', $event)"
         @update="emit('updateEmployee', $event)"
         @delete="emit('deleteEmployee', $event)"
+      />
+
+      <!-- ═══ 근태 분석 탭 (관리자) ═══ -->
+      <AttendanceAnalysisPanel
+        v-if="isAdmin && activeTab === 'analysis'"
+        :employees="employees"
       />
 
       <AttendanceSummaryBoard

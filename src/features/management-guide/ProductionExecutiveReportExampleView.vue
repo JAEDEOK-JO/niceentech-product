@@ -31,8 +31,13 @@ const isPrinting = ref(false)
 
 const now = new Date()
 const reportYear = now.getFullYear()
+const previousYear = reportYear - 1
+const twoYearsAgoYear = reportYear - 2
 const reportMonth = now.getMonth()
 const reportYearLabel = `${reportYear}년`
+const previousYearLabel = `${previousYear}년`
+const twoYearsAgoYearLabel = `${twoYearsAgoYear}년`
+const currentYearProgressLabel = `${reportYear}년 현재까지`
 const reportMonthLabel = `${reportMonth + 1}월`
 const getMonthDateByOffset = (offset) => new Date(reportYear, reportMonth + offset, 1)
 const getMonthLabelByOffset = (offset) => `${getMonthDateByOffset(offset).getMonth() + 1}월`
@@ -170,25 +175,48 @@ const isYearRow = (row) => {
   if (!date) return false
   return date.getFullYear() === reportYear
 }
+const isPreviousYearRow = (row) => {
+  const date = getMonthlyReferenceDate(row)
+  if (!date) return false
+  return date.getFullYear() === previousYear
+}
+const isTwoYearsAgoRow = (row) => {
+  const date = getMonthlyReferenceDate(row)
+  if (!date) return false
+  return date.getFullYear() === twoYearsAgoYear
+}
 
 const fetchRows = async () => {
-  const fetchStart = new Date(reportYear, reportMonth - 2, 1)
+  const fetchStart = new Date(twoYearsAgoYear, 0, 1)
   const endOfYear = new Date(reportYear, 11, 31)
+  const batchSize = 1000
+  let from = 0
+  let hasMore = true
+  const allRows = []
 
-  const { data, error } = await supabase
-    .from(PRODUCT_LIST_TABLE)
-    .select(
-      'id,work_type,head,hole,groove,test_date,complete,shipment,worker_t,worker_main,worker_nasa,worker_welding',
-    )
-    .gte('test_date', formatTestDate(fetchStart))
-    .lte('test_date', formatTestDate(endOfYear))
-    .order('id', { ascending: false })
+  while (hasMore) {
+    const to = from + batchSize - 1
+    const { data, error } = await supabase
+      .from(PRODUCT_LIST_TABLE)
+      .select(
+        'id,work_type,head,hole,groove,test_date,complete,shipment,worker_t,worker_main,worker_nasa,worker_welding',
+      )
+      .gte('test_date', formatTestDate(fetchStart))
+      .lte('test_date', formatTestDate(endOfYear))
+      .order('id', { ascending: false })
+      .range(from, to)
 
-  if (error) {
-    throw new Error(error.message ?? '생산 데이터를 불러오지 못했습니다.')
+    if (error) {
+      throw new Error(error.message ?? '생산 데이터를 불러오지 못했습니다.')
+    }
+
+    const nextRows = data ?? []
+    allRows.push(...nextRows)
+    hasMore = nextRows.length === batchSize
+    from += batchSize
   }
 
-  rows.value = data ?? []
+  rows.value = allRows
 }
 
 const fetchRepairHistory = async () => {
@@ -291,6 +319,14 @@ const currentMonthProgressRows = computed(() =>
   }),
 )
 const currentYearRows = computed(() => rows.value.filter((row) => isCompletedOrShipped(row) && isYearRow(row)))
+const currentYearProgressRows = computed(() =>
+  currentYearRows.value.filter((row) => {
+    const date = getMonthlyReferenceDate(row)
+    return date ? startOfDay(date).getTime() <= startOfDay(currentWeekTuesday).getTime() : false
+  }),
+)
+const previousYearRows = computed(() => rows.value.filter((row) => isCompletedOrShipped(row) && isPreviousYearRow(row)))
+const twoYearsAgoYearRows = computed(() => rows.value.filter((row) => isCompletedOrShipped(row) && isTwoYearsAgoRow(row)))
 const currentWeekTargetRows = computed(() =>
   rows.value.filter((row) => {
     const date = getMonthlyReferenceDate(row)
@@ -318,6 +354,9 @@ const currentCounts = computed(() => buildCategoryCounts(currentMonthRows.value)
 const previousCounts = computed(() => buildCategoryCounts(previousMonthRows.value))
 const currentMonthProgressCounts = computed(() => buildCategoryCounts(currentMonthProgressRows.value))
 const currentYearCounts = computed(() => buildCategoryCounts(currentYearRows.value))
+const currentYearProgressCounts = computed(() => buildCategoryCounts(currentYearProgressRows.value))
+const previousYearCounts = computed(() => buildCategoryCounts(previousYearRows.value))
+const twoYearsAgoYearCounts = computed(() => buildCategoryCounts(twoYearsAgoYearRows.value))
 const currentWeekCounts = computed(() => buildCategoryCounts(currentWeekRows.value))
 const currentWeekPendingCounts = computed(() => buildCategoryCounts(currentWeekPendingRows.value))
 const currentMonthTotal = computed(() => Object.values(currentCounts.value).reduce((sum, value) => sum + toNumber(value), 0))
@@ -332,6 +371,14 @@ const currentYearSummaryRows = computed(() =>
   categoryMeta.map((item) => ({
     ...item,
     value: currentYearCounts.value[item.key],
+  })),
+)
+const yearComparisonRows = computed(() =>
+  categoryMeta.map((item) => ({
+    ...item,
+    twoYearsAgoYearValue: twoYearsAgoYearCounts.value[item.key],
+    previousYearValue: previousYearCounts.value[item.key],
+    currentYearProgressValue: currentYearProgressCounts.value[item.key],
   })),
 )
 const qualityAggregatedRows = computed(() => {
@@ -627,28 +674,43 @@ onMounted(async () => {
               </article>
 
               <article class="h-full rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <p class="text-[15px] font-extrabold text-slate-900">{{ reportYearLabel }} 누적</p>
-                <p class="mt-1 text-[13px] font-semibold text-slate-500">작업완료 또는 출하완료 기준 누적</p>
-                <div class="mt-4 space-y-2">
-                  <div
-                    v-for="item in currentYearSummaryRows"
-                    :key="`${item.key}-year`"
-                    class="grid min-h-[58px] grid-cols-[72px_1fr_1fr] items-center gap-2 rounded-xl bg-white px-3 py-2"
-                  >
-                    <div class="flex items-center gap-2 text-sm font-bold text-slate-900">
-                      <span class="h-2.5 w-2.5 rounded-full" :style="{ backgroundColor: item.color }" />
-                      <div class="leading-tight">
-                        <div>{{ item.label }}</div>
-                        <div v-if="getCategorySubLabel(item)" class="text-[10px] font-semibold text-slate-500">
-                          {{ getCategorySubLabel(item) }}
-                        </div>
-                      </div>
-                    </div>
-                    <div class="col-span-2 text-center">
-                      <p class="text-[10px] font-bold text-slate-500">완료/출하 누적</p>
-                      <p class="text-sm font-extrabold text-slate-900">{{ formatCount(item.value) }}</p>
-                    </div>
-                  </div>
+                <p class="text-[15px] font-extrabold text-slate-900">
+                  {{ twoYearsAgoYearLabel }} / {{ previousYearLabel }} / {{ currentYearProgressLabel }} 비교
+                </p>
+                <p class="mt-1 text-[13px] font-semibold text-slate-500">올해는 이번 주 화요일 기준 누적만 반영합니다.</p>
+                <div class="mt-4">
+                  <table class="min-w-full table-fixed border-collapse text-sm">
+                    <thead class="border-b border-slate-200 text-[12px] font-bold text-slate-600">
+                      <tr>
+                        <th class="w-[110px] px-4 py-3 text-left">항목</th>
+                        <th class="px-4 py-3 text-center">{{ twoYearsAgoYearLabel }}</th>
+                        <th class="px-4 py-3 text-center">{{ previousYearLabel }}</th>
+                        <th class="px-4 py-3 text-center">{{ currentYearProgressLabel }}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr
+                        v-for="item in yearComparisonRows"
+                        :key="`${item.key}-year-compare`"
+                        class="border-t border-slate-200"
+                      >
+                        <td class="w-[110px] px-4 py-4 text-left font-bold text-slate-900">
+                          <div class="flex items-center gap-2">
+                            <span class="h-2.5 w-2.5 rounded-full" :style="{ backgroundColor: item.color }" />
+                            <div class="leading-tight">
+                              <div>{{ item.label }}</div>
+                              <div v-if="getCategorySubLabel(item)" class="text-[10px] font-semibold text-slate-500">
+                                {{ getCategorySubLabel(item) }}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td class="px-4 py-4 text-center font-semibold text-slate-500">{{ formatCount(item.twoYearsAgoYearValue) }}</td>
+                        <td class="px-4 py-4 text-center font-semibold text-slate-700">{{ formatCount(item.previousYearValue) }}</td>
+                        <td class="px-4 py-4 text-center font-extrabold text-slate-900">{{ formatCount(item.currentYearProgressValue) }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
               </article>
             </div>

@@ -47,6 +47,19 @@ const compareVersion = (left, right) => {
 
 const isElectron = typeof window !== 'undefined' && Boolean(window.electronAPI?.isElectron)
 
+const detectDesktopBrowser = () => {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') return false
+  if (isElectron) return false
+  const ua = navigator.userAgent || ''
+  if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|Tablet|Silk/i.test(ua)) return false
+  if ((navigator.maxTouchPoints ?? 0) > 1 && /Macintosh/i.test(ua)) return false
+  const coarsePointer = typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches
+  if (coarsePointer) return false
+  return true
+}
+
+const isDesktopBrowser = ref(detectDesktopBrowser())
+
 const hasNewVersion = computed(() => {
   if (!remoteVersion.value) return false
   return compareVersion(remoteVersion.value, currentVersion) !== 0

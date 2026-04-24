@@ -119,6 +119,27 @@ const formatShortDate = (value) => {
   if (!matched) return raw || '-'
   return `${matched[2]}월 ${matched[3]}일`
 }
+const formatTestDateShort = (value) => {
+  const raw = normalizeText(value)
+  if (!raw) return ''
+  const korean = raw.match(/^(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일$/)
+  if (korean) {
+    const [, y, m, d] = korean
+    return `${String(y).slice(2)}.${String(m).padStart(2, '0')}.${String(d).padStart(2, '0')}`
+  }
+  const iso = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/)
+  if (iso) {
+    const [, y, m, d] = iso
+    return `${String(y).slice(2)}.${String(m).padStart(2, '0')}.${String(d).padStart(2, '0')}`
+  }
+  const dot = raw.match(/^(\d{2,4})\.(\d{1,2})\.(\d{1,2})/)
+  if (dot) {
+    const [, y, m, d] = dot
+    const yy = String(y).length === 4 ? String(y).slice(2) : String(y).padStart(2, '0')
+    return `${yy}.${String(m).padStart(2, '0')}.${String(d).padStart(2, '0')}`
+  }
+  return raw
+}
 
 const operationsMetricDefinitions = [
   { metric_key: METRIC_KEYS.received, label: '주간 입고', value_type: 'number', unit: '톤', sort_order: 1, is_active: true },
@@ -846,9 +867,9 @@ onMounted(fetchReportData)
                 <table class="w-full table-fixed border-collapse text-xs">
                   <colgroup>
                     <col style="width: 72px" />
-                    <col style="width: 82px" />
-                    <col style="width: 80px" />
-                    <col />
+                    <col style="width: 110px" />
+                    <col style="width: 110px" />
+                    <col style="width: 190px" />
                     <col />
                     <col style="width: 65px" />
                     <col style="width: 120px" />
@@ -881,7 +902,7 @@ onMounted(fetchReportData)
                       <td class="border border-slate-200 px-2 py-2 text-center">{{ item.place || '-' }}</td>
                       <td class="border border-slate-200 px-2 py-2 text-center">{{ item.area || '-' }}</td>
                       <td class="border border-slate-200 px-2 py-2 text-center font-semibold">{{ formatCount(item.head_count) }}</td>
-                      <td class="border border-slate-200 px-2 py-2 text-center whitespace-nowrap">{{ item.test_date || '-' }}</td>
+                      <td class="border border-slate-200 px-2 py-2 text-center whitespace-nowrap">{{ formatTestDateShort(item.test_date) || '-' }}</td>
                     </tr>
                   </tbody>
                 </table>

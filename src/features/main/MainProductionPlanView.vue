@@ -4,7 +4,7 @@ import Button from '@/components/ui/button/Button.vue'
 import Input from '@/components/ui/input/Input.vue'
 import MainProductionPlanGroupTable from '@/features/main/MainProductionPlanGroupTable.vue'
 import { useDialog } from '@/composables/useDialog'
-import { isAdminRole } from '@/utils/adminAccess'
+import { isAdminRole, isProductionAdmin } from '@/utils/adminAccess'
 
 const { confirm, alert } = useDialog()
 
