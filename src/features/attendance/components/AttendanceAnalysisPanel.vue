@@ -45,6 +45,7 @@ interface LeaveCreditSummary {
   employeeName: string
   department: string
   hourlyWage: number
+  leaveDays: number
   normalSeconds: number
   workedDays: number
   normalPay: number
@@ -56,6 +57,7 @@ interface EmployeeSummary {
   department: string
   matched: boolean
   hourlyWage: number
+  leaveDays: number
   totalSeconds: number
   normalSeconds: number
   overtimeSeconds: number
@@ -564,6 +566,7 @@ const fetchLeaveCredits = async (
         employeeName: employee.name,
         department: employee.department,
         hourlyWage: employee.hourlyWage,
+        leaveDays: 0,
         normalSeconds: 0,
         workedDays: 0,
         normalPay: 0,
@@ -576,6 +579,7 @@ const fetchLeaveCredits = async (
       ).filter((date) => date >= startDate && date <= endDate)
 
       for (const leaveDate of leaveDates) {
+        current.leaveDays += 1
         if (parsedDateKeys.has(`${employee.employeeCode}:${leaveDate}`)) continue
         current.normalSeconds += 8 * 3600
         current.workedDays += 1
@@ -584,6 +588,7 @@ const fetchLeaveCredits = async (
     } else if (isHalfDayLeaveType(leaveType)) {
       const leaveDate = String(row.start_date ?? '')
       if (leaveDate >= startDate && leaveDate <= endDate) {
+        current.leaveDays += 0.5
         current.normalSeconds += 4 * 3600
         current.workedDays += 0.5
         current.normalPay += employee.hourlyWage * 4
@@ -610,6 +615,7 @@ const employeeSummaries = computed<EmployeeSummary[]>(() => {
         department: row.department,
         matched: row.matched,
         hourlyWage: row.hourlyWage,
+        leaveDays: 0,
         totalSeconds: 0,
         normalSeconds: 0,
         overtimeSeconds: 0,
@@ -648,6 +654,7 @@ const employeeSummaries = computed<EmployeeSummary[]>(() => {
         department: leave.department,
         matched: true,
         hourlyWage: leave.hourlyWage,
+        leaveDays: 0,
         totalSeconds: 0,
         normalSeconds: 0,
         overtimeSeconds: 0,
@@ -661,6 +668,7 @@ const employeeSummaries = computed<EmployeeSummary[]>(() => {
         totalPay: 0,
       }
 
+    current.leaveDays += leave.leaveDays
     current.totalSeconds += leave.normalSeconds
     current.normalSeconds += leave.normalSeconds
     current.workedDays += leave.workedDays
@@ -698,6 +706,7 @@ const formatHM = (seconds: number): string => {
 }
 
 const formatCurrency = (amount: number): string => `${amount.toLocaleString('ko-KR')}원`
+const formatLeaveDays = (days: number): string => `${Number.isInteger(days) ? days : days.toFixed(1)}일`
 
 const saveToDatabase = async () => {
   if (parsedRows.value.length === 0) return
@@ -758,9 +767,6 @@ const totalPayrollAmount = computed(() =>
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 class="text-sm font-extrabold text-slate-900">근태 엑셀 업로드</h3>
-          <p class="mt-1 text-xs text-slate-500">
-            직원 ID를 직원목록과 매칭해 시급으로 급여를 계산합니다. <b>08:00~17:00</b>은 점심 1시간 제외 후 100%, 그 외 시간은 150%로 계산합니다.
-          </p>
         </div>
         <div class="flex items-center gap-2">
           <label class="cursor-pointer rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-bold text-white hover:bg-slate-700">
@@ -841,6 +847,7 @@ const totalPayrollAmount = computed(() =>
               <th class="border-r border-slate-200 px-3 py-2 text-center font-bold text-slate-600">이름</th>
               <th class="border-r border-slate-200 px-3 py-2 text-center font-bold text-slate-600">부서</th>
               <th class="border-r border-slate-200 px-3 py-2 text-center font-bold text-slate-600">시급</th>
+              <th class="border-r border-slate-200 px-3 py-2 text-center font-bold text-slate-600">연차/반차</th>
               <th class="border-r border-slate-200 px-3 py-2 text-center font-bold text-slate-600">근무일수</th>
               <th class="border-r border-slate-200 px-3 py-2 text-center font-bold text-slate-600">총 근무</th>
               <th class="border-r border-slate-200 px-3 py-2 text-center font-bold text-emerald-700">기본 근무</th>
@@ -862,6 +869,9 @@ const totalPayrollAmount = computed(() =>
               <td class="border-r border-slate-200 px-3 py-2 text-center text-slate-600">{{ emp.department || '-' }}</td>
               <td class="border-r border-slate-200 px-3 py-2 text-center text-slate-700">
                 {{ emp.hourlyWage > 0 ? formatCurrency(emp.hourlyWage) : '-' }}
+              </td>
+              <td class="border-r border-slate-200 px-3 py-2 text-center text-slate-700">
+                {{ emp.leaveDays > 0 ? formatLeaveDays(emp.leaveDays) : '-' }}
               </td>
               <td class="border-r border-slate-200 px-3 py-2 text-center text-slate-700">{{ emp.workedDays }}일</td>
               <td class="border-r border-slate-200 px-3 py-2 text-center font-semibold text-slate-900">{{ formatHours(emp.totalSeconds) }}</td>

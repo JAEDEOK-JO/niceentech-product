@@ -145,7 +145,7 @@ watch(
 
 <template>
   <div class="min-h-screen bg-slate-50 pt-[72px]">
-    <div class="mx-auto max-w-6xl px-4 py-8 md:px-6">
+    <div class="w-full px-[5px] py-8 sm:px-5">
 
       <!-- 페이지 헤더 -->
       <div class="mb-7 flex flex-wrap items-start justify-between gap-3">
