@@ -48,6 +48,8 @@
 | business_registration_number | text | N |  | 사업자등록번호 |
 | registration_month | date | N |  | 등록 월 |
 | total_head_count | bigint | N |  | 현장 총헤드수 |
+| total_screw_count | bigint | N |  | 현장 총나사수 |
+| total_supipe_count | bigint | N |  | 현장 총수파이프수 |
 | site_completed | boolean | Y | `false` | 현장 종료 여부 |
 | order_confirmed | boolean | Y | `true` | 수주 확정 여부, false면 수주예정으로 사용 |
 

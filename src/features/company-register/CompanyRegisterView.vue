@@ -15,6 +15,12 @@ const props = defineProps({
 
 const emit = defineEmits(['go-back', 'update-form', 'submit'])
 
+const onNumericInput = (event, field) => {
+  const digits = String(event.target.value ?? '').replace(/\D/g, '')
+  if (event.target.value !== digits) event.target.value = digits
+  emit('update-form', field, digits)
+}
+
 const calendarWeekLabels = ['일', '월', '화', '수', '목', '금', '토']
 const isCalendarDialogOpen = ref(false)
 const activeDateField = ref('')
@@ -182,7 +188,7 @@ const dialogTitle = computed(() => {
       </div>
 
       <div class="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div class="grid gap-5 md:grid-cols-2">
+        <div class="grid gap-5 grid-cols-1 md:grid-cols-3">
           <div>
             <p class="mb-2 text-sm font-bold text-slate-700">회사명</p>
             <Input
@@ -202,17 +208,6 @@ const dialogTitle = computed(() => {
           </div>
 
           <div>
-            <p class="mb-2 text-sm font-bold text-slate-700">총헤드수</p>
-            <Input
-              :model-value="form.totalHeadCount"
-              inputmode="numeric"
-              pattern="[0-9]*"
-              placeholder="숫자만 입력"
-              @update:model-value="emit('update-form', 'totalHeadCount', $event)"
-            />
-          </div>
-
-          <div>
             <p class="mb-2 text-sm font-bold text-slate-700">건물종류</p>
             <select
               class="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
@@ -221,6 +216,45 @@ const dialogTitle = computed(() => {
             >
               <option v-for="item in COMPANY_TYPE_OPTIONS" :key="item" :value="item">{{ item }}</option>
             </select>
+          </div>
+
+          <div>
+            <p class="mb-2 text-sm font-bold text-slate-700">총헤드수</p>
+            <input
+              class="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+              type="text"
+              inputmode="numeric"
+              pattern="[0-9]*"
+              placeholder="숫자만 입력"
+              :value="form.totalHeadCount"
+              @input="onNumericInput($event, 'totalHeadCount')"
+            />
+          </div>
+
+          <div>
+            <p class="mb-2 text-sm font-bold text-slate-700">총나사수</p>
+            <input
+              class="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+              type="text"
+              inputmode="numeric"
+              pattern="[0-9]*"
+              placeholder="숫자만 입력"
+              :value="form.totalScrewCount"
+              @input="onNumericInput($event, 'totalScrewCount')"
+            />
+          </div>
+
+          <div>
+            <p class="mb-2 text-sm font-bold text-slate-700">총수파이프수</p>
+            <input
+              class="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+              type="text"
+              inputmode="numeric"
+              pattern="[0-9]*"
+              placeholder="숫자만 입력"
+              :value="form.totalSupipeCount"
+              @input="onNumericInput($event, 'totalSupipeCount')"
+            />
           </div>
 
           <div>
@@ -250,6 +284,15 @@ const dialogTitle = computed(() => {
           </div>
 
           <div>
+            <p class="mb-2 text-sm font-bold text-slate-700">사업자등록번호</p>
+            <Input
+              :model-value="form.businessRegistrationNumber"
+              placeholder="숫자만 입력"
+              @update:model-value="emit('update-form', 'businessRegistrationNumber', $event)"
+            />
+          </div>
+
+          <div>
             <p class="mb-2 text-sm font-bold text-slate-700">소장 이름</p>
             <Input
               :model-value="form.directorName"
@@ -266,16 +309,7 @@ const dialogTitle = computed(() => {
               @update:model-value="emit('update-form', 'directorPhone', $event)"
             />
           </div>
-
-          <div>
-            <p class="mb-2 text-sm font-bold text-slate-700">사업자등록번호</p>
-            <Input
-              :model-value="form.businessRegistrationNumber"
-              placeholder="숫자만 입력"
-              @update:model-value="emit('update-form', 'businessRegistrationNumber', $event)"
-            />
-          </div>
-          <div class="md:col-span-2">
+          <div class="md:col-span-3">
             <p class="mb-2 text-sm font-bold text-slate-700">현장 주소</p>
             <textarea
               class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
@@ -286,7 +320,7 @@ const dialogTitle = computed(() => {
             />
           </div>
 
-          <div class="md:col-span-2">
+          <div class="md:col-span-3">
             <div class="grid gap-5 md:grid-cols-3">
               <div>
                 <p class="mb-2 text-sm font-bold text-slate-700">등록일</p>
@@ -348,7 +382,7 @@ const dialogTitle = computed(() => {
             </div>
           </div>
 
-          <div class="md:col-span-2">
+          <div class="md:col-span-3">
             <p class="mb-2 text-sm font-bold text-slate-700">담당자</p>
             <select
               class="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"

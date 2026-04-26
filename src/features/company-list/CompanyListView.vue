@@ -19,6 +19,12 @@ const props = defineProps({
 
 const emit = defineEmits(['go-back', 'refresh', 'update-search', 'toggle-expected-only', 'update-row', 'save-row', 'delete-row'])
 
+const onNumericInput = (event, rowId, field) => {
+  const digits = String(event.target.value ?? '').replace(/\D/g, '')
+  if (event.target.value !== digits) event.target.value = digits
+  emit('update-row', rowId, field, digits)
+}
+
 const isSaving = (rowId) => props.savingIds.includes(rowId)
 const isDeleting = (rowId) => props.deletingIds.includes(rowId)
 
@@ -212,7 +218,7 @@ const groupedByConsonant = computed(() => {
                 </div>
               </div>
 
-              <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <div class="grid gap-4 grid-cols-1 md:grid-cols-3">
                 <div>
                   <p class="mb-2 text-sm font-bold text-slate-700">회사명</p>
                   <Input :model-value="selectedRow.company" @update:model-value="emit('update-row', selectedRow.id, 'company', $event)" />
@@ -220,10 +226,6 @@ const groupedByConsonant = computed(() => {
                 <div>
                   <p class="mb-2 text-sm font-bold text-slate-700">현장명</p>
                   <Input :model-value="selectedRow.place" @update:model-value="emit('update-row', selectedRow.id, 'place', $event)" />
-                </div>
-                <div>
-                  <p class="mb-2 text-sm font-bold text-slate-700">총헤드수</p>
-                  <Input :model-value="selectedRow.totalHeadCount" inputmode="numeric" @update:model-value="emit('update-row', selectedRow.id, 'totalHeadCount', $event)" />
                 </div>
                 <div>
                   <p class="mb-2 text-sm font-bold text-slate-700">건물종류</p>
@@ -235,6 +237,42 @@ const groupedByConsonant = computed(() => {
                     <option value="">선택안함</option>
                     <option v-for="item in COMPANY_TYPE_OPTIONS" :key="item" :value="item">{{ item }}</option>
                   </select>
+                </div>
+                <div>
+                  <p class="mb-2 text-sm font-bold text-slate-700">총헤드수</p>
+                  <input
+                    class="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                    type="text"
+                    inputmode="numeric"
+                    pattern="[0-9]*"
+                    placeholder="숫자만 입력"
+                    :value="selectedRow.totalHeadCount"
+                    @input="onNumericInput($event, selectedRow.id, 'totalHeadCount')"
+                  />
+                </div>
+                <div>
+                  <p class="mb-2 text-sm font-bold text-slate-700">총나사수</p>
+                  <input
+                    class="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                    type="text"
+                    inputmode="numeric"
+                    pattern="[0-9]*"
+                    placeholder="숫자만 입력"
+                    :value="selectedRow.totalScrewCount"
+                    @input="onNumericInput($event, selectedRow.id, 'totalScrewCount')"
+                  />
+                </div>
+                <div>
+                  <p class="mb-2 text-sm font-bold text-slate-700">총수파이프수</p>
+                  <input
+                    class="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                    type="text"
+                    inputmode="numeric"
+                    pattern="[0-9]*"
+                    placeholder="숫자만 입력"
+                    :value="selectedRow.totalSupipeCount"
+                    @input="onNumericInput($event, selectedRow.id, 'totalSupipeCount')"
+                  />
                 </div>
                 <div>
                   <p class="mb-2 text-sm font-bold text-slate-700">수주 상태</p>
@@ -312,7 +350,7 @@ const groupedByConsonant = computed(() => {
                     </option>
                   </select>
                 </div>
-                <div class="md:col-span-2 xl:col-span-3">
+                <div class="md:col-span-3">
                   <p class="mb-2 text-sm font-bold text-slate-700">현장 주소</p>
                   <textarea
                     class="min-h-[84px] w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"

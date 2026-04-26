@@ -196,15 +196,15 @@ watch(
   () => form.lotRound,
   async (next, prev) => {
     await loadLotInfos()
-    if (props.mode === 'update' && prev && next !== prev) {
-      if (filteredLotInfos.value.length === 0) {
-        await alert(`${next} 차수에 등록된 로트 정보가 없습니다. 먼저 로트를 등록해 주세요.`)
-        form.lotRound = prev
-        return
-      }
+    if (prev && next !== prev) {
       const first = filteredLotInfos.value[0]
-      form.lotNameH = first.lotName
-      form.lotNumH = first.lotNum
+      if (first) {
+        form.lotNameH = first.lotName
+        form.lotNumH = first.lotNum
+      } else {
+        form.lotNameH = ''
+        form.lotNumH = null
+      }
     }
   },
   { immediate: true },
@@ -354,10 +354,9 @@ watch(selectedLotType, () => {
           <div class="qf-inline qf-inline--footer">
             <div class="qf-field qf-field--narrow">
               <label>검사 차수</label>
-              <select v-if="mode === 'update'" v-model="form.lotRound" class="qf-input">
+              <select v-model="form.lotRound" class="qf-input">
                 <option v-for="round in LOT_ROUNDS" :key="round" :value="round">{{ round }}</option>
               </select>
-              <input v-else :value="form.lotRound" type="text" readonly class="qf-input--readonly" />
             </div>
             <div class="qf-field qf-field--grow">
               <label>선택된 로트명</label>
@@ -430,7 +429,12 @@ watch(selectedLotType, () => {
         <div class="qf-dialog-body">
           <div class="qf-dialog-meta">
             <p><strong>검사일:</strong> {{ lotDialogForm.testDate }}</p>
-            <p><strong>검사 차수:</strong> {{ lotDialogForm.lotRound }}</p>
+          </div>
+          <div class="qf-field">
+            <label>검사 차수</label>
+            <select v-model="lotDialogForm.lotRound">
+              <option v-for="round in LOT_ROUNDS" :key="round" :value="round">{{ round }}</option>
+            </select>
           </div>
           <div class="qf-field">
             <label>로트 타입</label>

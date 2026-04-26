@@ -14,6 +14,11 @@ const SALES_WEEKLY_TABLE = 'sales_weekly_entries'
 const SALES_AS_TABLE = 'sales_as_entries'
 const WEEK_COUNT = 5
 const MONTHLY_TARGET = 600000000
+const SALES_CATEGORY_TABS = [
+  { key: 'head', label: '헤드', field: 'salesAmountHead', dbField: 'sales_amount_head' },
+  { key: 'screw', label: '나사', field: 'salesAmountScrew', dbField: 'sales_amount_screw' },
+  { key: 'supipe', label: '수파이프', field: 'salesAmountSupipe', dbField: 'sales_amount_supipe' },
+]
 const SALES_REPORT_BASELINE_START = '2026-01-01'
 const emit = defineEmits(['go-back'])
 const props = defineProps({
@@ -32,6 +37,7 @@ const deletingWeeklySales = ref(false)
 const savingAsEntry = ref(false)
 const deletingAsEntry = ref(false)
 const isSalesDialogOpen = ref(false)
+const activeSalesTab = ref('head')
 const isAsDialogOpen = ref(false)
 const selectedSalesMonth = ref(new Date())
 const isPrinting = ref(false)
@@ -106,13 +112,18 @@ const buildWeeklyInputs = (rows) =>
   Array.from({ length: WEEK_COUNT }, (_, index) => {
     const weekIndex = index + 1
     const matched = rows.find((row) => Number(row?.week_index) === weekIndex)
-    return { weekIndex, salesAmount: matched ? String(toNumber(matched.sales_amount)) : '' }
+    return {
+      weekIndex,
+      salesAmountHead: matched ? String(toNumber(matched.sales_amount_head)) : '',
+      salesAmountScrew: matched ? String(toNumber(matched.sales_amount_screw)) : '',
+      salesAmountSupipe: matched ? String(toNumber(matched.sales_amount_supipe)) : '',
+    }
   })
 
 const fetchWeeklySalesByMonth = async (monthValue) => {
   const { data, error } = await supabase
     .from(SALES_WEEKLY_TABLE)
-    .select('id,target_month,week_index,sales_amount')
+    .select('id,target_month,week_index,sales_amount,sales_amount_head,sales_amount_screw,sales_amount_supipe')
     .eq('target_month', monthValue)
     .order('week_index', { ascending: true })
 
@@ -142,11 +153,11 @@ const fetchReportData = async () => {
   errorMessage.value = ''
 
   const [companyResult, weeklyResult, yearlyResult, asResult] = await Promise.all([
-    supabase.from(COMPANY_LIST_TABLE).select('id,company,place,company_type,registration_month,total_head_count,order_confirmed,site_completed').order('id', { ascending: false }),
+    supabase.from(COMPANY_LIST_TABLE).select('id,company,place,company_type,registration_month,total_head_count,total_screw_count,total_supipe_count,order_confirmed,site_completed').order('id', { ascending: false }),
     fetchWeeklySalesByMonth(reportMonthValue),
     supabase
       .from(SALES_WEEKLY_TABLE)
-      .select('id,target_month,week_index,sales_amount')
+      .select('id,target_month,week_index,sales_amount,sales_amount_head,sales_amount_screw,sales_amount_supipe')
       .gte('target_month', reportYearStartValue)
       .lte('target_month', reportMonthValue)
       .order('target_month', { ascending: true })
@@ -234,7 +245,20 @@ const saveWeeklySales = async () => {
   const { data: sessionData } = await supabase.auth.getSession()
   const createdBy = sessionData.session?.user?.id ?? null
   const monthValue = salesDialogMonthValue.value
-  const payload = weeklySalesInputs.value.map((row) => ({ target_month: monthValue, week_index: row.weekIndex, sales_amount: toNumber(row.salesAmount), created_by: createdBy }))
+  const payload = weeklySalesInputs.value.map((row) => {
+    const head = toNumber(row.salesAmountHead)
+    const screw = toNumber(row.salesAmountScrew)
+    const supipe = toNumber(row.salesAmountSupipe)
+    return {
+      target_month: monthValue,
+      week_index: row.weekIndex,
+      sales_amount: head + screw + supipe,
+      sales_amount_head: head,
+      sales_amount_screw: screw,
+      sales_amount_supipe: supipe,
+      created_by: createdBy,
+    }
+  })
   const { error } = await supabase.from(SALES_WEEKLY_TABLE).upsert(payload, { onConflict: 'target_month,week_index' })
   savingWeeklySales.value = false
 
@@ -380,21 +404,33 @@ const currentSalesWeekLabel = computed(() => `${reportMonthLabel} ${currentSales
 const currentSalesWeekAmount = computed(() => toNumber(currentSalesWeekRow.value?.sales_amount))
 const confirmedHeadTotal = computed(() => confirmedRows.value.reduce((sum, row) => sum + toNumber(row?.total_head_count), 0))
 const expectedHeadTotal = computed(() => expectedRows.value.reduce((sum, row) => sum + toNumber(row?.total_head_count), 0))
+const confirmedScrewTotal = computed(() => confirmedRows.value.reduce((sum, row) => sum + toNumber(row?.total_screw_count), 0))
+const confirmedSupipeTotal = computed(() => confirmedRows.value.reduce((sum, row) => sum + toNumber(row?.total_supipe_count), 0))
+const expectedScrewTotal = computed(() => expectedRows.value.reduce((sum, row) => sum + toNumber(row?.total_screw_count), 0))
+const expectedSupipeTotal = computed(() => expectedRows.value.reduce((sum, row) => sum + toNumber(row?.total_supipe_count), 0))
+const baselineScrewTotal = computed(() => salesBaselineRows.value.reduce((sum, row) => sum + toNumber(row?.total_screw_count), 0))
+const baselineSupipeTotal = computed(() => salesBaselineRows.value.reduce((sum, row) => sum + toNumber(row?.total_supipe_count), 0))
+const formatPieces = (value) => `${Number(value || 0).toLocaleString('ko-KR')}개`
 const yearlyMonthlySales = computed(() =>
   Array.from({ length: reportMonth + 1 }, (_, index) => {
     const month = index + 1
     const monthValue = `${reportYear}-${String(month).padStart(2, '0')}-01`
-    const total = yearlySalesRows.value
-      .filter((row) => String(row?.target_month ?? '') === monthValue)
-      .reduce((sum, row) => sum + toNumber(row?.sales_amount), 0)
+    const rows = yearlySalesRows.value.filter((row) => String(row?.target_month ?? '') === monthValue)
+    const head = rows.reduce((sum, row) => sum + toNumber(row?.sales_amount_head), 0)
+    const screw = rows.reduce((sum, row) => sum + toNumber(row?.sales_amount_screw), 0)
+    const supipe = rows.reduce((sum, row) => sum + toNumber(row?.sales_amount_supipe), 0)
 
     return {
       label: `${month}월`,
-      value: total,
+      value: head + screw + supipe,
+      head,
+      screw,
+      supipe,
     }
   }),
 )
 const yearlySalesMax = computed(() => Math.max(...yearlyMonthlySales.value.map((item) => item.value), 0))
+const yearlyBarUnitHeight = (value) => (yearlySalesMax.value ? (value / yearlySalesMax.value) * 160 : 0)
 const nonApartmentRatio = computed(() => {
   const total = salesBaselineRows.value.length
   if (!total) return 0
@@ -435,18 +471,41 @@ const targetSummary = computed(() => ({
   expectedHead: formatHead(expectedHeadTotal.value),
 }))
 const asTotalCost = computed(() => asRows.value.reduce((sum, row) => sum + toNumber(row?.cost), 0))
+const confirmedCombinedTotal = computed(() => confirmedHeadTotal.value + confirmedScrewTotal.value + confirmedSupipeTotal.value)
+const expectedCombinedTotal = computed(() => expectedHeadTotal.value + expectedScrewTotal.value + expectedSupipeTotal.value)
 const summaryCards = computed(() => [
-  { label: '신규 수주', value: formatHead(confirmedHeadTotal.value), note: `${reportMonthLabel} 확정 헤드수`, tone: 'bg-emerald-50 border-emerald-200 text-emerald-800', clickable: false },
-  { label: '신규 수주 예정', value: formatHead(expectedHeadTotal.value), note: '2026년 1월 이후 예정 헤드수', tone: 'bg-indigo-50 border-indigo-200 text-indigo-800', clickable: false },
+  { label: '신규 수주', value: formatPieces(confirmedCombinedTotal.value), note: `헤드 ${formatPieces(confirmedHeadTotal.value)} · 나사 ${formatPieces(confirmedScrewTotal.value)} · 수파이프 ${formatPieces(confirmedSupipeTotal.value)}`, tone: 'bg-emerald-50 border-emerald-200 text-emerald-800', clickable: false },
+  { label: '신규 수주 예정', value: formatPieces(expectedCombinedTotal.value), note: `헤드 ${formatPieces(expectedHeadTotal.value)} · 나사 ${formatPieces(expectedScrewTotal.value)} · 수파이프 ${formatPieces(expectedSupipeTotal.value)}`, tone: 'bg-indigo-50 border-indigo-200 text-indigo-800', clickable: false },
   { label: 'AS 발생 건수', value: `${asRows.value.length}건`, note: `${reportMonthLabel} 접수 누계`, tone: 'bg-rose-50 border-rose-200 text-rose-800', clickable: true },
   { label: 'AS 발생 비용', value: formatCurrency(asTotalCost.value), note: `${reportMonthLabel} 접수 비용 합계`, tone: 'bg-amber-50 border-amber-200 text-amber-800', clickable: false },
 ])
-const hasSalesDialogData = computed(() => weeklySalesInputs.value.some((row) => toNumber(row.salesAmount) > 0))
+const hasSalesDialogData = computed(() =>
+  weeklySalesInputs.value.some(
+    (row) =>
+      toNumber(row.salesAmountHead) > 0 ||
+      toNumber(row.salesAmountScrew) > 0 ||
+      toNumber(row.salesAmountSupipe) > 0,
+  ),
+)
+const weeklySalesBreakdown = computed(() => {
+  const head = weeklySalesRows.value.reduce((sum, row) => sum + toNumber(row?.sales_amount_head), 0)
+  const screw = weeklySalesRows.value.reduce((sum, row) => sum + toNumber(row?.sales_amount_screw), 0)
+  const supipe = weeklySalesRows.value.reduce((sum, row) => sum + toNumber(row?.sales_amount_supipe), 0)
+  return { head, screw, supipe, total: head + screw + supipe }
+})
+const currentSalesWeekBreakdown = computed(() => {
+  const row = currentSalesWeekRow.value
+  const head = toNumber(row?.sales_amount_head)
+  const screw = toNumber(row?.sales_amount_screw)
+  const supipe = toNumber(row?.sales_amount_supipe)
+  return { head, screw, supipe, total: head + screw + supipe }
+})
 
 const openSalesDialog = () => {
   weeklySalesError.value = ''
   selectedSalesMonth.value = new Date(reportYear, reportMonth, 1)
   weeklySalesInputs.value = buildWeeklyInputs(weeklySalesRows.value)
+  activeSalesTab.value = 'head'
   isSalesDialogOpen.value = true
 }
 const printReport = async () => {
@@ -583,22 +642,35 @@ onBeforeUnmount(revokeAsPreviewUrls)
                       {{ item.label }} {{ item.ratioText }}
                     </span>
                   </div>
+                  <div class="flex flex-wrap gap-2">
+                    <span class="rounded-full border border-slate-200 bg-white px-3 py-1 text-center text-slate-700">
+                      나사 {{ formatPieces(baselineScrewTotal) }}
+                    </span>
+                    <span class="rounded-full border border-slate-200 bg-white px-3 py-1 text-center text-slate-700">
+                      수파이프 {{ formatPieces(baselineSupipeTotal) }}
+                    </span>
+                  </div>
                 </div>
               </div>
               <div class="rounded-3xl border border-white bg-white px-5 py-4 text-center shadow-sm md:w-[380px] lg:w-[420px] md:self-stretch">
-                <p class="text-[12px] font-bold text-emerald-700">매출 진행률 {{ currentSalesWeekLabel }}</p>
-                <p class="mt-2 text-3xl font-extrabold text-slate-900">{{ formatCurrency(currentSalesWeekAmount) }}</p>
+                <p class="text-[12px] font-bold text-emerald-700">매출 진행률 {{ currentSalesWeekLabel }} · 헤드+나사+수파이프 합산</p>
+                <p class="mt-2 text-3xl font-extrabold text-slate-900">{{ formatCurrency(currentSalesWeekBreakdown.total) }}</p>
+                <p class="mt-1 text-[11px] font-semibold text-slate-500">
+                  헤드 {{ formatCompactSales(currentSalesWeekBreakdown.head) }}
+                  · 나사 {{ formatCompactSales(currentSalesWeekBreakdown.screw) }}
+                  · 수파이프 {{ formatCompactSales(currentSalesWeekBreakdown.supipe) }}
+                </p>
                 <div class="mt-4 w-full text-left">
-                  <div class="mb-2 flex items-center justify-between text-[12px] font-semibold text-slate-700"><span>현재 매출</span><span>{{ formatCurrency(weeklySalesTotal) }}</span></div>
+                  <div class="mb-2 flex items-center justify-between text-[12px] font-semibold text-slate-700"><span>월 누적 매출</span><span>{{ formatCurrency(weeklySalesBreakdown.total) }}</span></div>
                   <div class="h-4 rounded-full bg-slate-200"><div class="h-4 rounded-full bg-emerald-500" :style="{ width: `${salesProgressWidth}%` }" /></div>
-                  <div class="mt-2 flex items-center justify-between text-[11px] text-slate-500"><span>현재 {{ formatCurrency(weeklySalesTotal) }}</span><span>목표 {{ targetSummary.monthlyTarget }}</span></div>
+                  <div class="mt-2 flex items-center justify-between text-[11px] text-slate-500"><span>현재 {{ formatCurrency(weeklySalesBreakdown.total) }}</span><span>목표 {{ targetSummary.monthlyTarget }}</span></div>
                 </div>
               </div>
             </div>
           </section>
 
-          <section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
-            <div class="sales-print-grid-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <section class="rounded-2xl border border-slate-200 bg-white p-2">
+            <div class="sales-print-grid-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
               <button v-for="card in summaryCards" :key="card.label" type="button" class="rounded-2xl border p-4 text-left" :class="[card.tone, card.clickable ? 'cursor-pointer transition hover:shadow-sm' : 'cursor-default']" @click="card.clickable ? goAsListPage() : null">
                 <p class="text-[13px] font-bold">{{ card.label }}</p>
                 <p class="mt-2 text-2xl font-extrabold">{{ card.value }}</p>
@@ -616,6 +688,11 @@ onBeforeUnmount(revokeAsPreviewUrls)
             </div>
 
             <div class="mt-6">
+              <div class="mb-3 flex flex-wrap items-center gap-3 text-[11px] font-semibold text-slate-600">
+                <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm bg-emerald-500" />헤드</span>
+                <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm bg-sky-500" />나사</span>
+                <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm bg-amber-500" />수파이프</span>
+              </div>
               <div class="flex h-[240px] items-end gap-3 overflow-x-auto rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
                 <div
                   v-for="item in yearlyMonthlySales"
@@ -624,10 +701,11 @@ onBeforeUnmount(revokeAsPreviewUrls)
                 >
                   <p class="mb-2 text-[11px] font-semibold text-slate-500">{{ formatCompactSales(item.value) }}</p>
                   <div class="flex h-[160px] items-end">
-                    <div
-                      class="w-10 rounded-t-xl bg-gradient-to-t from-emerald-500 to-emerald-300"
-                      :style="{ height: `${yearlySalesMax ? Math.max((item.value / yearlySalesMax) * 160, item.value > 0 ? 12 : 0) : 0}px` }"
-                    />
+                    <div class="flex w-10 flex-col-reverse overflow-hidden rounded-t-xl">
+                      <div class="w-full bg-emerald-500" :style="{ height: `${yearlyBarUnitHeight(item.head)}px` }" />
+                      <div class="w-full bg-sky-500" :style="{ height: `${yearlyBarUnitHeight(item.screw)}px` }" />
+                      <div class="w-full bg-amber-500" :style="{ height: `${yearlyBarUnitHeight(item.supipe)}px` }" />
+                    </div>
                   </div>
                   <p class="mt-3 text-[12px] font-bold text-slate-600">{{ item.label }}</p>
                 </div>
@@ -763,13 +841,54 @@ onBeforeUnmount(revokeAsPreviewUrls)
           </div>
           <button type="button" class="text-sm font-semibold text-slate-500 hover:text-slate-700" @click="closeSalesDialog">닫기</button>
         </div>
+        <div class="mt-4 flex gap-1 rounded-xl bg-slate-100 p-1">
+          <button
+            v-for="tab in SALES_CATEGORY_TABS"
+            :key="tab.key"
+            type="button"
+            class="flex-1 rounded-lg px-3 py-2 text-[13px] font-bold transition"
+            :class="activeSalesTab === tab.key ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'"
+            @click="activeSalesTab = tab.key"
+          >
+            {{ tab.label }}
+          </button>
+        </div>
         <div class="mt-4 overflow-x-auto">
           <table class="min-w-full border-separate border-spacing-0 text-sm">
-            <thead><tr class="bg-slate-50 text-slate-600"><th class="border border-slate-200 px-3 py-2 text-center">주차</th><th class="border border-slate-200 px-3 py-2 text-center">매출</th></tr></thead>
+            <thead>
+              <tr class="bg-slate-50 text-slate-600">
+                <th class="border border-slate-200 px-3 py-2 text-center">주차</th>
+                <th class="border border-slate-200 px-3 py-2 text-center">
+                  {{ SALES_CATEGORY_TABS.find((tab) => tab.key === activeSalesTab)?.label }} 매출
+                </th>
+              </tr>
+            </thead>
             <tbody>
-              <tr v-for="row in weeklySalesInputs" :key="row.weekIndex" class="bg-white"><td class="border border-slate-200 px-3 py-2 text-center font-semibold text-slate-900">{{ salesDialogMonthLabel }} {{ getWeekLabel(row.weekIndex) }}</td><td class="border border-slate-200 px-3 py-2"><div class="flex items-center gap-2"><input :value="Number(row.salesAmount || 0).toLocaleString('ko-KR')" type="text" inputmode="numeric" class="flex h-10 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-right text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2" placeholder="0" @input="row.salesAmount = sanitizeMoneyInput($event.target.value)" /><span class="shrink-0 text-xs font-semibold text-slate-500">원</span></div></td></tr>
+              <tr v-for="row in weeklySalesInputs" :key="row.weekIndex" class="bg-white">
+                <td class="border border-slate-200 px-3 py-2 text-center font-semibold text-slate-900">
+                  {{ salesDialogMonthLabel }} {{ getWeekLabel(row.weekIndex) }}
+                </td>
+                <td class="border border-slate-200 px-3 py-2">
+                  <div class="flex items-center gap-2">
+                    <input
+                      :value="Number(row[SALES_CATEGORY_TABS.find((tab) => tab.key === activeSalesTab)?.field] || 0).toLocaleString('ko-KR')"
+                      type="text"
+                      inputmode="numeric"
+                      class="flex h-10 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-right text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                      placeholder="0"
+                      @input="row[SALES_CATEGORY_TABS.find((tab) => tab.key === activeSalesTab)?.field] = sanitizeMoneyInput($event.target.value)"
+                    />
+                    <span class="shrink-0 text-xs font-semibold text-slate-500">원</span>
+                  </div>
+                </td>
+              </tr>
             </tbody>
           </table>
+          <p class="mt-3 text-[12px] font-semibold text-slate-500">
+            주차별 합계: 헤드 {{ formatCurrency(weeklySalesInputs.reduce((s, r) => s + toNumber(r.salesAmountHead), 0)) }}
+            · 나사 {{ formatCurrency(weeklySalesInputs.reduce((s, r) => s + toNumber(r.salesAmountScrew), 0)) }}
+            · 수파이프 {{ formatCurrency(weeklySalesInputs.reduce((s, r) => s + toNumber(r.salesAmountSupipe), 0)) }}
+          </p>
         </div>
         <p v-if="weeklySalesError" class="mt-4 text-sm font-bold text-red-600">{{ weeklySalesError }}</p>
         <div class="mt-5 flex justify-end gap-2">

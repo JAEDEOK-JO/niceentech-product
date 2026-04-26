@@ -56,6 +56,8 @@ const normalizeRow = (row) => ({
   place: String(row.place ?? '').trim(),
   fullName: String(row.full_name ?? '').trim(),
   totalHeadCount: row.total_head_count == null ? '' : String(row.total_head_count),
+  totalScrewCount: row.total_screw_count == null ? '' : String(row.total_screw_count),
+  totalSupipeCount: row.total_supipe_count == null ? '' : String(row.total_supipe_count),
   directorName: String(row.director_name ?? '').trim(),
   directorPhone: formatMobilePhoneNumber(row.director_phone),
   siteAddress: String(row.site_address ?? '').trim(),
@@ -93,7 +95,7 @@ const fetchRows = async () => {
 
   const { data, error } = await supabase
     .from('company_list')
-    .select('id,company,place,full_name,total_head_count,director_name,director_phone,site_address,company_type,business_registration_number,registration_month,start_date,end_date,manager_id,order_confirmed,site_completed')
+    .select('id,company,place,full_name,total_head_count,total_screw_count,total_supipe_count,director_name,director_phone,site_address,company_type,business_registration_number,registration_month,start_date,end_date,manager_id,order_confirmed,site_completed')
     .order('id', { ascending: false })
 
   loading.value = false
@@ -154,6 +156,14 @@ const updateRow = (rowId, field, value) => {
 
   if (field === 'totalHeadCount') {
     target.totalHeadCount = digitsOnly(value)
+    return
+  }
+  if (field === 'totalScrewCount') {
+    target.totalScrewCount = digitsOnly(value)
+    return
+  }
+  if (field === 'totalSupipeCount') {
+    target.totalSupipeCount = digitsOnly(value)
     return
   }
   if (field === 'directorPhone') {
@@ -223,6 +233,8 @@ const saveRow = async (rowId) => {
       place,
       full_name: fullName,
       total_head_count: target.totalHeadCount ? Number(target.totalHeadCount) : null,
+      total_screw_count: target.totalScrewCount ? Number(target.totalScrewCount) : null,
+      total_supipe_count: target.totalSupipeCount ? Number(target.totalSupipeCount) : null,
       director_name: String(target.directorName ?? '').trim() || null,
       director_phone: digitsOnly(target.directorPhone) || null,
       site_address: String(target.siteAddress ?? '').trim() || null,

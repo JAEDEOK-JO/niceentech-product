@@ -7,6 +7,9 @@ import { useProfile } from '@/composables/useProfile'
 import { supabase } from '@/lib/supabase'
 import { normalizeCompanyType } from '@/constants/companyTypes'
 import { isAdminRole, isDesignDepartment } from '@/utils/adminAccess'
+import { useDialog } from '@/composables/useDialog'
+
+const { alert } = useDialog()
 
 const route = useRoute()
 const router = useRouter()
@@ -20,10 +23,12 @@ const saveError = ref('')
 const today = new Date()
 const defaultRegistrationMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
 
-const form = reactive({
+const createEmptyForm = () => ({
   company: '',
   place: '',
   totalHeadCount: '',
+  totalScrewCount: '',
+  totalSupipeCount: '',
   directorName: '',
   directorPhone: '',
   siteAddress: '',
@@ -36,6 +41,12 @@ const form = reactive({
   orderConfirmed: true,
   siteCompleted: false,
 })
+
+const form = reactive(createEmptyForm())
+
+const resetForm = () => {
+  Object.assign(form, createEmptyForm())
+}
 
 const fullNamePreview = computed(() =>
   [form.company, form.place]
@@ -93,6 +104,14 @@ const updateForm = (field, value) => {
   }
   if (field === 'totalHeadCount') {
     form.totalHeadCount = digitsOnly(value)
+    return
+  }
+  if (field === 'totalScrewCount') {
+    form.totalScrewCount = digitsOnly(value)
+    return
+  }
+  if (field === 'totalSupipeCount') {
+    form.totalSupipeCount = digitsOnly(value)
     return
   }
   if (field === 'directorPhone') {
@@ -182,6 +201,8 @@ const submit = async () => {
     place,
     full_name: fullName,
     total_head_count: form.totalHeadCount ? Number(form.totalHeadCount) : null,
+    total_screw_count: form.totalScrewCount ? Number(form.totalScrewCount) : null,
+    total_supipe_count: form.totalSupipeCount ? Number(form.totalSupipeCount) : null,
     director_name: String(form.directorName ?? '').trim() || null,
     director_phone: digitsOnly(form.directorPhone) || null,
     site_address: String(form.siteAddress ?? '').trim() || null,
@@ -201,6 +222,8 @@ const submit = async () => {
     saveError.value = `회사 등록 실패: ${error.message}`
     return
   }
+
+  await alert(`"${fullName}" 회사가 등록되었습니다.`)
 
   if (route.query.returnTo === 'main-register') {
     router.push({
@@ -229,7 +252,7 @@ const submit = async () => {
     return
   }
 
-  router.push({ name: 'main' })
+  resetForm()
 }
 
 onMounted(async () => {
