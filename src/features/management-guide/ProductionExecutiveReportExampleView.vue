@@ -85,17 +85,11 @@ const isDoneStatus = (value) => {
   const text = normalizeText(value)
   return text === '작업완료' || text === '출하완료'
 }
-const isNoneStatus = (value) => normalizeText(value) === '없음'
-const isCompletedOrShipped = (row) =>
-  Boolean(row?.complete) ||
-  Boolean(row?.shipment) ||
-  isDoneStatus(row?.worker_t) ||
-  isDoneStatus(row?.worker_main) ||
-  isDoneStatus(row?.worker_nasa) ||
-  (isNoneStatus(row?.worker_t) &&
-    isNoneStatus(row?.worker_main) &&
-    isNoneStatus(row?.worker_nasa) &&
-    isNoneStatus(row?.worker_welding))
+const isCompletedOrShipped = (row) => Boolean(row?.complete) || Boolean(row?.shipment)
+const isNotWelded = (row) => {
+  if (normalizeText(row?.work_type) === '나사') return false
+  return !isDoneStatus(row?.worker_welding)
+}
 const formatCount = (value, unit = '개') => `${Number(value || 0).toLocaleString('ko-KR')}${unit}`
 const formatCurrency = (value) => `${Number(value || 0).toLocaleString('ko-KR')}원`
 const formatRatio = (value) => `${Number(value || 0).toFixed(2)}%`
@@ -335,6 +329,7 @@ const currentWeekTargetRows = computed(() =>
 )
 const currentWeekRows = computed(() => currentWeekTargetRows.value.filter((row) => isCompletedOrShipped(row)))
 const currentWeekPendingRows = computed(() => currentWeekTargetRows.value.filter((row) => !isCompletedOrShipped(row)))
+const currentWeekNotWeldedRows = computed(() => currentWeekTargetRows.value.filter((row) => isNotWelded(row)))
 
 const buildCategoryCounts = (targetRows) => {
   const head = targetRows.reduce((sum, row) => sum + toNumber(row?.head), 0)
@@ -359,12 +354,14 @@ const previousYearCounts = computed(() => buildCategoryCounts(previousYearRows.v
 const twoYearsAgoYearCounts = computed(() => buildCategoryCounts(twoYearsAgoYearRows.value))
 const currentWeekCounts = computed(() => buildCategoryCounts(currentWeekRows.value))
 const currentWeekPendingCounts = computed(() => buildCategoryCounts(currentWeekPendingRows.value))
+const currentWeekNotWeldedCounts = computed(() => buildCategoryCounts(currentWeekNotWeldedRows.value))
 const currentMonthTotal = computed(() => Object.values(currentCounts.value).reduce((sum, value) => sum + toNumber(value), 0))
 const currentWeekSummaryRows = computed(() =>
   categoryMeta.map((item) => ({
     ...item,
     completedValue: currentWeekCounts.value[item.key],
     pendingValue: currentWeekPendingCounts.value[item.key],
+    notWeldedValue: item.key === 'nasa' ? null : currentWeekNotWeldedCounts.value[item.key],
   })),
 )
 const currentYearSummaryRows = computed(() =>
@@ -650,7 +647,7 @@ onMounted(async () => {
                   <div
                     v-for="item in currentWeekSummaryRows"
                     :key="`${item.key}-week`"
-                    class="grid min-h-[58px] grid-cols-[72px_1fr_1fr] items-center gap-2 rounded-xl bg-white/80 px-3 py-2"
+                    class="grid min-h-[64px] grid-cols-[88px_1fr_1.4fr] items-center gap-3 rounded-xl bg-white/80 px-3 py-2"
                   >
                     <div class="flex items-center gap-2 text-sm font-bold text-slate-900">
                       <span class="h-2.5 w-2.5 rounded-full" :style="{ backgroundColor: item.color }" />
@@ -661,13 +658,21 @@ onMounted(async () => {
                         </div>
                       </div>
                     </div>
-                    <div class="text-center">
-                      <p class="text-[10px] font-bold text-slate-500">완료/출하</p>
-                      <p class="text-sm font-extrabold text-slate-900">{{ formatCount(item.completedValue) }}</p>
+                    <div class="border-r border-slate-200 pr-3 text-center">
+                      <p class="text-[10px] font-bold text-emerald-600">완료/출하</p>
+                      <p class="text-lg font-extrabold leading-tight text-emerald-700">{{ formatCount(item.completedValue) }}</p>
                     </div>
-                    <div class="text-center">
-                      <p class="text-[10px] font-bold text-slate-500">미완료</p>
-                      <p class="text-sm font-extrabold text-slate-900">{{ formatCount(item.pendingValue) }}</p>
+                    <div class="grid grid-cols-2 gap-2 pl-1">
+                      <div class="text-center">
+                        <p class="text-[10px] font-bold text-slate-500">미완료</p>
+                        <p class="text-sm font-bold text-slate-700">{{ formatCount(item.pendingValue) }}</p>
+                      </div>
+                      <div class="text-center">
+                        <p class="text-[10px] font-bold text-amber-600">미용접</p>
+                        <p class="text-sm font-bold text-amber-700">
+                          {{ item.notWeldedValue == null ? '-' : formatCount(item.notWeldedValue) }}
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>

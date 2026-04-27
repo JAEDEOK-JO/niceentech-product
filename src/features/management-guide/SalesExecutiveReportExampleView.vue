@@ -408,8 +408,6 @@ const confirmedScrewTotal = computed(() => confirmedRows.value.reduce((sum, row)
 const confirmedSupipeTotal = computed(() => confirmedRows.value.reduce((sum, row) => sum + toNumber(row?.total_supipe_count), 0))
 const expectedScrewTotal = computed(() => expectedRows.value.reduce((sum, row) => sum + toNumber(row?.total_screw_count), 0))
 const expectedSupipeTotal = computed(() => expectedRows.value.reduce((sum, row) => sum + toNumber(row?.total_supipe_count), 0))
-const baselineScrewTotal = computed(() => salesBaselineRows.value.reduce((sum, row) => sum + toNumber(row?.total_screw_count), 0))
-const baselineSupipeTotal = computed(() => salesBaselineRows.value.reduce((sum, row) => sum + toNumber(row?.total_supipe_count), 0))
 const formatPieces = (value) => `${Number(value || 0).toLocaleString('ko-KR')}개`
 const yearlyMonthlySales = computed(() =>
   Array.from({ length: reportMonth + 1 }, (_, index) => {
@@ -642,13 +640,19 @@ onBeforeUnmount(revokeAsPreviewUrls)
                       {{ item.label }} {{ item.ratioText }}
                     </span>
                   </div>
-                  <div class="flex flex-wrap gap-2">
-                    <span class="rounded-full border border-slate-200 bg-white px-3 py-1 text-center text-slate-700">
-                      나사 {{ formatPieces(baselineScrewTotal) }}
-                    </span>
-                    <span class="rounded-full border border-slate-200 bg-white px-3 py-1 text-center text-slate-700">
-                      수파이프 {{ formatPieces(baselineSupipeTotal) }}
-                    </span>
+                  <div class="grid grid-cols-3 gap-2">
+                    <div class="rounded-2xl border-2 border-emerald-300 bg-white px-3 py-3 text-center shadow-sm">
+                      <p class="text-[12px] font-bold text-emerald-700">신규수주 헤드</p>
+                      <p class="mt-1 text-xl font-extrabold text-slate-900 md:text-2xl">{{ formatPieces(confirmedHeadTotal) }}</p>
+                    </div>
+                    <div class="rounded-2xl border-2 border-sky-300 bg-white px-3 py-3 text-center shadow-sm">
+                      <p class="text-[12px] font-bold text-sky-700">신규수주 나사</p>
+                      <p class="mt-1 text-xl font-extrabold text-slate-900 md:text-2xl">{{ formatPieces(confirmedScrewTotal) }}</p>
+                    </div>
+                    <div class="rounded-2xl border-2 border-amber-300 bg-white px-3 py-3 text-center shadow-sm">
+                      <p class="text-[12px] font-bold text-amber-700">신규수주 수파이프</p>
+                      <p class="mt-1 text-xl font-extrabold text-slate-900 md:text-2xl">{{ formatPieces(confirmedSupipeTotal) }}</p>
+                    </div>
                   </div>
                 </div>
               </div>
