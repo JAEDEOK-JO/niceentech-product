@@ -23,7 +23,10 @@
       "Bash(npm uninstall *)",
       "mcp__supabase__list_edge_functions",
       "mcp__supabase__get_logs",
-      "Bash(grep -E \"\\\\.\\(sql|ts|js\\)$\")"
+      "Bash(grep -E \"\\\\.\\(sql|ts|js\\)$\")",
+      "Bash(rustc --version)",
+      "Bash(cargo --version)",
+      "Read(//c/Windows/System32/**)"
     ]
   }
 }

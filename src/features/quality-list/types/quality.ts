@@ -1,6 +1,6 @@
 export const LOT_ROUNDS = ['1차', '2차', '3차', '4차'] as const
-export const LOT_TYPES = ['백관', '스케쥴', '서스', 'STS/SU'] as const
-export const LOT_INFO_TYPES = ['비확관', '백관', '스케쥴', '서스', 'STS/SU'] as const
+export const LOT_TYPES = ['백관', '스케쥴', '서스', '수파이프'] as const
+export const LOT_INFO_TYPES = ['비확관', '백관', '스케쥴', '서스', '수파이프'] as const
 
 export type LotRound = (typeof LOT_ROUNDS)[number]
 export type LotType = (typeof LOT_TYPES)[number]
