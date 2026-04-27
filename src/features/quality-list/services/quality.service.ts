@@ -18,7 +18,7 @@ const LOT_META: Record<
   백관: { lotKsd: 'KSD 3507', lotCertification: '분기 25-36', lotKsdNum: '' },
   스케쥴: { lotKsd: 'KSD 3562', lotCertification: '분기 12-9', lotKsdNum: 'sch40' },
   서스: { lotKsd: 'KSD 3576', lotCertification: '분기 11-39', lotKsdNum: '' },
-  수파이프: { lotKsd: 'KSD 3595', lotCertification: '분기 23-2', lotKsdNum: '' },
+  STS/SU: { lotKsd: 'KSD 3595', lotCertification: '분기 23-2', lotKsdNum: '' },
 }
 
 const MAIN_FIELDS = ['a32', 'a40', 'a50', 'a65'] as const

@@ -17,7 +17,7 @@ const MONTHLY_TARGET = 600000000
 const SALES_CATEGORY_TABS = [
   { key: 'head', label: '헤드', field: 'salesAmountHead', dbField: 'sales_amount_head' },
   { key: 'screw', label: '나사', field: 'salesAmountScrew', dbField: 'sales_amount_screw' },
-  { key: 'supipe', label: '수파이프', field: 'salesAmountSupipe', dbField: 'sales_amount_supipe' },
+  { key: 'supipe', label: 'STS/SU', field: 'salesAmountSupipe', dbField: 'sales_amount_supipe' },
 ]
 const SALES_REPORT_BASELINE_START = '2026-01-01'
 const emit = defineEmits(['go-back'])
@@ -472,8 +472,8 @@ const asTotalCost = computed(() => asRows.value.reduce((sum, row) => sum + toNum
 const confirmedCombinedTotal = computed(() => confirmedHeadTotal.value + confirmedScrewTotal.value + confirmedSupipeTotal.value)
 const expectedCombinedTotal = computed(() => expectedHeadTotal.value + expectedScrewTotal.value + expectedSupipeTotal.value)
 const summaryCards = computed(() => [
-  { label: '신규 수주', value: formatPieces(confirmedCombinedTotal.value), note: `헤드 ${formatPieces(confirmedHeadTotal.value)} · 나사 ${formatPieces(confirmedScrewTotal.value)} · 수파이프 ${formatPieces(confirmedSupipeTotal.value)}`, tone: 'bg-emerald-50 border-emerald-200 text-emerald-800', clickable: false },
-  { label: '신규 수주 예정', value: formatPieces(expectedCombinedTotal.value), note: `헤드 ${formatPieces(expectedHeadTotal.value)} · 나사 ${formatPieces(expectedScrewTotal.value)} · 수파이프 ${formatPieces(expectedSupipeTotal.value)}`, tone: 'bg-indigo-50 border-indigo-200 text-indigo-800', clickable: false },
+  { label: '신규 수주', value: formatPieces(confirmedCombinedTotal.value), note: `헤드 ${formatPieces(confirmedHeadTotal.value)} · 나사 ${formatPieces(confirmedScrewTotal.value)} · STS/SU ${formatPieces(confirmedSupipeTotal.value)}`, tone: 'bg-emerald-50 border-emerald-200 text-emerald-800', clickable: false },
+  { label: '신규 수주 예정', value: formatPieces(expectedCombinedTotal.value), note: `헤드 ${formatPieces(expectedHeadTotal.value)} · 나사 ${formatPieces(expectedScrewTotal.value)} · STS/SU ${formatPieces(expectedSupipeTotal.value)}`, tone: 'bg-indigo-50 border-indigo-200 text-indigo-800', clickable: false },
   { label: 'AS 발생 건수', value: `${asRows.value.length}건`, note: `${reportMonthLabel} 접수 누계`, tone: 'bg-rose-50 border-rose-200 text-rose-800', clickable: true },
   { label: 'AS 발생 비용', value: formatCurrency(asTotalCost.value), note: `${reportMonthLabel} 접수 비용 합계`, tone: 'bg-amber-50 border-amber-200 text-amber-800', clickable: false },
 ])
@@ -650,19 +650,19 @@ onBeforeUnmount(revokeAsPreviewUrls)
                       <p class="mt-1 text-xl font-extrabold text-slate-900 md:text-2xl">{{ formatPieces(confirmedScrewTotal) }}</p>
                     </div>
                     <div class="rounded-2xl border-2 border-amber-300 bg-white px-3 py-3 text-center shadow-sm">
-                      <p class="text-[12px] font-bold text-amber-700">신규수주 수파이프</p>
+                      <p class="text-[12px] font-bold text-amber-700">신규수주 STS/SU</p>
                       <p class="mt-1 text-xl font-extrabold text-slate-900 md:text-2xl">{{ formatPieces(confirmedSupipeTotal) }}</p>
                     </div>
                   </div>
                 </div>
               </div>
               <div class="rounded-3xl border border-white bg-white px-5 py-4 text-center shadow-sm md:w-[380px] lg:w-[420px] md:self-stretch">
-                <p class="text-[12px] font-bold text-emerald-700">매출 진행률 {{ currentSalesWeekLabel }} · 헤드+나사+수파이프 합산</p>
+                <p class="text-[12px] font-bold text-emerald-700">매출 진행률 {{ currentSalesWeekLabel }} · 헤드+나사+STS/SU 합산</p>
                 <p class="mt-2 text-3xl font-extrabold text-slate-900">{{ formatCurrency(currentSalesWeekBreakdown.total) }}</p>
                 <p class="mt-1 text-[11px] font-semibold text-slate-500">
                   헤드 {{ formatCompactSales(currentSalesWeekBreakdown.head) }}
                   · 나사 {{ formatCompactSales(currentSalesWeekBreakdown.screw) }}
-                  · 수파이프 {{ formatCompactSales(currentSalesWeekBreakdown.supipe) }}
+                  · STS/SU {{ formatCompactSales(currentSalesWeekBreakdown.supipe) }}
                 </p>
                 <div class="mt-4 w-full text-left">
                   <div class="mb-2 flex items-center justify-between text-[12px] font-semibold text-slate-700"><span>월 누적 매출</span><span>{{ formatCurrency(weeklySalesBreakdown.total) }}</span></div>
@@ -695,7 +695,7 @@ onBeforeUnmount(revokeAsPreviewUrls)
               <div class="mb-3 flex flex-wrap items-center gap-3 text-[11px] font-semibold text-slate-600">
                 <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm bg-emerald-500" />헤드</span>
                 <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm bg-sky-500" />나사</span>
-                <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm bg-amber-500" />수파이프</span>
+                <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm bg-amber-500" />STS/SU</span>
               </div>
               <div class="flex h-[240px] items-end gap-3 overflow-x-auto rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
                 <div
@@ -891,7 +891,7 @@ onBeforeUnmount(revokeAsPreviewUrls)
           <p class="mt-3 text-[12px] font-semibold text-slate-500">
             주차별 합계: 헤드 {{ formatCurrency(weeklySalesInputs.reduce((s, r) => s + toNumber(r.salesAmountHead), 0)) }}
             · 나사 {{ formatCurrency(weeklySalesInputs.reduce((s, r) => s + toNumber(r.salesAmountScrew), 0)) }}
-            · 수파이프 {{ formatCurrency(weeklySalesInputs.reduce((s, r) => s + toNumber(r.salesAmountSupipe), 0)) }}
+            · STS/SU {{ formatCurrency(weeklySalesInputs.reduce((s, r) => s + toNumber(r.salesAmountSupipe), 0)) }}
           </p>
         </div>
         <p v-if="weeklySalesError" class="mt-4 text-sm font-bold text-red-600">{{ weeklySalesError }}</p>

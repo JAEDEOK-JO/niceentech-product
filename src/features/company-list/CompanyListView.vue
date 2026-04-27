@@ -263,7 +263,7 @@ const groupedByConsonant = computed(() => {
                   />
                 </div>
                 <div>
-                  <p class="mb-2 text-sm font-bold text-slate-700">총수파이프수</p>
+                  <p class="mb-2 text-sm font-bold text-slate-700">총STS/SU수</p>
                   <input
                     class="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
                     type="text"
