@@ -17,6 +17,7 @@ import AttendanceSummaryBoard from './AttendanceSummaryBoard.vue'
 import AttendanceSummaryDetailModal from './AttendanceSummaryDetailModal.vue'
 import AttendanceDetailModal from './AttendanceDetailModal.vue'
 import AttendanceRequestSignatureDialog from './AttendanceRequestSignatureDialog.vue'
+import AttendancePasswordKeypad from './AttendancePasswordKeypad.vue'
 
 const props = defineProps<{
   items: AttendanceRequest[]
@@ -45,6 +46,7 @@ const props = defineProps<{
   formLoading: boolean
   formData: AttendanceFormState
   isEditForm: boolean
+  hideFormEmployeeSelector: boolean
   toast: { show: boolean; message: string; type: 'success' | 'error' }
   rejectDialogVisible: boolean
   rejectTarget: AttendanceRequest | null
@@ -83,12 +85,48 @@ const emit = defineEmits<{
   (e: 'createEmployee', data: EmployeeFormData): void
   (e: 'updateEmployee', payload: { id: number; data: EmployeeFormData }): void
   (e: 'deleteEmployee', id: number): void
+  (e: 'workTimeEntry'): void
+  (e: 'openFormForEmployee', employee: Employee): void
 }>()
+
+// ─── 비밀번호 키패드 상태 ─────────────────────────────────────────────────────
+const keypadEmployee = ref<Employee | null>(null)
+
+function openKeypad(emp: Employee) {
+  keypadEmployee.value = emp
+}
+
+function closeKeypad() {
+  keypadEmployee.value = null
+}
+
+function onKeypadSuccess(emp: Employee) {
+  keypadEmployee.value = null
+  emit('openFormForEmployee', emp)
+}
 
 // 관리자 탭
 const activeTab = ref<'requests' | 'employees' | 'summary' | 'analysis' | 'approval' | 'daepyo' | 'gyeongyu'>('requests')
 const REQUESTS_PER_PAGE = 10
 const requestsPage = ref(1)
+
+// ─── 일반 사용자: 직원 명단 부서 선택 ──────────────────────────────────────────
+const DEPT_ORDER = ['생산부', '용접부', '나사부', 'CNC']
+const directoryDepartments = computed(() => {
+  const set = new Set(props.employees.map((e) => e.department).filter(Boolean))
+  const ordered = DEPT_ORDER.filter((d) => set.has(d))
+  const extras = [...set].filter((d) => !DEPT_ORDER.includes(d)).sort()
+  return [...ordered, ...extras]
+})
+const selectedDirectoryDept = ref('')
+const directoryEmployees = computed(() =>
+  selectedDirectoryDept.value
+    ? props.employees
+        .filter((e) => e.department === selectedDirectoryDept.value)
+        .slice()
+        .sort((a, b) => a.name.localeCompare(b.name, 'ko'))
+    : [],
+)
 
 
 const statusBorder = (status: string) => {
@@ -153,7 +191,7 @@ watch(
           <h1 class="text-2xl font-extrabold text-slate-900">생산부 근태관리</h1>
           <p class="mt-1 text-sm text-slate-500">{{ thisMonthLabel }} 휴가 신청 및 근태 현황</p>
         </div>
-        <div v-if="activeTab === 'requests'" class="flex flex-wrap items-center gap-2">
+        <div v-if="isAdmin && activeTab === 'requests'" class="flex flex-wrap items-center gap-2">
           <button
             type="button"
             class="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-slate-700"
@@ -164,8 +202,8 @@ watch(
         </div>
       </div>
 
-      <!-- 통계 카드 4개 -->
-      <div class="mb-7 grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <!-- 통계 카드 4개 (관리자만) -->
+      <div v-if="isAdmin" class="mb-7 grid grid-cols-2 gap-4 sm:grid-cols-4">
         <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <p class="text-xs font-medium text-slate-400">총 직원</p>
           <p class="mt-2 text-3xl font-extrabold text-slate-900">
@@ -383,8 +421,99 @@ watch(
         </div>
       </template>
 
-      <!-- ═══ 신청 현황 탭 ═══ -->
-      <template v-if="!isAdmin || activeTab === 'requests'">
+      <!-- ═══ 일반 사용자 뷰 ═══ -->
+      <template v-if="!isAdmin">
+        <!-- 내 연차 현황 -->
+        <div v-if="quota" class="mb-5 rounded-2xl border border-slate-200 bg-white p-4">
+          <div class="mb-2 flex items-center justify-between text-sm">
+            <span class="font-bold text-slate-700">내 연차 현황</span>
+            <span class="text-slate-500">{{ quota.usedDays }} / {{ quota.totalDays }}일 사용</span>
+          </div>
+          <div class="h-2 w-full overflow-hidden rounded-full bg-slate-100">
+            <div
+              class="h-full rounded-full bg-emerald-500 transition-all"
+              :style="{ width: `${quota.totalDays > 0 ? Math.min(100, (quota.usedDays / quota.totalDays) * 100) : 0}%` }"
+            />
+          </div>
+          <p class="mt-1.5 text-right text-xs text-slate-400">잔여 {{ quota.remainingDays }}일</p>
+        </div>
+
+        <!-- 액션 버튼 2개 -->
+        <div class="mb-6 grid grid-cols-2 gap-3">
+          <button
+            type="button"
+            class="rounded-2xl bg-slate-900 px-5 py-4 text-base font-extrabold text-white shadow-sm transition-colors hover:bg-slate-700"
+            @click="emit('openForm')"
+          >
+            휴가 신청
+          </button>
+          <button
+            type="button"
+            class="rounded-2xl bg-emerald-600 px-5 py-4 text-base font-extrabold text-white shadow-sm transition-colors hover:bg-emerald-500"
+            @click="emit('workTimeEntry')"
+          >
+            오늘 근무시간 입력
+          </button>
+        </div>
+
+        <!-- 직원 명단 -->
+        <div class="rounded-2xl border border-slate-200 bg-white p-5">
+          <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <h2 class="text-base font-extrabold text-slate-800">
+              {{ selectedDirectoryDept ? `${selectedDirectoryDept} 직원 명단` : '직원 명단' }}
+            </h2>
+            <button
+              v-if="selectedDirectoryDept"
+              type="button"
+              class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
+              @click="selectedDirectoryDept = ''"
+            >
+              ← 돌아가기
+            </button>
+          </div>
+
+          <!-- 부서 선택 (초기 화면) -->
+          <div v-if="!selectedDirectoryDept" class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <button
+              v-for="d in directoryDepartments"
+              :key="d"
+              type="button"
+              class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-8 text-base font-extrabold text-slate-800 transition-colors hover:bg-slate-900 hover:text-white"
+              @click="selectedDirectoryDept = d"
+            >
+              {{ d }}
+            </button>
+          </div>
+
+          <!-- 직원 카드 (부서 선택 후) -->
+          <div v-else-if="directoryEmployees.length === 0" class="py-12 text-center text-sm text-slate-400">
+            해당 부서에 등록된 직원이 없습니다.
+          </div>
+          <div v-else class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            <button
+              v-for="emp in directoryEmployees"
+              :key="emp.id"
+              type="button"
+              class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-4 text-center transition-colors hover:border-slate-900 hover:bg-white"
+              @click="openKeypad(emp)"
+            >
+              <p class="truncate text-sm font-extrabold text-slate-900">{{ emp.name }}</p>
+              <p class="mt-1 text-[11px] font-bold text-slate-500">{{ emp.assignedDepartment || emp.department || '-' }}</p>
+            </button>
+          </div>
+        </div>
+      </template>
+
+      <!-- 비밀번호 키패드 -->
+      <AttendancePasswordKeypad
+        v-if="keypadEmployee"
+        :employee="keypadEmployee"
+        @success="onKeypadSuccess"
+        @cancel="closeKeypad"
+      />
+
+      <!-- ═══ 신청 현황 탭 (관리자 전용) ═══ -->
+      <template v-if="isAdmin && activeTab === 'requests'">
 
         <!-- 필터 -->
         <div class="mb-5">
@@ -470,82 +599,6 @@ watch(
             </div>
           </div>
 
-          <!-- ── 일반 사용자 뷰: 전체 신청 리스트 (읽기 전용 + 본인 것만 액션) ── -->
-          <div v-else>
-            <!-- 내 연차 잔여 바 -->
-            <div v-if="quota" class="mb-5 rounded-2xl border border-slate-200 bg-white p-4">
-              <div class="mb-2 flex items-center justify-between text-sm">
-                <span class="font-bold text-slate-700">내 연차 현황</span>
-                <span class="text-slate-500">{{ quota.usedDays }} / {{ quota.totalDays }}일 사용</span>
-              </div>
-              <div class="h-2 w-full overflow-hidden rounded-full bg-slate-100">
-                <div
-                  class="h-full rounded-full bg-emerald-500 transition-all"
-                  :style="{ width: `${quota.totalDays > 0 ? Math.min(100, (quota.usedDays / quota.totalDays) * 100) : 0}%` }"
-                />
-              </div>
-              <p class="mt-1.5 text-right text-xs text-slate-400">잔여 {{ quota.remainingDays }}일</p>
-            </div>
-
-            <!-- 전체 신청 목록 -->
-            <div v-if="items.length === 0" class="rounded-xl border border-dashed border-slate-200 bg-white py-14 text-center text-sm text-slate-400">
-              신청 내역이 없습니다.
-            </div>
-            <div v-else class="space-y-2">
-              <div
-                v-for="item in pagedRequestItems"
-                :key="item.id"
-                class="cursor-pointer rounded-xl border border-l-4 border-slate-200 bg-white px-4 py-3 transition-shadow hover:shadow-sm"
-                :class="statusBorder(item.status)"
-                @click="emit('openDetail', item)"
-              >
-                <div class="flex flex-wrap items-center justify-between gap-3">
-                  <div class="min-w-0 flex-1">
-                    <div class="flex flex-wrap items-center gap-2">
-                      <span class="font-bold text-slate-900">{{ item.userName }}</span>
-                      <span v-if="item.userId === currentUserId" class="rounded-full bg-slate-900 px-2 py-0.5 text-xs font-bold text-white">나</span>
-                      <span class="rounded-full px-2 py-0.5 text-xs font-bold" :class="leaveTypeBadge(item.leaveType)">{{ item.leaveType }}</span>
-                      <span class="text-xs font-bold text-slate-700">{{ item.daysCount }}일</span>
-                    </div>
-                    <p class="mt-1 text-xs text-slate-500">
-                      {{ formatPeriod(item) }}
-                      <span v-if="item.status === '승인' && item.approvedBy"> · 승인: {{ item.approvedBy }}</span>
-                      <span v-else-if="item.status === '반려' && item.rejectReason"> · 반려: {{ item.rejectReason }}</span>
-                      <span v-if="item.reason"> · {{ item.reason }}</span>
-                    </p>
-                  </div>
-
-                  <!-- 상태 + 본인 액션 -->
-                  <div class="flex shrink-0 items-center gap-2" @click.stop>
-                    <span class="rounded-full px-2.5 py-0.5 text-xs font-bold" :class="statusBadge(item.status)">{{ item.status }}</span>
-                    <template v-if="item.userId === currentUserId && item.status === '대기중'">
-                      <button type="button" class="rounded border border-slate-200 px-2 py-1 text-xs font-bold text-slate-600 hover:bg-slate-50" @click="emit('edit', item)">수정</button>
-                      <button type="button" class="rounded border border-red-200 px-2 py-1 text-xs font-bold text-red-500 hover:bg-red-50" @click="emit('delete', item)">취소</button>
-                    </template>
-                  </div>
-                </div>
-              </div>
-              <div class="flex items-center justify-center gap-2 pt-2">
-                <button
-                  type="button"
-                  class="rounded border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-40"
-                  :disabled="!canGoPrevPage"
-                  @click="moveRequestPage(-1)"
-                >
-                  이전
-                </button>
-                <span class="text-xs font-semibold text-slate-500">{{ requestsPage }} / {{ totalRequestPages }}</span>
-                <button
-                  type="button"
-                  class="rounded border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-40"
-                  :disabled="!canGoNextPage"
-                  @click="moveRequestPage(1)"
-                >
-                  다음
-                </button>
-              </div>
-            </div>
-          </div>
         </template>
       </template>
     </div>
@@ -555,7 +608,6 @@ watch(
       <div
         v-if="formVisible"
         class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
-        @click.self="emit('closeForm')"
       >
         <div class="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
           <h2 class="mb-5 text-lg font-extrabold text-slate-900">
@@ -567,6 +619,7 @@ watch(
             :loading="formLoading"
             :is-edit="isEditForm"
             :employees="employees"
+            :hide-employee-selector="hideFormEmployeeSelector"
             @update:model-value="emit('update:formData', $event)"
             @submit="emit('submitForm')"
             @cancel="emit('closeForm')"

@@ -39,6 +39,7 @@ const emit = defineEmits([
   'upload-drawing-files',
   'delete-drawing-file',
   'welding-long-press',
+  'nasa-long-press',
   'welding-start',
 ])
 
@@ -90,6 +91,11 @@ const selectWeldingInspector = (inspector) => {
   if (!weldingInspectorDialogRow.value) return
   emit('welding-start', { row: weldingInspectorDialogRow.value, inspector })
   closeWeldingInspectorDialog()
+}
+const isNasaWorkRow = (row) => String(row?.work_type ?? '').trim() === '나사'
+const canControlNasaWork = () => {
+  const workMan = String(props.currentWorkMan ?? '').trim()
+  return workMan === '무용접' || workMan === '나사' || isAdminRole(props.currentRole)
 }
 
 const isDrawingDialogOpen = ref(false)
@@ -380,6 +386,14 @@ const handleCellClick = ({ row, columnKey }) => {
     emit('cell-action', { row, columnKey })
     return
   }
+  if (columnKey === 'worker_nasa' && isNasaWorkRow(row)) {
+    if (!canControlNasaWork()) {
+      showSnackbar('무용접만 작업할 수 있습니다.')
+      return
+    }
+    emit('cell-action', { row, columnKey })
+    return
+  }
   const workerColumns = ['worker_t', 'worker_nasa', 'worker_main']
   if (workerColumns.includes(columnKey)) {
     if (row?.shipment) {
@@ -397,6 +411,19 @@ const handleCellClick = ({ row, columnKey }) => {
   }
 
   emit('cell-action', { row, columnKey })
+}
+const handleCellLongPress = ({ row, columnKey }) => {
+  if (columnKey === 'worker_welding') {
+    emit('welding-long-press', row)
+    return
+  }
+  if (columnKey === 'worker_nasa' && isNasaWorkRow(row)) {
+    if (!canControlNasaWork()) {
+      showSnackbar('무용접만 작업할 수 있습니다.')
+      return
+    }
+    emit('nasa-long-press', row)
+  }
 }
 
 const closeShipmentConfirm = () => {
@@ -699,7 +726,7 @@ const selectDrawingFile = (file) => {
           :group-index="groupIndex"
           :overall-totals="overallTotals"
           @cell-click="handleCellClick"
-          @cell-long-press="({ row, columnKey }) => columnKey === 'worker_welding' && emit('welding-long-press', row)"
+          @cell-long-press="handleCellLongPress"
           @open-row-menu="openRowMenu"
         />
       </div>

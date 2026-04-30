@@ -26,6 +26,8 @@ const emit = defineEmits(['open-row-menu', 'cell-click', 'cell-long-press'])
 const LONG_PRESS_MS = 700
 let longPressTimer = null
 let longPressTriggered = false
+const longPressColumns = ['worker_welding', 'worker_nasa']
+const isLongPressColumn = (columnKey) => longPressColumns.includes(columnKey)
 
 const onCellPointerDown = (row, columnKey) => {
   longPressTriggered = false
@@ -192,13 +194,13 @@ const onCellClick = (row, columnKey) => {
                 v-else-if="clickableColumns.includes(column.key)"
                 type="button"
                 class="flex h-full w-full items-center justify-center bg-transparent p-0 text-inherit"
-                @click="column.key === 'worker_welding' ? onCellClick(row, column.key) : emit('cell-click', { row, columnKey: column.key })"
-                @mousedown="column.key === 'worker_welding' ? onCellPointerDown(row, column.key) : undefined"
-                @mouseup="column.key === 'worker_welding' ? onCellPointerUp() : undefined"
-                @mouseleave="column.key === 'worker_welding' ? onCellPointerUp() : undefined"
-                @touchstart="column.key === 'worker_welding' ? onCellPointerDown(row, column.key) : undefined"
-                @touchend="column.key === 'worker_welding' ? onCellPointerUp() : undefined"
-                @touchcancel="column.key === 'worker_welding' ? onCellPointerUp() : undefined"
+                @click="isLongPressColumn(column.key) ? onCellClick(row, column.key) : emit('cell-click', { row, columnKey: column.key })"
+                @mousedown="isLongPressColumn(column.key) ? onCellPointerDown(row, column.key) : undefined"
+                @mouseup="isLongPressColumn(column.key) ? onCellPointerUp() : undefined"
+                @mouseleave="isLongPressColumn(column.key) ? onCellPointerUp() : undefined"
+                @touchstart="isLongPressColumn(column.key) ? onCellPointerDown(row, column.key) : undefined"
+                @touchend="isLongPressColumn(column.key) ? onCellPointerUp() : undefined"
+                @touchcancel="isLongPressColumn(column.key) ? onCellPointerUp() : undefined"
               >
                 <span class="cell-fixed-text block w-full" :class="isStatusCompactColumn(column.key) ? 'text-center text-[11px] font-bold' : ''">{{ getCellText(row, column.key) }}</span>
               </button>

@@ -168,6 +168,7 @@ const formatWorkerDate = (date = new Date()) => {
   const day = String(date.getDate()).padStart(2, '0')
   return `${year}.${month}.${day}`
 }
+const isNasaWorkRow = (row) => String(row?.work_type ?? '').trim() === '나사'
 
 const handleWeldingStart = async ({ row, inspector }) => {
   if (!row?.id) return
@@ -212,9 +213,45 @@ const handleWeldingLongPress = async (row) => {
   })
   await supabase.from('welding_inspections').delete().eq('product_list_id', row.id)
 }
+const handleNasaLongPress = async (row) => {
+  if (!row?.id || !isNasaWorkRow(row)) return
+  await updatePlanRowFields({
+    rowId: row.id,
+    updates: {
+      nasa_status: '없음',
+      worker_nasa: '없음',
+      worker_nasa_time: '',
+      worker_nasa_time_final: '',
+      nasa_started_on: null,
+      nasa_completed_on: null,
+    },
+  })
+}
 
 const handleCellAction = async ({ row, columnKey }) => {
   if (!row?.id || !columnKey) return
+
+  if (columnKey === 'worker_nasa' && isNasaWorkRow(row)) {
+    const current = String(row.nasa_status ?? '').trim()
+    let next = ''
+    const updates = {}
+    if (!current || current === '없음' || current === '작업전') {
+      next = '작업중'
+      updates.nasa_started_on = formatIsoDate()
+      updates.nasa_completed_on = null
+      updates.worker_nasa_time = ''
+    } else if (current === '작업중') {
+      next = '작업완료'
+      updates.nasa_completed_on = formatIsoDate()
+      updates.worker_nasa_time = formatWorkerDate()
+    } else {
+      return
+    }
+    updates.nasa_status = next
+    updates.worker_nasa = next
+    await updatePlanRowFields({ rowId: row.id, updates })
+    return
+  }
 
   if (columnKey === 'worker_welding') {
     const current = String(row.welding_status ?? '').trim()
@@ -378,6 +415,7 @@ watch(
     @cell-action="handleCellAction"
     @welding-start="handleWeldingStart"
     @welding-long-press="handleWeldingLongPress"
+    @nasa-long-press="handleNasaLongPress"
     @move-test-date="handleMoveTestDate"
     @load-drawing-files="handleLoadDrawingFiles"
     @upload-drawing-files="handleUploadDrawingFiles"

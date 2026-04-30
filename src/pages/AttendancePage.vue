@@ -114,6 +114,7 @@ const formLoading = ref(false)
 const isEditForm = ref(false)
 const editTargetId = ref<number | null>(null)
 const formData = ref<AttendanceFormState>(createEmptyForm())
+const hideFormEmployeeSelector = ref(false)
 
 // ─── 서명 다이얼로그 상태 ──────────────────────────────────────────────────────
 const signatureRequestVisible = ref(false)
@@ -294,6 +295,19 @@ function openForm() {
   formData.value = createEmptyForm()
   isEditForm.value = false
   editTargetId.value = null
+  hideFormEmployeeSelector.value = false
+  formVisible.value = true
+}
+
+function openFormForEmployee(emp: Employee) {
+  formData.value = {
+    ...createEmptyForm(),
+    selectedDepartment: emp.department,
+    selectedEmployeeName: emp.name,
+  }
+  isEditForm.value = false
+  editTargetId.value = null
+  hideFormEmployeeSelector.value = true
   formVisible.value = true
 }
 
@@ -313,6 +327,7 @@ function openEditForm(item: AttendanceRequest) {
   }
   isEditForm.value = true
   editTargetId.value = item.id
+  hideFormEmployeeSelector.value = false
   formVisible.value = true
 }
 
@@ -403,6 +418,7 @@ function handleAdminEdit(item: AttendanceRequest) {
   }
   isEditForm.value = true
   editTargetId.value = item.id
+  hideFormEmployeeSelector.value = false
   formVisible.value = true
 }
 
@@ -552,6 +568,7 @@ async function handleDeleteEmployee(id: number) {
     :form-loading="formLoading"
     :form-data="formData"
     :is-edit-form="isEditForm"
+    :hide-form-employee-selector="hideFormEmployeeSelector"
     :toast="toast"
     :reject-dialog-visible="rejectDialogVisible"
     :reject-target="rejectTarget"
@@ -587,5 +604,7 @@ async function handleDeleteEmployee(id: number) {
     @create-employee="handleCreateEmployee"
     @update-employee="handleUpdateEmployee"
     @delete-employee="handleDeleteEmployee"
+    @work-time-entry="showToast('준비중입니다.')"
+    @open-form-for-employee="openFormForEmployee"
   />
 </template>

@@ -26,7 +26,20 @@
       "Bash(grep -E \"\\\\.\\(sql|ts|js\\)$\")",
       "Bash(rustc --version)",
       "Bash(cargo --version)",
-      "Read(//c/Windows/System32/**)"
+      "Read(//c/Windows/System32/**)",
+      "Read(//c/theplace//**)",
+      "Read(//c/theplace/aion2-meter//**)",
+      "Read(//c/Users/nicee/.cargo/bin//**)",
+      "Read(//c/Users/nicee/.rustup//**)",
+      "Bash(/c/Users/nicee/.cargo/bin/rustc.exe --version)",
+      "Bash(/c/Users/nicee/.cargo/bin/cargo.exe --version)",
+      "Bash(export PATH=\"/c/Users/nicee/.cargo/bin:$PATH\")",
+      "Bash(cargo build *)",
+      "Bash(\"/c/theplace/aion2-meter/target/release/aion2-recon.exe\" --help)",
+      "Bash(\"/c/theplace/aion2-meter/target/release/aion2-recon.exe\" interfaces *)",
+      "Bash(/c/theplace/aion2-meter/target/release/aion2-recon.exe find-aion2 *)",
+      "Bash(\"/c/theplace/aion2-meter/target/release/aion2-recon.exe\" find-aion2 *)",
+      "Bash(cmd.exe //c \"C:\\\\theplace\\\\aion2-meter\\\\1_인터페이스확인.bat\")"
     ]
   }
 }

@@ -447,6 +447,7 @@ export interface EmployeeFormData {
   hireDate: string
   homeLeaveStart: string
   homeLeaveEnd: string
+  password: number
 }
 
 export async function createEmployee(data: EmployeeFormData): Promise<Employee> {
@@ -465,6 +466,7 @@ export async function createEmployee(data: EmployeeFormData): Promise<Employee> 
       hire_date: data.hireDate || null,
       home_leave_start: data.homeLeaveStart || null,
       home_leave_end: data.homeLeaveEnd || null,
+      password: data.password,
     })
     .select()
     .single()
@@ -500,6 +502,7 @@ export async function updateEmployee(id: number, data: EmployeeFormData): Promis
       hire_date: data.hireDate || null,
       home_leave_start: data.homeLeaveStart || null,
       home_leave_end: data.homeLeaveEnd || null,
+      password: data.password,
     })
     .eq('id', id)
 

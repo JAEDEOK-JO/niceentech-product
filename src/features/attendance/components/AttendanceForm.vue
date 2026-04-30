@@ -7,6 +7,7 @@ const props = defineProps<{
   loading: boolean
   isEdit: boolean
   employees: Employee[]
+  hideEmployeeSelector?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -91,7 +92,7 @@ function onEndDateChange(date: string) {
   <form class="space-y-5" @submit.prevent="emit('submit')">
 
     <!-- 부서 선택 -->
-    <div class="grid grid-cols-2 gap-4">
+    <div v-if="!hideEmployeeSelector" class="grid grid-cols-2 gap-4">
       <div>
         <label class="mb-1.5 block text-sm font-bold text-slate-700">부서</label>
         <select

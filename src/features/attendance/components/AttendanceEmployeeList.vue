@@ -76,6 +76,7 @@ const emptyForm = (): EmployeeFormData => ({
   hireDate: '',
   homeLeaveStart: '',
   homeLeaveEnd: '',
+  password: 0,
 })
 
 const isValidEmployeeCode = (code: string) => /^\d{8}$/.test(code.trim())
@@ -103,6 +104,7 @@ function openEdit(emp: Employee) {
     hireDate: emp.hireDate ?? '',
     homeLeaveStart: emp.homeLeaveStart ?? '',
     homeLeaveEnd: emp.homeLeaveEnd ?? '',
+    password: emp.password,
   }
   isEditMode.value = true
   editTargetId.value = emp.id
@@ -125,11 +127,13 @@ function submitForm() {
     0,
     Math.floor(Number(form.value.remainingAnnualLeaveCount || 0)),
   )
+  const normalizedPassword = Math.max(0, Math.floor(Number(form.value.password || 0)))
   const payload: EmployeeFormData = {
     ...form.value,
     employeeCode: trimmedCode,
     hourlyWage: normalizedHourlyWage,
     remainingAnnualLeaveCount: normalizedAnnualLeaveCount,
+    password: normalizedPassword,
   }
   if (isEditMode.value && editTargetId.value !== null) {
     emit('update', { id: editTargetId.value, data: payload })
@@ -383,14 +387,28 @@ const nationalityClass = (n: string) => {
               </select>
             </div>
 
-            <!-- 입사일 -->
-            <div>
-              <label class="mb-1 block text-xs font-bold text-slate-600">입사일</label>
-              <input
-                v-model="form.hireDate"
-                type="date"
-                class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
-              />
+            <!-- 입사일 + 비밀번호 -->
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="mb-1 block text-xs font-bold text-slate-600">입사일</label>
+                <input
+                  v-model="form.hireDate"
+                  type="date"
+                  class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+                />
+              </div>
+              <div>
+                <label class="mb-1 block text-xs font-bold text-slate-600">비밀번호 (숫자)</label>
+                <input
+                  v-model.number="form.password"
+                  type="number"
+                  min="0"
+                  step="1"
+                  inputmode="numeric"
+                  placeholder="0"
+                  class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-slate-400"
+                />
+              </div>
             </div>
 
             <!-- 귀국휴가 기간 -->

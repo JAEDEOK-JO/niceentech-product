@@ -133,6 +133,7 @@ export interface Employee {
   hireDate: string | null
   homeLeaveStart: string | null
   homeLeaveEnd: string | null
+  password: number
   createdAt: string
 }
 
@@ -151,6 +152,7 @@ export function mapEmployee(raw: Record<string, unknown>): Employee {
     hireDate: raw.hire_date != null ? toStr(raw.hire_date) : null,
     homeLeaveStart: raw.home_leave_start != null ? toStr(raw.home_leave_start) : null,
     homeLeaveEnd: raw.home_leave_end != null ? toStr(raw.home_leave_end) : null,
+    password: toNum(raw.password),
     createdAt: toStr(raw.created_at),
   }
 }
