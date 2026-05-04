@@ -1,6 +1,11 @@
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { isProductionAdmin, normalizeWorkMan } from '@/utils/adminAccess'
+import {
+  isWorkerDoneStatus,
+  normalizeProductionWorkType,
+  preserveWorkerDoneStatus,
+} from '@/utils/productionStatus'
 
 const PRODUCT_LIST_TABLE = 'product_list'
 const workTypeGroups = ['용접/무용접', '전실/입상', '나사', '기타']
@@ -138,9 +143,7 @@ const getRowsTotals = (rows) =>
   )
 
 const normalizeWorkType = (value) => {
-  const text = String(value ?? '').trim()
-  if (text === '용접/무용접' || text === '전실/입상' || text === '나사') return text
-  return '기타'
+  return normalizeProductionWorkType(value)
 }
 
 const normalizeStatus = (value) => {
@@ -157,17 +160,21 @@ const normalizeProgressState = (value) => {
   return '작업전'
 }
 const resolveWorkerTStatus = (row) => {
+  const preservedDoneStatus = preserveWorkerDoneStatus(row?.worker_t)
+  if (preservedDoneStatus === '출하완료') return preservedDoneStatus
   // 다이얼로그(가지관 완료 버튼)로 수동 완료된 경우 stage 토글이 덮어쓰지 않음
   // worker_t_time 이 찍혀 있으면 완료 상태를 보존
-  if (row?.worker_t === '작업완료' && row?.worker_t_time) return '작업완료'
+  if (preservedDoneStatus && row?.worker_t_time) return preservedDoneStatus
   if (Boolean(row?.complete)) return '작업완료'
   const statuses = workerTStageFields.map((field) => normalizeProgressState(row?.[field]))
   if (statuses.some((s) => s === '작업중' || s === '작업완료')) return '작업중'
   return '없음'
 }
 const resolveWorkerMainStatus = (row) => {
+  const preservedDoneStatus = preserveWorkerDoneStatus(row?.worker_main)
+  if (preservedDoneStatus === '출하완료') return preservedDoneStatus
   // 다이얼로그(메인관 완료 버튼)로 수동 완료된 경우 보존
-  if (row?.worker_main === '작업완료' && row?.worker_main_time) return '작업완료'
+  if (preservedDoneStatus && row?.worker_main_time) return preservedDoneStatus
   const statuses = workerMainStageFields.map((field) => normalizeProgressState(row?.[field]))
   if (statuses.some((s) => s === '작업중' || s === '작업완료')) return '작업중'
   return '없음'
@@ -199,8 +206,8 @@ const isCompletedRow = (row) => Boolean(row?.complete)
 
 const isEffectivelyCompleted = (row) =>
   Boolean(row?.complete) ||
-  row?.worker_t === '작업완료' ||
-  row?.worker_main === '작업완료'
+  isWorkerDoneStatus(row?.worker_t) ||
+  isWorkerDoneStatus(row?.worker_main)
 
 const sortRowsByPriority = (rows) => {
   return [...rows].sort((a, b) => {
@@ -446,7 +453,7 @@ export function useProductionPlan(session) {
       }
     }
     // 다이얼로그 완료(worker_t_time 있음)로 보존된 경우 시간 필드를 건드리지 않음
-    const workerTManuallyDone = row.worker_t === '작업완료' && row.worker_t_time
+    const workerTManuallyDone = isWorkerDoneStatus(row.worker_t) && row.worker_t_time
     if (!workerTManuallyDone) {
       if (worker_t === '작업완료' && row.worker_t !== '작업완료') {
         updatePayload.worker_t_time = todayText
@@ -455,7 +462,7 @@ export function useProductionPlan(session) {
         updatePayload.worker_t_time = ''
       }
     }
-    const workerMainManuallyDone = row.worker_main === '작업완료' && row.worker_main_time
+    const workerMainManuallyDone = isWorkerDoneStatus(row.worker_main) && row.worker_main_time
     if (!workerMainManuallyDone) {
       if (worker_main === '작업완료' && row.worker_main !== '작업완료') {
         updatePayload.worker_main_time = todayText
@@ -638,8 +645,8 @@ export function useProductionPlan(session) {
       }
     }
     if (workerTDate !== undefined || workerMainDate !== undefined) {
-      const nextWorkerTDone = (updatePayload.worker_t ?? row?.worker_t) === '작업완료'
-      const nextWorkerMainDone = (updatePayload.worker_main ?? row?.worker_main) === '작업완료'
+      const nextWorkerTDone = isWorkerDoneStatus(updatePayload.worker_t ?? row?.worker_t)
+      const nextWorkerMainDone = isWorkerDoneStatus(updatePayload.worker_main ?? row?.worker_main)
       const nextWorkerTTime =
         updatePayload.worker_t_time !== undefined ? updatePayload.worker_t_time : row?.worker_t_time ?? ''
       const nextWorkerMainTime =

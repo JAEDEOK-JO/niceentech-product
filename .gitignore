@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 .env
+.claude/
+.dart_tool/
+electron/env.generated.cjs
 
 # Electron build outputs
 release/

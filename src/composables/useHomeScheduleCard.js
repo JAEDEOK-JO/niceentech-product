@@ -1,5 +1,6 @@
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { supabase } from '@/lib/supabase'
+import { normalizeProductionWorkType } from '@/utils/productionStatus'
 
 const PRODUCT_LIST_TABLE = 'product_list'
 const REGULAR_WORK_SECONDS = 9 * 60 * 60
@@ -9,11 +10,10 @@ const toNumber = (value) => {
   const n = Number(value)
   return Number.isFinite(n) ? n : 0
 }
-const normalizeText = (value) => String(value ?? '').replaceAll(' ', '').trim()
 const resolveWorkTypeGroup = (value) => {
-  const workType = normalizeText(value)
+  const workType = normalizeProductionWorkType(value)
   if (workType === '용접/무용접') return 'welding'
-  if (workType === '전실/입상' || workType === '전실입상') return 'hole'
+  if (workType === '전실/입상') return 'hole'
   if (workType === '나사') return 'nasa'
   return 'other'
 }
@@ -207,4 +207,3 @@ export function useHomeScheduleCard({ session, selectedTuesday }) {
     scheduleCard,
   }
 }
-

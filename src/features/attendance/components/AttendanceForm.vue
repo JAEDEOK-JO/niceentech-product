@@ -33,6 +33,23 @@ const employeeNames = computed(() => {
     .map((e) => e.name)
 })
 
+// 선택된 직원
+const selectedEmployee = computed(() =>
+  props.employees.find(
+    (e) =>
+      e.name === form.value.selectedEmployeeName &&
+      e.department === form.value.selectedDepartment,
+  ) ?? null,
+)
+
+const remainingAfter = computed(() => {
+  if (!selectedEmployee.value) return null
+  return Math.max(
+    0,
+    selectedEmployee.value.remainingAnnualLeaveCount - (Number(form.value.daysCount) || 0),
+  )
+})
+
 function emitUpdate(next: AttendanceFormState) {
   form.value = next
   emit('update:modelValue', next)
@@ -90,6 +107,46 @@ function onEndDateChange(date: string) {
 
 <template>
   <form class="space-y-5" @submit.prevent="emit('submit')">
+
+    <!-- 본인 연차 정보 (키패드 인증 후) -->
+    <div
+      v-if="hideEmployeeSelector && selectedEmployee"
+      class="rounded-2xl border border-emerald-100 bg-emerald-50 p-4"
+    >
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-xs font-bold text-emerald-600">{{ selectedEmployee.department }}</p>
+          <p class="mt-0.5 text-lg font-extrabold text-slate-900">{{ selectedEmployee.name }}</p>
+        </div>
+        <div class="text-right">
+          <p class="text-[11px] font-bold text-emerald-600">잔여 연차</p>
+          <p class="mt-0.5 text-2xl font-extrabold text-emerald-700">
+            {{ selectedEmployee.remainingAnnualLeaveCount }}<span class="ml-0.5 text-sm">일</span>
+          </p>
+        </div>
+      </div>
+      <div class="mt-3 grid grid-cols-2 gap-2 border-t border-emerald-200 pt-3 text-center text-xs">
+        <div>
+          <p class="font-bold text-emerald-600">신청 일수</p>
+          <p class="mt-0.5 text-base font-extrabold text-slate-800">{{ form.daysCount }}일</p>
+        </div>
+        <div>
+          <p class="font-bold text-emerald-600">신청 후 잔여</p>
+          <p
+            class="mt-0.5 text-base font-extrabold"
+            :class="(remainingAfter ?? 0) <= 0 ? 'text-red-500' : 'text-slate-800'"
+          >
+            {{ remainingAfter }}일
+          </p>
+        </div>
+      </div>
+      <p
+        v-if="selectedEmployee.remainingAnnualLeaveCount === 0"
+        class="mt-3 rounded-lg border border-red-200 bg-red-50 py-2 text-center text-xs font-extrabold text-red-600"
+      >
+        잔여 연차가 없어 신청할 수 없습니다. 인사담당자에게 문의하세요.
+      </p>
+    </div>
 
     <!-- 부서 선택 -->
     <div v-if="!hideEmployeeSelector" class="grid grid-cols-2 gap-4">
@@ -197,7 +254,7 @@ function onEndDateChange(date: string) {
       <button
         type="submit"
         class="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-bold text-white hover:bg-slate-700 disabled:opacity-50"
-        :disabled="loading"
+        :disabled="loading || (hideEmployeeSelector && selectedEmployee?.remainingAnnualLeaveCount === 0)"
       >
         {{ loading ? '처리 중...' : isEdit ? '수정' : '신청' }}
       </button>

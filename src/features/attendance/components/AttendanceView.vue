@@ -18,6 +18,9 @@ import AttendanceSummaryDetailModal from './AttendanceSummaryDetailModal.vue'
 import AttendanceDetailModal from './AttendanceDetailModal.vue'
 import AttendanceRequestSignatureDialog from './AttendanceRequestSignatureDialog.vue'
 import AttendancePasswordKeypad from './AttendancePasswordKeypad.vue'
+import DailyWorkHoursInputDialog from './DailyWorkHoursInputDialog.vue'
+import DailyWorkHoursPanel from './DailyWorkHoursPanel.vue'
+import type { DailyWorkHour } from '../types/attendance'
 
 const props = defineProps<{
   items: AttendanceRequest[]
@@ -54,6 +57,9 @@ const props = defineProps<{
   signatureRequestVisible: boolean
   detailItem: AttendanceRequest | null
   detailSignatures: import('../services/attendance.service').SignatureInfo[]
+  todayWorkDate: string
+  dailyWorkHours: DailyWorkHour[]
+  dailyWorkHoursLoading: boolean
 }>()
 
 const emit = defineEmits<{
@@ -87,6 +93,9 @@ const emit = defineEmits<{
   (e: 'deleteEmployee', id: number): void
   (e: 'workTimeEntry'): void
   (e: 'openFormForEmployee', employee: Employee): void
+  (e: 'saveDailyWorkHours', records: { employeeId: number; endTime: string }[]): void
+  (e: 'refreshDailyWorkHours'): void
+  (e: 'deleteDailyWorkHour', payload: { workDate: string; employeeId: number }): void
 }>()
 
 // ─── 비밀번호 키패드 상태 ─────────────────────────────────────────────────────
@@ -106,7 +115,20 @@ function onKeypadSuccess(emp: Employee) {
 }
 
 // 관리자 탭
-const activeTab = ref<'requests' | 'employees' | 'summary' | 'analysis' | 'approval' | 'daepyo' | 'gyeongyu'>('requests')
+const activeTab = ref<'requests' | 'employees' | 'summary' | 'analysis' | 'approval' | 'daepyo' | 'gyeongyu' | 'workhours'>('requests')
+
+// 금일 작업시간 입력 다이얼로그
+const workHoursDialogVisible = ref(false)
+function openWorkHoursDialog() {
+  workHoursDialogVisible.value = true
+}
+function closeWorkHoursDialog() {
+  workHoursDialogVisible.value = false
+}
+function onSaveDailyWorkHours(records: { employeeId: number; endTime: string }[]) {
+  emit('saveDailyWorkHours', records)
+  workHoursDialogVisible.value = false
+}
 const REQUESTS_PER_PAGE = 10
 const requestsPage = ref(1)
 
@@ -292,7 +314,25 @@ watch(
           :class="activeTab === 'analysis' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-800'"
           @click="activeTab = 'analysis'"
         >근태 분석</button>
+        <button
+          type="button"
+          class="rounded-lg px-4 py-2 text-sm font-bold transition-colors"
+          :class="activeTab === 'workhours' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-800'"
+          @click="activeTab = 'workhours'"
+        >금일 작업시간</button>
       </div>
+
+      <!-- ═══ 금일 작업시간 탭 (관리자) ═══ -->
+      <DailyWorkHoursPanel
+        v-if="isAdmin && activeTab === 'workhours'"
+        :employees="employees"
+        :today-hours="dailyWorkHours"
+        :work-date="todayWorkDate"
+        :loading="dailyWorkHoursLoading"
+        @open-input="openWorkHoursDialog"
+        @refresh="emit('refreshDailyWorkHours')"
+        @delete="emit('deleteDailyWorkHour', $event)"
+      />
 
       <!-- ═══ 직원 목록 탭 (관리자) ═══ -->
       <AttendanceEmployeeList
@@ -438,19 +478,12 @@ watch(
           <p class="mt-1.5 text-right text-xs text-slate-400">잔여 {{ quota.remainingDays }}일</p>
         </div>
 
-        <!-- 액션 버튼 2개 -->
-        <div class="mb-6 grid grid-cols-2 gap-3">
+        <!-- 액션 버튼 -->
+        <div class="mb-6">
           <button
             type="button"
-            class="rounded-2xl bg-slate-900 px-5 py-4 text-base font-extrabold text-white shadow-sm transition-colors hover:bg-slate-700"
-            @click="emit('openForm')"
-          >
-            휴가 신청
-          </button>
-          <button
-            type="button"
-            class="rounded-2xl bg-emerald-600 px-5 py-4 text-base font-extrabold text-white shadow-sm transition-colors hover:bg-emerald-500"
-            @click="emit('workTimeEntry')"
+            class="w-full rounded-2xl bg-emerald-600 px-5 py-4 text-base font-extrabold text-white shadow-sm transition-colors hover:bg-emerald-500"
+            @click="openWorkHoursDialog"
           >
             오늘 근무시간 입력
           </button>
@@ -510,6 +543,16 @@ watch(
         :employee="keypadEmployee"
         @success="onKeypadSuccess"
         @cancel="closeKeypad"
+      />
+
+      <!-- 금일 작업시간 입력 다이얼로그 -->
+      <DailyWorkHoursInputDialog
+        v-if="workHoursDialogVisible"
+        :employees="employees"
+        :today-hours="dailyWorkHours"
+        :work-date="todayWorkDate"
+        @close="closeWorkHoursDialog"
+        @save="onSaveDailyWorkHours"
       />
 
       <!-- ═══ 신청 현황 탭 (관리자 전용) ═══ -->

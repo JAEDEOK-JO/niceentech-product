@@ -4,11 +4,13 @@ import {
   mapAttendanceRequest,
   mapAnnualQuota,
   mapEmployee,
+  mapDailyWorkHour,
   type AttendanceFilters,
   type AttendanceFormState,
   type AttendanceRequest,
   type AttendanceAnnualQuota,
   type AttendanceMonthlySummary,
+  type DailyWorkHour,
   type Employee,
   type LeaveType,
 } from '../types/attendance'
@@ -511,6 +513,41 @@ export async function updateEmployee(id: number, data: EmployeeFormData): Promis
 
 export async function deleteEmployee(id: number): Promise<void> {
   const { error } = await supabase.from('employees').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ─── 금일 작업시간 ─────────────────────────────────────────────────────────────
+export async function fetchDailyWorkHours(workDate: string): Promise<DailyWorkHour[]> {
+  const { data, error } = await supabase
+    .from('daily_work_hours')
+    .select('*')
+    .eq('work_date', workDate)
+
+  if (error) throw error
+  return (data ?? []).map((r) => mapDailyWorkHour(r as Record<string, unknown>))
+}
+
+export async function upsertDailyWorkHoursBulk(
+  records: { workDate: string; employeeId: number; endTime: string }[],
+): Promise<void> {
+  if (records.length === 0) return
+  const rows = records.map((r) => ({
+    work_date: r.workDate,
+    employee_id: r.employeeId,
+    end_time: r.endTime,
+  }))
+  const { error } = await supabase
+    .from('daily_work_hours')
+    .upsert(rows, { onConflict: 'work_date,employee_id' })
+  if (error) throw error
+}
+
+export async function deleteDailyWorkHour(workDate: string, employeeId: number): Promise<void> {
+  const { error } = await supabase
+    .from('daily_work_hours')
+    .delete()
+    .eq('work_date', workDate)
+    .eq('employee_id', employeeId)
   if (error) throw error
 }
 

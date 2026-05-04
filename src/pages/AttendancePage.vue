@@ -37,6 +37,9 @@ import {
   fetchSignatures,
   subscribeAttendanceRequests,
   unsubscribeAttendance,
+  fetchDailyWorkHours,
+  upsertDailyWorkHoursBulk,
+  deleteDailyWorkHour,
   type EmployeeFormData,
   type SignatureInfo,
 } from '@/features/attendance/services/attendance.service'
@@ -48,6 +51,7 @@ import {
   type AttendanceAnnualQuota,
   type AttendanceDashboardStats,
   type AttendanceMonthlySummary,
+  type DailyWorkHour,
   type Employee,
 } from '@/features/attendance/types/attendance'
 import AttendanceView from '@/features/attendance/components/AttendanceView.vue'
@@ -96,6 +100,44 @@ const stats = computed<AttendanceDashboardStats>(() => {
 // ─── 직원 목록 상태 ────────────────────────────────────────────────────────────
 const employees = ref<Employee[]>([])
 const employeesLoading = ref(false)
+
+// ─── 금일 작업시간 상태 ───────────────────────────────────────────────────────
+const todayWorkDate = computed(() => new Date().toISOString().slice(0, 10))
+const dailyWorkHours = ref<DailyWorkHour[]>([])
+const dailyWorkHoursLoading = ref(false)
+
+async function loadDailyWorkHours() {
+  dailyWorkHoursLoading.value = true
+  try {
+    dailyWorkHours.value = await fetchDailyWorkHours(todayWorkDate.value)
+  } catch {
+    dailyWorkHours.value = []
+  } finally {
+    dailyWorkHoursLoading.value = false
+  }
+}
+
+async function handleSaveDailyWorkHours(records: { employeeId: number; endTime: string }[]) {
+  if (records.length === 0) return
+  try {
+    await upsertDailyWorkHoursBulk(
+      records.map((r) => ({ workDate: todayWorkDate.value, employeeId: r.employeeId, endTime: r.endTime })),
+    )
+    showToast(`${records.length}명 저장되었습니다.`)
+    await loadDailyWorkHours()
+  } catch {
+    showToast('저장 중 오류가 발생했습니다.', 'error')
+  }
+}
+
+async function handleDeleteDailyWorkHour(payload: { workDate: string; employeeId: number }) {
+  try {
+    await deleteDailyWorkHour(payload.workDate, payload.employeeId)
+    await loadDailyWorkHours()
+  } catch {
+    showToast('삭제 중 오류가 발생했습니다.', 'error')
+  }
+}
 
 // ─── 근태요약 상태 ──────────────────────────────────────────────────────────────
 const summaryYear = ref(thisYear)
@@ -270,7 +312,7 @@ watch([summaryYear, summaryMonth, isAdmin], () => {
 
 watch(() => profile.value, async (p) => {
   if (!p) return
-  await Promise.all([loadItems(), loadQuota(), loadMeta(), loadEmployees(), loadMonthlySummary()])
+  await Promise.all([loadItems(), loadQuota(), loadMeta(), loadEmployees(), loadMonthlySummary(), loadDailyWorkHours()])
 }, { immediate: true })
 
 // ─── 실시간 구독 ───────────────────────────────────────────────────────────────
@@ -604,7 +646,12 @@ async function handleDeleteEmployee(id: number) {
     @create-employee="handleCreateEmployee"
     @update-employee="handleUpdateEmployee"
     @delete-employee="handleDeleteEmployee"
-    @work-time-entry="showToast('준비중입니다.')"
     @open-form-for-employee="openFormForEmployee"
+    :today-work-date="todayWorkDate"
+    :daily-work-hours="dailyWorkHours"
+    :daily-work-hours-loading="dailyWorkHoursLoading"
+    @save-daily-work-hours="handleSaveDailyWorkHours"
+    @refresh-daily-work-hours="loadDailyWorkHours"
+    @delete-daily-work-hour="handleDeleteDailyWorkHour"
   />
 </template>

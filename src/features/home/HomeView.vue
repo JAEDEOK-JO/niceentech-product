@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import Button from '@/components/ui/button/Button.vue'
 import { productTableColumns, tableTotalWidth } from '@/features/home/productTableConfig'
 import { isAdminRole, normalizeWorkMan } from '@/utils/adminAccess'
+import { isWorkerDoneStatus, normalizeProductionWorkType } from '@/utils/productionStatus'
 
 const props = defineProps({
   pageTitle: { type: String, required: true },
@@ -122,7 +123,7 @@ const getCellText = (row, key) => {
   return row?.[key] ?? ''
 }
 
-const normalizeWorkType = (value) => String(value ?? '').replaceAll(' ', '').trim()
+const normalizeWorkType = (value) => normalizeProductionWorkType(value)
 const NASA_HOME_STAGE_KEY = 'marking_laser_1'
 const NASA_HOME_ONLY_STAGE_MESSAGE = '레이저1을 클릭해주세요.'
 const canReorderRows = computed(() => isAdminRole(props.currentRole))
@@ -242,9 +243,9 @@ const isRowDisabled = (row) => !isActualDistributedRow(row) && !isVirtualDistrib
 const isDistributedRow = (row) => isActualDistributedRow(row) || isVirtualDistributedRow(row)
 
 const isRowCompleted = (row) => Boolean(row?.complete)
-const isBothWorkerCompleted = (row) => row?.worker_t === '작업완료' && row?.worker_main === '작업완료'
+const isBothWorkerCompleted = (row) => isWorkerDoneStatus(row?.worker_t) && isWorkerDoneStatus(row?.worker_main)
 const isOneWorkerCompleted = (row) =>
-  (row?.worker_t === '작업완료' || row?.worker_main === '작업완료') && !isBothWorkerCompleted(row)
+  (isWorkerDoneStatus(row?.worker_t) || isWorkerDoneStatus(row?.worker_main)) && !isBothWorkerCompleted(row)
 
 const isStageColumn = (key) => Object.hasOwn(stageMeta, key)
 const isCallColumn = (key) => key === 'call_action'

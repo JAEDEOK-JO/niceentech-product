@@ -176,3 +176,32 @@ export interface AttendanceMonthlySummary {
   totalApprovedCount: number
   totalUsedDays: number
 }
+
+// ─── 금일 작업시간 ─────────────────────────────────────────────────────────────
+export const WORK_END_TIME_OPTIONS = [
+  { value: '17:00', label: '5시' },
+  { value: '20:30', label: '8시30분' },
+  { value: '22:00', label: '10시' },
+] as const
+
+export type WorkEndTime = (typeof WORK_END_TIME_OPTIONS)[number]['value']
+
+export interface DailyWorkHour {
+  id: number
+  workDate: string
+  employeeId: number
+  endTime: WorkEndTime | string
+  createdAt: string
+  updatedAt: string
+}
+
+export function mapDailyWorkHour(raw: Record<string, unknown>): DailyWorkHour {
+  return {
+    id: toNum(raw.id),
+    workDate: toStr(raw.work_date),
+    employeeId: toNum(raw.employee_id),
+    endTime: toStr(raw.end_time),
+    createdAt: toStr(raw.created_at),
+    updatedAt: toStr(raw.updated_at),
+  }
+}
