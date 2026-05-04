@@ -14,6 +14,8 @@ app.commandLine.appendSwitch('disable-renderer-backgrounding')
 app.commandLine.appendSwitch('disable-background-timer-throttling')
 
 const isDev = !app.isPackaged
+const isLinuxArm = process.platform === 'linux' && (process.arch === 'arm' || process.arch === 'arm64')
+const isKiosk = isLinuxArm || process.argv.includes('--kiosk') || process.env.NICEENTECH_KIOSK === '1'
 
 if (process.platform === 'win32') {
   app.setAppUserModelId('com.niceentech.product')
@@ -44,6 +46,9 @@ function createWindow() {
     minHeight: 600,
     icon: appIcon ?? undefined,
     show: false,
+    kiosk: isKiosk,
+    fullscreen: isKiosk,
+    autoHideMenuBar: isKiosk,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       nodeIntegration: false,
