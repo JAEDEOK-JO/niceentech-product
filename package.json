@@ -15,7 +15,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "build:icons": "node scripts/build-icons.mjs",
-    "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron . --dev-server\"",
     "build:electron": "node scripts/gen-electron-env.mjs && vite build --base ./",
     "electron:build": "npm run build:electron && electron-builder",
     "electron:start": "electron ."

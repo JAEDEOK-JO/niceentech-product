@@ -12,6 +12,7 @@ try { ENV = require('./env.generated.cjs') } catch { /* 파일 없으면 무시 
 // 백그라운드 스로틀링 방지 (숨겨진 창에서도 JS 정상 실행)
 const isLinuxArm = process.platform === 'linux' && (process.arch === 'arm' || process.arch === 'arm64')
 const isDev = !app.isPackaged
+const useDevServer = process.argv.includes('--dev-server') || process.env.NICEENTECH_DEV_SERVER === '1'
 const isKiosk = isLinuxArm
 
 if (isLinuxArm) {
@@ -64,7 +65,7 @@ function createWindow() {
     },
   })
 
-  if (isDev) {
+  if (useDevServer) {
     mainWindow.loadURL('http://localhost:5173')
   } else {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
