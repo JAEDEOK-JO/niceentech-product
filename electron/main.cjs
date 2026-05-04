@@ -10,12 +10,18 @@ let ENV = { SUPABASE_URL: '', SUPABASE_ANON_KEY: '' }
 try { ENV = require('./env.generated.cjs') } catch { /* 파일 없으면 무시 */ }
 
 // 백그라운드 스로틀링 방지 (숨겨진 창에서도 JS 정상 실행)
+const isLinuxArm = process.platform === 'linux' && (process.arch === 'arm' || process.arch === 'arm64')
+const isDev = !app.isPackaged
+const isKiosk = isLinuxArm
+
+if (isLinuxArm) {
+  app.disableHardwareAcceleration()
+  app.commandLine.appendSwitch('disable-gpu')
+  app.commandLine.appendSwitch('disable-gpu-compositing')
+}
+
 app.commandLine.appendSwitch('disable-renderer-backgrounding')
 app.commandLine.appendSwitch('disable-background-timer-throttling')
-
-const isDev = !app.isPackaged
-const isLinuxArm = process.platform === 'linux' && (process.arch === 'arm' || process.arch === 'arm64')
-const isKiosk = isLinuxArm || process.argv.includes('--kiosk') || process.env.NICEENTECH_KIOSK === '1'
 
 if (process.platform === 'win32') {
   app.setAppUserModelId('com.niceentech.product')
