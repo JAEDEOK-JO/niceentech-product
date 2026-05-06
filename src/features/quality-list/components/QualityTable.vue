@@ -25,6 +25,7 @@ const emit = defineEmits<{
 }>()
 
 const rangeInputs = ref<Record<number, string>>({})
+const expandedCards = ref<Record<number, boolean>>({})
 
 watch(
   () => props.items,
@@ -51,6 +52,17 @@ function saveRange(item: QualityListRow) {
 const menuDialogItem = ref<QualityListRow | null>(null)
 function openMenuDialog(item: QualityListRow) { menuDialogItem.value = item }
 function closeMenuDialog() { menuDialogItem.value = null }
+
+function toggleCard(item: QualityListRow) {
+  expandedCards.value = {
+    ...expandedCards.value,
+    [item.id]: !expandedCards.value[item.id],
+  }
+}
+
+function isCardExpanded(item: QualityListRow) {
+  return Boolean(expandedCards.value[item.id])
+}
 
 const total = computed(() =>
   props.items.reduce(
@@ -94,6 +106,11 @@ const countCols: CountCol[] = [
   { label: '150A', field: 'm150', valueKey: 'm150', cancelKey: 'm150Cancel', metric: true  },
   { label: '200A', field: 'm200', valueKey: 'm200', cancelKey: 'm200Cancel', metric: true  },
 ]
+
+const mobileCountRows: CountCol[][] = [
+  countCols.filter((col) => ['a32', 'a40', 'a50', 'a65'].includes(col.field)),
+  countCols.filter((col) => ['m80', 'm100', 'm125', 'm150', 'm200'].includes(col.field)),
+]
 </script>
 
 <template>
@@ -105,8 +122,63 @@ const countCols: CountCol[] = [
 
     <div v-if="loading" class="qt-empty">로딩 중...</div>
     <div v-else-if="items.length === 0" class="qt-empty">검수리스트가 없습니다.</div>
-    <div v-else class="qt-scroll">
-      <table class="qt">
+    <div v-else class="qt-list">
+      <div class="qt-mobile-cards">
+        <article
+          v-for="(item, index) in items"
+          :key="item.id"
+          class="qt-card"
+          :class="{ 'qt-card--open': isCardExpanded(item) }"
+          @click="toggleCard(item)"
+        >
+          <div class="qt-card-head">
+            <div class="qt-card-title">
+              <span class="qt-card-index">No. {{ index + 1 }}</span>
+              <strong>{{ item.company }} {{ item.place }}</strong>
+              <span v-if="item.area">{{ item.area }}</span>
+              <span v-if="showAllRecords && item.testDate" class="qt-card-date">{{ formatShortDate(item.testDate) }}</span>
+            </div>
+          </div>
+
+          <div class="qt-card-meta">
+            <span>도번 {{ item.initial || '-' }}</span>
+            <span>합계 {{ item.totalH || 0 }}</span>
+          </div>
+
+          <div class="qt-card-lot" :class="lotRoundClass(item.lotRound)" @click.stop>
+            <span class="qt-card-lot-name">{{ item.lotNameH || '-' }}</span>
+            <span class="qt-card-lot-num">({{ item.lotNumH ? String(item.lotNumH).slice(-3) : '---' }})</span>
+            <span class="qt-card-lot-start">{{ rangeInputs[item.id] || 0 }}</span>
+            <span>~ {{ item.lotNumEndH || '' }}</span>
+          </div>
+
+          <div class="qt-card-toggle">
+            <span>수량정보</span>
+            <svg viewBox="0 0 24 24" class="qt-card-chevron" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="m6 9 6 6 6-6" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </div>
+
+          <div class="qt-card-counts">
+            <div v-for="(row, rowIndex) in mobileCountRows" :key="rowIndex" class="qt-card-count-row">
+              <button
+                v-for="col in row"
+                :key="col.field"
+                type="button"
+                class="qt-card-count"
+                :class="col.metric ? 'qt-card-count--metric' : 'qt-card-count--inch'"
+                @click.stop="promptCancel(item, col.field, item[col.cancelKey] as number)"
+              >
+                <span>{{ col.label }}</span>
+                <strong>{{ (item[col.valueKey] as number) || '-' }}</strong>
+              </button>
+            </div>
+          </div>
+        </article>
+      </div>
+
+      <div class="qt-scroll">
+        <table class="qt">
         <colgroup>
           <col class="col-n" />
           <col class="col-initial" />
@@ -173,7 +245,8 @@ const countCols: CountCol[] = [
             </td>
           </tr>
         </tbody>
-      </table>
+        </table>
+      </div>
     </div>
 
     <!-- 메뉴 다이얼로그 -->
@@ -215,6 +288,14 @@ const countCols: CountCol[] = [
   text-align: center;
   color: #94a3b8;
   font-size: 15px;
+}
+
+.qt-list {
+  min-width: 0;
+}
+
+.qt-mobile-cards {
+  display: none;
 }
 
 .qt-scroll {
@@ -502,4 +583,186 @@ const countCols: CountCol[] = [
 .da-btn--purple:hover { background: #ddd6fe; }
 .da-btn--danger { background: #fee2e2; border-color: #fecaca; color: #b91c1c; }
 .da-btn--danger:hover { background: #fecaca; }
+
+@media (max-width: 767px) {
+  .qt-summary {
+    justify-content: flex-start;
+    padding: 0 2px;
+    font-size: 16px;
+  }
+
+  .qt-scroll {
+    display: none;
+  }
+
+  .qt-mobile-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .qt-card {
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
+    padding: 14px;
+    cursor: pointer;
+  }
+
+  .qt-card-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .qt-card-title {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    color: #0f172a;
+    font-size: 13px;
+    line-height: 1.35;
+  }
+
+  .qt-card-title strong {
+    font-size: 15px;
+    line-height: 1.3;
+  }
+
+  .qt-card-index,
+  .qt-card-date {
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 800;
+  }
+
+  .qt-card-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .qt-card-meta span {
+    border-radius: 999px;
+    background: #eff6ff;
+    padding: 5px 9px;
+    color: #1e3a8a;
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .qt-card-lot {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 10px;
+    border-radius: 12px;
+    background: #f8fafc;
+    padding: 9px 10px;
+    color: #111827;
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .qt-card-lot-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .qt-card-lot-num,
+  .qt-card-lot span:last-child {
+    flex-shrink: 0;
+  }
+
+  .qt-card-lot-start {
+    flex-shrink: 0;
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .qt-card-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 12px;
+    border-top: 1px solid #eef2f7;
+    padding-top: 12px;
+    color: #0f172a;
+    font-size: 13px;
+    font-weight: 900;
+  }
+
+  .qt-card-chevron {
+    height: 18px;
+    width: 18px;
+    transition: transform 0.18s ease;
+  }
+
+  .qt-card--open .qt-card-chevron {
+    transform: rotate(180deg);
+  }
+
+  .qt-card-counts {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.24s ease, opacity 0.18s ease, margin-top 0.18s ease;
+    opacity: 0;
+  }
+
+  .qt-card--open .qt-card-counts {
+    max-height: 150px;
+    margin-top: 10px;
+    opacity: 1;
+  }
+
+  .qt-card-count-row {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+
+  .qt-card-count-row:nth-child(2) {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    margin-bottom: 0;
+  }
+
+  .qt-card-count {
+    min-height: 52px;
+    border: 1px solid #dbe3ef;
+    border-radius: 12px;
+    background: #fff;
+    padding: 7px 4px;
+    color: #0f172a;
+    text-align: center;
+  }
+
+  .qt-card-count span,
+  .qt-card-count strong {
+    display: block;
+  }
+
+  .qt-card-count span {
+    color: #64748b;
+    font-size: 10px;
+    font-weight: 900;
+  }
+
+  .qt-card-count strong {
+    margin-top: 3px;
+    font-size: 14px;
+    font-weight: 900;
+  }
+
+  .qt-card-count--metric {
+    background: #fff7ed;
+    border-color: #fed7aa;
+  }
+}
 </style>

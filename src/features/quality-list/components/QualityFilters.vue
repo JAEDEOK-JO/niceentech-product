@@ -67,32 +67,36 @@ function openCalendar() {
         class="calendar-input sr-only"
         @input="emit('calendarChange', ($event.target as HTMLInputElement).value)"
       />
-      <button type="button" class="ghost-button" @click="emit('print')">리스트출력</button>
-      <button type="button" class="ghost-button" @click="emit('export')">메인관출력</button>
-      <button type="button" class="ghost-button" @click="emit('calculation')">가지관 출력</button>
-      <button type="button" class="primary-button" @click="emit('create')">등록</button>
-      <input
-        :value="searchQuery"
-        type="text"
-        class="search-input"
-        placeholder="검색"
-        @input="emit('update:searchQuery', ($event.target as HTMLInputElement).value)"
-        @keyup.enter="emit('search')"
-      />
-      <label class="toggle-inline">
+      <div class="quality-print-actions">
+        <button type="button" class="ghost-button" @click="emit('print')">리스트출력</button>
+        <button type="button" class="ghost-button" @click="emit('export')">메인관출력</button>
+        <button type="button" class="ghost-button" @click="emit('calculation')">가지관 출력</button>
+      </div>
+      <button type="button" class="primary-button quality-create-button" @click="emit('create')">등록</button>
+      <div class="quality-search-row">
         <input
-          :checked="showAllRecords"
-          type="checkbox"
-          @change="
-            emit(
-              'update:showAllRecords',
-              ($event.target as HTMLInputElement).checked,
-            )
-          "
+          :value="searchQuery"
+          type="text"
+          class="search-input"
+          placeholder="검색"
+          @input="emit('update:searchQuery', ($event.target as HTMLInputElement).value)"
+          @keyup.enter="emit('search')"
         />
-        <span class="toggle-box" />
-        <span>전체</span>
-      </label>
+        <label class="toggle-inline">
+          <input
+            :checked="showAllRecords"
+            type="checkbox"
+            @change="
+              emit(
+                'update:showAllRecords',
+                ($event.target as HTMLInputElement).checked,
+              )
+            "
+          />
+          <span class="toggle-box" />
+          <span>전체</span>
+        </label>
+      </div>
     </div>
   </section>
 </template>
@@ -181,5 +185,42 @@ function openCalendar() {
 .search-input {
   min-width: 200px;
   width: 200px;
+}
+
+.quality-print-actions {
+  display: contents;
+}
+
+.quality-search-row {
+  display: contents;
+}
+
+@media (max-width: 767px) {
+  .quality-print-actions {
+    display: none;
+  }
+
+  .quality-create-button {
+    display: none;
+  }
+
+  .quality-search-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .quality-search-row .search-input {
+    min-width: 0;
+    flex: 1;
+    width: auto;
+  }
+
+  .quality-search-row .toggle-inline {
+    min-height: 42px;
+    flex-shrink: 0;
+    padding: 0;
+  }
 }
 </style>

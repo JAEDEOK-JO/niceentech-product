@@ -8,14 +8,24 @@ export const isDesktopBrowser = () => {
   if (isElectronApp()) return false
 
   const ua = navigator.userAgent || ''
-  if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|Tablet|Silk/i.test(ua)) {
+  const platform = navigator.platform || ''
+  const maxTouchPoints = navigator.maxTouchPoints ?? 0
+  const userAgentDataMobile = navigator.userAgentData?.mobile === true
+
+  if (userAgentDataMobile || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|Tablet|Silk/i.test(ua)) {
     return false
   }
 
-  if ((navigator.maxTouchPoints ?? 0) > 1 && /Macintosh/i.test(ua)) {
+  if (maxTouchPoints > 1 && (/Macintosh/i.test(ua) || /MacIntel/i.test(platform))) {
     return false
   }
 
-  const coarsePointer = typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches
-  return !coarsePointer
+  if (typeof window.matchMedia !== 'function') return false
+
+  const desktopWidth = window.matchMedia('(min-width: 1024px)').matches
+  const finePointer = window.matchMedia('(pointer: fine)').matches
+  const hoverCapable = window.matchMedia('(hover: hover)').matches
+  const coarsePointer = window.matchMedia('(pointer: coarse)').matches
+
+  return desktopWidth && finePointer && hoverCapable && !coarsePointer
 }
