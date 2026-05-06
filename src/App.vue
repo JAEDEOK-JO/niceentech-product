@@ -6,7 +6,6 @@ import DesktopInstallGate from '@/components/desktop/DesktopInstallGate.vue'
 import AppDialog from '@/components/ui/AppDialog.vue'
 import { supabase } from '@/lib/supabase'
 import { usePushNotification } from '@/composables/usePushNotification'
-import { DESKTOP_INSTALL_GATE_SESSION_KEY } from '@/constants/desktopInstall'
 import { isDesktopBrowser } from '@/utils/device'
 import packageJson from '../package.json'
 
@@ -51,9 +50,7 @@ const compareVersion = (left, right) => {
 
 const isElectron = typeof window !== 'undefined' && Boolean(window.electronAPI?.isElectron)
 
-const desktopInstallGateVisible = ref(
-  isDesktopBrowser() && window.sessionStorage.getItem(DESKTOP_INSTALL_GATE_SESSION_KEY) !== '1',
-)
+const desktopInstallGateVisible = ref(isDesktopBrowser())
 
 const hasNewVersion = computed(() => {
   if (!remoteVersion.value) return false
@@ -132,7 +129,6 @@ const handleEnablePush = async () => {
 
 const handleDesktopGateUnlocked = () => {
   desktopInstallGateVisible.value = false
-  window.sessionStorage.setItem(DESKTOP_INSTALL_GATE_SESSION_KEY, '1')
   router.push({ name: 'home' })
 }
 
