@@ -50,4 +50,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
   checkForUpdate: () => {
     ipcRenderer.send('check-for-update')
   },
+
+  /**
+   * @param {(status: {
+   *   phase: string,
+   *   message?: string,
+   *   percent?: number,
+   *   transferred?: number,
+   *   total?: number,
+   *   bytesPerSecond?: number,
+   *   version?: string,
+   * }) => void} callback
+   */
+  onUpdateStatus: (callback) => {
+    const listener = (_, status) => callback(status)
+    ipcRenderer.on('update-status', listener)
+    return () => ipcRenderer.removeListener('update-status', listener)
+  },
 })

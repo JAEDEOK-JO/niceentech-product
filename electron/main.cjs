@@ -1,15 +1,13 @@
 'use strict'
 
-const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, Notification, dialog } = require('electron')
+const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, Notification } = require('electron')
 const path = require('path')
 const { autoUpdater } = require('electron-updater')
 const supabaseListener = require('./supabase-listener.cjs')
 
-// 빌드 시 gen-electron-env.mjs 가 생성한 파일 (Supabase 크리덴셜)
 let ENV = { SUPABASE_URL: '', SUPABASE_ANON_KEY: '' }
-try { ENV = require('./env.generated.cjs') } catch { /* 파일 없으면 무시 */ }
+try { ENV = require('./env.generated.cjs') } catch { /* generated at build time */ }
 
-// 백그라운드 스로틀링 방지 (숨겨진 창에서도 JS 정상 실행)
 const isLinuxArm = process.platform === 'linux' && (process.arch === 'arm' || process.arch === 'arm64')
 const isDev = !app.isPackaged
 const useDevServer = process.argv.includes('--dev-server') || process.env.NICEENTECH_DEV_SERVER === '1'
@@ -38,16 +36,16 @@ let mainWindow = null
 /** @type {Tray | null} */
 let tray = null
 
-// ─── 아이콘 로더 ────────────────────────────────────────────────────────────
 function loadIcon(filename) {
-  const p = path.join(__dirname, '../build', filename)
+  const iconPath = path.join(__dirname, '../build', filename)
   try {
-    const img = nativeImage.createFromPath(p)
+    const img = nativeImage.createFromPath(iconPath)
     return img.isEmpty() ? null : img
-  } catch { return null }
+  } catch {
+    return null
+  }
 }
 
-// ─── 창 생성 ────────────────────────────────────────────────────────────────
 function createWindow() {
   if (mainWindow && !mainWindow.isDestroyed()) {
     showWindow()
@@ -71,7 +69,7 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: false,
-      backgroundThrottling: false, // 숨겨도 JS 계속 실행
+      backgroundThrottling: false,
     },
   })
 
@@ -81,35 +79,31 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
   }
 
-  mainWindow.once('ready-to-show', () => mainWindow.show())
+  mainWindow.once('ready-to-show', () => mainWindow?.show())
   mainWindow.on('closed', () => {
     mainWindow = null
   })
-
-  // 포커스 받으면 깜빡임 중지
   mainWindow.on('focus', () => mainWindow?.flashFrame(false))
-
-  // X 버튼 → 트레이로 숨김
-  mainWindow.on('close', (e) => {
-    if (!app.isQuitting) {
-      e.preventDefault()
-      mainWindow.hide()
-      mainWindow.setSkipTaskbar(true)
-    }
+  mainWindow.on('close', (event) => {
+    if (app.isQuitting) return
+    event.preventDefault()
+    mainWindow?.hide()
+    mainWindow?.setSkipTaskbar(true)
   })
-
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('http')) shell.openExternal(url)
     return { action: 'deny' }
   })
 }
 
-// ─── 트레이 생성 ────────────────────────────────────────────────────────────
 function createTray() {
   if (tray) return
 
   const icon = loadIcon('tray.png') || loadIcon('icon.png')
-  if (!icon) { console.warn('[Tray] build/tray.png 없음'); return }
+  if (!icon) {
+    console.warn('[Tray] build/tray.png missing')
+    return
+  }
 
   tray = new Tray(icon)
   tray.setToolTip('NICEENTECH')
@@ -124,62 +118,57 @@ function createTray() {
   tray.on('double-click', showWindow)
 }
 
-// ─── 창 표시 ────────────────────────────────────────────────────────────────
 function showWindow() {
-  if (!mainWindow) return
+  if (!mainWindow || mainWindow.isDestroyed()) return
   mainWindow.flashFrame(false)
-  mainWindow.setOpacity(1)         // opacity가 0인 상태일 수 있으므로 복원
+  mainWindow.setOpacity(1)
   mainWindow.setSkipTaskbar(false)
   if (mainWindow.isMinimized()) mainWindow.restore()
   mainWindow.show()
   mainWindow.focus()
 }
 
-// ─── 알림 + 작업표시줄 깜빡임 ────────────────────────────────────────────────
+function sendUpdateStatus(status) {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  mainWindow.webContents.send('update-status', status)
+}
+
 function bringToNotice({ title, body, url }) {
-  // 1) 토스트 알림 (최우선)
   if (Notification.isSupported()) {
-    const n = new Notification({
+    const notification = new Notification({
       title: title || 'NICEENTECH',
       body: body || '',
       icon: loadIcon('icon.png') || undefined,
       silent: false,
       urgency: 'critical',
     })
-    n.on('click', () => {
+    notification.on('click', () => {
       showWindow()
       if (url) mainWindow?.webContents.send('navigate-to', url)
     })
-    n.show()
+    notification.show()
   }
 
-  // 2) 작업표시줄에 나타나게 + 깜빡임
   if (!mainWindow || mainWindow.isDestroyed()) return
 
   if (!mainWindow.isVisible()) {
-    // 창이 숨겨진 상태: opacity 0으로 투명하게 만들고 표시 → 사용자 눈에 안 보임
     mainWindow.setOpacity(0)
     mainWindow.setSkipTaskbar(false)
-    mainWindow.showInactive()    // 투명한 채로 표시 (포커스 X)
-    mainWindow.minimize()        // 즉시 최소화 → 작업표시줄 버튼 생성
-    mainWindow.flashFrame(true)  // 깜빡임
-    // 나중에 창을 실제로 열 때 정상으로 보이도록 opacity 복원
+    mainWindow.showInactive()
+    mainWindow.minimize()
+    mainWindow.flashFrame(true)
     setTimeout(() => {
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setOpacity(1)
     }, 500)
-  } else if (mainWindow.isMinimized()) {
-    mainWindow.flashFrame(true)
-  } else if (!mainWindow.isFocused()) {
+  } else if (mainWindow.isMinimized() || !mainWindow.isFocused()) {
     mainWindow.flashFrame(true)
   }
 }
 
-// ─── IPC ─────────────────────────────────────────────────────────────────────
 ipcMain.on('show-notification', (_, payload) => {
   bringToNotice(payload || {})
 })
 
-// 렌더러가 로그인 상태 변경 시 메인 프로세스 Supabase 리스너도 갱신
 ipcMain.on('auth-user-id', (_, userId) => {
   if (userId) {
     supabaseListener.start(userId, (payload) => bringToNotice(payload))
@@ -188,10 +177,11 @@ ipcMain.on('auth-user-id', (_, userId) => {
   }
 })
 
-// 렌더러(Supabase Realtime 구독)가 setting.version 변경을 감지하면 업데이트 체크 트리거
 ipcMain.on('check-for-update', () => {
   if (isDev) return
+  sendUpdateStatus({ phase: 'checking', message: '업데이트를 확인하고 있습니다.', percent: 0 })
   autoUpdater.checkForUpdates().catch((err) => {
+    sendUpdateStatus({ phase: 'error', message: err?.message || '업데이트 확인에 실패했습니다.', percent: 0 })
     console.warn('[AutoUpdater] manual check failed:', err?.message || err)
   })
 })
@@ -203,7 +193,7 @@ ipcMain.on('unread-count', (_, count) => {
   if (n > 0) {
     const notifyIcon = loadIcon('tray-notify.png') || loadIcon('tray.png')
     if (tray && notifyIcon) tray.setImage(notifyIcon)
-    tray?.setToolTip(`NICEENTECH — 새 메시지 ${n}개`)
+    tray?.setToolTip(`NICEENTECH 새 메시지 ${n}개`)
     if (process.platform === 'win32') {
       const badge = loadIcon('badge.png')
       mainWindow.setOverlayIcon(badge ?? null, `새 메시지 ${n}개`)
@@ -217,44 +207,63 @@ ipcMain.on('unread-count', (_, count) => {
   }
 })
 
-// ─── 자동 업데이트 ──────────────────────────────────────────────────────────
 function setupAutoUpdater() {
   if (isDev) return
 
   autoUpdater.autoDownload = true
   autoUpdater.autoInstallOnAppQuit = true
 
+  autoUpdater.on('checking-for-update', () => {
+    sendUpdateStatus({ phase: 'checking', message: '업데이트를 확인하고 있습니다.', percent: 0 })
+  })
+  autoUpdater.on('update-available', (info) => {
+    sendUpdateStatus({
+      phase: 'available',
+      message: `${info?.version || ''} 버전 다운로드를 시작합니다.`,
+      percent: 0,
+      version: info?.version || '',
+    })
+  })
+  autoUpdater.on('update-not-available', () => {
+    sendUpdateStatus({ phase: 'not-available', message: '현재 최신 버전입니다.', percent: 0 })
+  })
+  autoUpdater.on('download-progress', (progress) => {
+    const percent = Math.max(0, Math.min(100, Number(progress?.percent || 0)))
+    if (process.platform === 'win32') mainWindow?.setProgressBar(percent / 100)
+    sendUpdateStatus({
+      phase: 'downloading',
+      message: '업데이트 파일을 다운로드하고 있습니다.',
+      percent,
+      transferred: progress?.transferred || 0,
+      total: progress?.total || 0,
+      bytesPerSecond: progress?.bytesPerSecond || 0,
+    })
+  })
   autoUpdater.on('error', (err) => {
+    if (process.platform === 'win32') mainWindow?.setProgressBar(-1)
+    sendUpdateStatus({ phase: 'error', message: err?.message || '업데이트 중 오류가 발생했습니다.', percent: 0 })
     console.error('[AutoUpdater]', err?.message || err)
   })
-
-  autoUpdater.on('update-downloaded', async (info) => {
-    // 닫기 불가 — 재시작 버튼 외엔 모든 동작이 다이얼로그 재표시로 이어짐
-    while (true) {
-      const { response } = await dialog.showMessageBox(mainWindow, {
-        type: 'warning',
-        buttons: ['지금 재시작'],
-        defaultId: 0,
-        cancelId: 1, // ESC/X 로 닫으면 1이 반환되어 루프 재진입
-        noLink: true,
-        title: '업데이트 설치 필요',
-        message: `새 버전 ${info?.version || ''} 을 설치해야 합니다.`,
-        detail: '지금 재시작해야 계속 사용할 수 있습니다.',
-      })
-      if (response === 0) {
-        app.isQuitting = true
-        autoUpdater.quitAndInstall()
-        return
-      }
-    }
+  autoUpdater.on('update-downloaded', (info) => {
+    if (process.platform === 'win32') mainWindow?.setProgressBar(-1)
+    sendUpdateStatus({
+      phase: 'installing',
+      message: `${info?.version || ''} 버전 다운로드가 완료되었습니다. 자동으로 설치합니다.`,
+      percent: 100,
+      version: info?.version || '',
+    })
+    setTimeout(() => {
+      app.isQuitting = true
+      autoUpdater.quitAndInstall(true, true)
+    }, 1500)
   })
 
   autoUpdater.checkForUpdates().catch((err) => {
+    sendUpdateStatus({ phase: 'error', message: err?.message || '업데이트 확인에 실패했습니다.', percent: 0 })
     console.warn('[AutoUpdater] check failed:', err?.message || err)
   })
 }
 
-// ─── 앱 이벤트 ──────────────────────────────────────────────────────────────
 if (gotSingleInstanceLock) {
   app.on('second-instance', () => {
     if (!mainWindow || mainWindow.isDestroyed()) {
@@ -267,12 +276,11 @@ if (gotSingleInstanceLock) {
   app.whenReady().then(() => {
     Menu.setApplicationMenu(null)
 
-  // 메인 프로세스 Supabase 리스너 초기화
-  if (ENV.SUPABASE_URL && ENV.SUPABASE_ANON_KEY) {
-    supabaseListener.init(ENV.SUPABASE_URL, ENV.SUPABASE_ANON_KEY)
-  } else {
-    console.warn('[Electron] Supabase 크리덴셜 없음 → npm run build:electron 을 먼저 실행하세요')
-  }
+    if (ENV.SUPABASE_URL && ENV.SUPABASE_ANON_KEY) {
+      supabaseListener.init(ENV.SUPABASE_URL, ENV.SUPABASE_ANON_KEY)
+    } else {
+      console.warn('[Electron] Supabase credentials missing. Run npm run build:electron first.')
+    }
 
     createWindow()
     createTray()
@@ -283,5 +291,5 @@ if (gotSingleInstanceLock) {
   })
 }
 
-app.on('window-all-closed', () => { /* 트레이 상주 유지 */ })
+app.on('window-all-closed', () => { /* keep tray app running */ })
 app.on('before-quit', () => { app.isQuitting = true })

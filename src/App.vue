@@ -25,9 +25,18 @@ const {
 const currentVersion = packageJson.version
 const remoteVersion = ref('')
 const updateMessage = ref('')
+const updateStatus = ref({
+  phase: 'idle',
+  message: '',
+  percent: 0,
+  transferred: 0,
+  total: 0,
+  bytesPerSecond: 0,
+})
 const pushPromptVisible = ref(false)
 let settingsChannel = null
 let authSubscription = null
+let removeUpdateStatusListener = null
 
 const PUSH_PROMPT_DISMISSED_KEY = 'push_prompt_dismissed'
 
@@ -63,6 +72,15 @@ const bannerMessage = computed(() => {
   return `${normalizeVersion(remoteVersion.value)} 버전이 배포되었습니다.`
 })
 
+const updatePercent = computed(() => Math.round(Number(updateStatus.value.percent || 0)))
+const updateBusy = computed(() => ['checking', 'available', 'downloading', 'installing'].includes(updateStatus.value.phase))
+const updateStatusMessage = computed(() => updateStatus.value.message || '업데이트를 준비하고 있습니다.')
+const updateDetailMessage = computed(() => {
+  const { phase, transferred, total, bytesPerSecond } = updateStatus.value
+  if (phase !== 'downloading' || !total) return ''
+  return `${formatBytes(transferred)} / ${formatBytes(total)} · ${formatBytes(bytesPerSecond)}/s`
+})
+
 const fetchSetting = async () => {
   const { data } = await supabase.from('setting').select('version,update_message').limit(1).maybeSingle()
   remoteVersion.value = normalizeVersion(data?.version)
@@ -89,10 +107,26 @@ const setupSettingRealtime = () => {
 
 const handleUpdate = () => {
   if (isElectron && typeof window.electronAPI?.checkForUpdate === 'function') {
+    updateStatus.value = {
+      phase: 'checking',
+      message: '업데이트를 확인하고 있습니다.',
+      percent: 0,
+      transferred: 0,
+      total: 0,
+      bytesPerSecond: 0,
+    }
     window.electronAPI.checkForUpdate()
     return
   }
   window.location.reload()
+}
+
+const formatBytes = (value) => {
+  const bytes = Number(value || 0)
+  if (!bytes) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB']
+  const idx = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
+  return `${(bytes / (1024 ** idx)).toFixed(idx === 0 ? 0 : 1)} ${units[idx]}`
 }
 
 const dismissPushPrompt = () => {
@@ -143,6 +177,16 @@ onMounted(async () => {
   await fetchSetting()
   setupSettingRealtime()
   window.addEventListener('beforeunload', blockClose)
+  removeUpdateStatusListener = window.electronAPI?.onUpdateStatus?.((status) => {
+    updateStatus.value = {
+      phase: status?.phase || 'idle',
+      message: status?.message || '',
+      percent: Number(status?.percent || 0),
+      transferred: Number(status?.transferred || 0),
+      total: Number(status?.total || 0),
+      bytesPerSecond: Number(status?.bytesPerSecond || 0),
+    }
+  }) || null
 
   // 로그인 상태이면 OneSignal에 external_user_id 매핑 (권한 여부와 무관하게)
   // 이후 사용자가 알림을 켜는 즉시 서버 발송이 연결됨
@@ -183,6 +227,7 @@ watch([showGlobalAppBar, pushPermission], () => {
 onBeforeUnmount(() => {
   stopSettingRealtime()
   window.removeEventListener('beforeunload', blockClose)
+  removeUpdateStatusListener?.()
   authSubscription?.unsubscribe()
 })
 </script>
@@ -255,9 +300,24 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
+          <div v-if="isElectron && updateStatus.phase !== 'idle'" class="mt-5 rounded-2xl border border-slate-200 bg-white p-4">
+            <div class="flex items-center justify-between gap-3">
+              <p class="text-sm font-extrabold text-slate-900">{{ updateStatusMessage }}</p>
+              <p class="text-sm font-extrabold text-slate-700">{{ updatePercent }}%</p>
+            </div>
+            <div class="mt-3 h-3 overflow-hidden rounded-full bg-slate-100">
+              <div
+                class="h-full rounded-full bg-blue-600 transition-all duration-300"
+                :style="{ width: `${updatePercent}%` }"
+              />
+            </div>
+            <p v-if="updateDetailMessage" class="mt-2 text-xs font-bold text-slate-500">{{ updateDetailMessage }}</p>
+          </div>
+
           <button
             type="button"
-            class="mt-6 w-full rounded-2xl bg-slate-900 py-3 text-sm font-extrabold text-white"
+            class="mt-6 w-full rounded-2xl bg-slate-900 py-3 text-sm font-extrabold text-white disabled:bg-slate-300"
+            :disabled="updateBusy"
             @click="handleUpdate"
           >
             지금 업데이트
