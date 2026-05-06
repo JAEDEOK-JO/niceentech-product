@@ -1,13 +1,17 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { RouterView, useRoute } from 'vue-router'
+import { RouterView, useRoute, useRouter } from 'vue-router'
 import GlobalAppBar from '@/components/layout/GlobalAppBar.vue'
+import DesktopInstallGate from '@/components/desktop/DesktopInstallGate.vue'
 import AppDialog from '@/components/ui/AppDialog.vue'
 import { supabase } from '@/lib/supabase'
 import { usePushNotification } from '@/composables/usePushNotification'
+import { DESKTOP_INSTALL_GATE_SESSION_KEY } from '@/constants/desktopInstall'
+import { isDesktopBrowser } from '@/utils/device'
 import packageJson from '../package.json'
 
 const route = useRoute()
+const router = useRouter()
 const showGlobalAppBar = computed(() => route.meta.requiresAuth === true)
 const {
   isSupported: pushSupported,
@@ -47,18 +51,9 @@ const compareVersion = (left, right) => {
 
 const isElectron = typeof window !== 'undefined' && Boolean(window.electronAPI?.isElectron)
 
-const detectDesktopBrowser = () => {
-  if (typeof window === 'undefined' || typeof navigator === 'undefined') return false
-  if (isElectron) return false
-  const ua = navigator.userAgent || ''
-  if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|Tablet|Silk/i.test(ua)) return false
-  if ((navigator.maxTouchPoints ?? 0) > 1 && /Macintosh/i.test(ua)) return false
-  const coarsePointer = typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches
-  if (coarsePointer) return false
-  return true
-}
-
-const isDesktopBrowser = ref(detectDesktopBrowser())
+const desktopInstallGateVisible = ref(
+  isDesktopBrowser() && window.sessionStorage.getItem(DESKTOP_INSTALL_GATE_SESSION_KEY) !== '1',
+)
 
 const hasNewVersion = computed(() => {
   if (!remoteVersion.value) return false
@@ -135,6 +130,12 @@ const handleEnablePush = async () => {
   }
 }
 
+const handleDesktopGateUnlocked = () => {
+  desktopInstallGateVisible.value = false
+  window.sessionStorage.setItem(DESKTOP_INSTALL_GATE_SESSION_KEY, '1')
+  router.push({ name: 'home' })
+}
+
 // 뒤로가기/닫기 시도 차단
 const blockClose = (e) => {
   if (!hasNewVersion.value) return
@@ -193,6 +194,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="min-h-screen bg-white">
     <AppDialog />
+    <DesktopInstallGate v-if="desktopInstallGateVisible" @unlocked="handleDesktopGateUnlocked" />
     <GlobalAppBar v-if="showGlobalAppBar" />
     <div :class="showGlobalAppBar ? 'app-with-bar pt-[72px]' : ''">
       <RouterView />
