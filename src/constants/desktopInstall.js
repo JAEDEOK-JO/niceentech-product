@@ -1,3 +1,10 @@
 export const DESKTOP_INSTALL_PASSWORD = '8462'
-export const DESKTOP_INSTALL_SHARE_PATH = String.raw`\\niceentech\프로그램\생산계획표 프로그램`
-export const DESKTOP_INSTALL_SHARE_URL = 'file://///niceentech/프로그램/생산계획표%20프로그램'
+export const DESKTOP_INSTALL_BUCKET_URL = 'https://joxfohziazjhscewifjj.supabase.co/storage/v1/object/public/update'
+
+export const buildDesktopInstallerFileName = (version) => {
+  return `NICEENTECH Setup ${version}.exe`
+}
+
+export const buildDesktopInstallerUrl = (version) => {
+  return `${DESKTOP_INSTALL_BUCKET_URL}/${encodeURIComponent(buildDesktopInstallerFileName(version))}`
+}

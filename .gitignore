@@ -15,11 +15,13 @@ dist-ssr
 .claude/
 .dart_tool/
 electron/env.generated.cjs
+supabase/.temp/
 
 # Electron build outputs
 release/
 release-online/
 win-unpacked/
+dist-electron/*.zip
 *.blockmap
 *.exe
 latest.yml

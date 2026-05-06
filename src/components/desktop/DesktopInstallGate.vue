@@ -1,35 +1,23 @@
 <script setup>
 import { computed, ref } from 'vue'
-import { ArrowLeft, Copy, Delete, Download, KeyRound } from 'lucide-vue-next'
+import { ArrowLeft, Delete, Download, KeyRound } from 'lucide-vue-next'
 import {
   DESKTOP_INSTALL_PASSWORD,
-  DESKTOP_INSTALL_SHARE_PATH,
-  DESKTOP_INSTALL_SHARE_URL,
+  buildDesktopInstallerFileName,
+  buildDesktopInstallerUrl,
 } from '@/constants/desktopInstall'
+import packageJson from '../../../package.json'
 
 const emit = defineEmits(['unlocked'])
 
 const mode = ref('install')
 const password = ref('')
 const errorMessage = ref('')
-const folderMessage = ref('')
 
+const installerFileName = computed(() => buildDesktopInstallerFileName(packageJson.version))
+const installerUrl = computed(() => buildDesktopInstallerUrl(packageJson.version))
 const maskedPassword = computed(() => password.value.padEnd(4, '○').slice(0, 4))
 const digits = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0']
-
-const copyInstallPath = async () => {
-  try {
-    await navigator.clipboard?.writeText(DESKTOP_INSTALL_SHARE_PATH)
-    folderMessage.value = '경로를 복사했습니다. 탐색기 주소창에 붙여넣어 주세요.'
-  } catch {
-    folderMessage.value = '브라우저에서 폴더가 열리지 않으면 아래 경로를 탐색기에 입력해 주세요.'
-  }
-}
-
-const openInstallFolder = async () => {
-  await copyInstallPath()
-  window.location.href = DESKTOP_INSTALL_SHARE_URL
-}
 
 const openPasswordPad = () => {
   password.value = ''
@@ -74,28 +62,19 @@ const submitPassword = () => {
         <p class="mt-3 text-sm leading-6 text-slate-600">PC버전으로 다운로드 해주세요.</p>
 
         <div class="mt-5 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-          <p class="text-xs font-bold text-slate-500">설치 파일 위치</p>
-          <p class="mt-1 break-all text-sm font-semibold text-slate-800">{{ DESKTOP_INSTALL_SHARE_PATH }}</p>
+          <p class="text-xs font-bold text-slate-500">설치 파일</p>
+          <p class="mt-1 break-all text-sm font-semibold text-slate-800">{{ installerFileName }}</p>
         </div>
-        <p v-if="folderMessage" class="mt-2 text-xs font-bold leading-5 text-blue-700">{{ folderMessage }}</p>
 
         <div class="mt-6 grid grid-cols-1 gap-3">
-          <button
-            type="button"
+          <a
+            :href="installerUrl"
+            :download="installerFileName"
             class="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-extrabold text-white hover:bg-slate-800"
-            @click="openInstallFolder"
           >
             <Download class="h-4 w-4" />
             다운로드 받기
-          </button>
-          <button
-            type="button"
-            class="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-extrabold text-slate-700 hover:bg-slate-50"
-            @click="copyInstallPath"
-          >
-            <Copy class="h-4 w-4" />
-            경로 복사
-          </button>
+          </a>
           <button
             type="button"
             class="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-extrabold text-slate-700 hover:bg-slate-50"
