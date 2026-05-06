@@ -28,6 +28,11 @@ if (process.platform === 'win32') {
   app.setAppUserModelId('com.niceentech.product')
 }
 
+const gotSingleInstanceLock = app.requestSingleInstanceLock()
+if (!gotSingleInstanceLock) {
+  app.quit()
+}
+
 /** @type {BrowserWindow | null} */
 let mainWindow = null
 /** @type {Tray | null} */
@@ -44,6 +49,11 @@ function loadIcon(filename) {
 
 // ─── 창 생성 ────────────────────────────────────────────────────────────────
 function createWindow() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    showWindow()
+    return
+  }
+
   const appIcon = loadIcon('icon.png') || loadIcon('icon.ico')
 
   mainWindow = new BrowserWindow({
@@ -72,6 +82,9 @@ function createWindow() {
   }
 
   mainWindow.once('ready-to-show', () => mainWindow.show())
+  mainWindow.on('closed', () => {
+    mainWindow = null
+  })
 
   // 포커스 받으면 깜빡임 중지
   mainWindow.on('focus', () => mainWindow?.flashFrame(false))
@@ -93,6 +106,8 @@ function createWindow() {
 
 // ─── 트레이 생성 ────────────────────────────────────────────────────────────
 function createTray() {
+  if (tray) return
+
   const icon = loadIcon('tray.png') || loadIcon('icon.png')
   if (!icon) { console.warn('[Tray] build/tray.png 없음'); return }
 
@@ -240,8 +255,17 @@ function setupAutoUpdater() {
 }
 
 // ─── 앱 이벤트 ──────────────────────────────────────────────────────────────
-app.whenReady().then(() => {
-  Menu.setApplicationMenu(null)
+if (gotSingleInstanceLock) {
+  app.on('second-instance', () => {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      createWindow()
+      return
+    }
+    showWindow()
+  })
+
+  app.whenReady().then(() => {
+    Menu.setApplicationMenu(null)
 
   // 메인 프로세스 Supabase 리스너 초기화
   if (ENV.SUPABASE_URL && ENV.SUPABASE_ANON_KEY) {
@@ -250,13 +274,14 @@ app.whenReady().then(() => {
     console.warn('[Electron] Supabase 크리덴셜 없음 → npm run build:electron 을 먼저 실행하세요')
   }
 
-  createWindow()
-  createTray()
-  setupAutoUpdater()
-  app.on('activate', () => {
-    BrowserWindow.getAllWindows().length === 0 ? createWindow() : showWindow()
+    createWindow()
+    createTray()
+    setupAutoUpdater()
+    app.on('activate', () => {
+      BrowserWindow.getAllWindows().length === 0 ? createWindow() : showWindow()
+    })
   })
-})
+}
 
 app.on('window-all-closed', () => { /* 트레이 상주 유지 */ })
 app.on('before-quit', () => { app.isQuitting = true })
