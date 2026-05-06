@@ -52,3 +52,12 @@ button:disabled {
 #app {
   min-height: 100vh;
 }
+
+@media print {
+  *,
+  *::before,
+  *::after {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}

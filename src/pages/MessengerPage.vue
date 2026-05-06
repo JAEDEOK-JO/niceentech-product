@@ -52,6 +52,7 @@ const showCreateRoomDialog = ref(false)
 const snackMessage = ref('')
 let snackTimer = null
 const sidebarOpen = ref(true)
+const isMobileViewport = ref(false)
 const myId = computed(() => session.value?.user?.id ?? '')
 const imageViewerOpen = ref(false)
 const imageViewerUrls = ref([])
@@ -226,6 +227,9 @@ const clearPendingFiles = () => {
 const handleSelectRoom = async (room) => {
   await selectRoom(room.id)
   await markRoomAsRead(room.id)
+  if (isMobileViewport.value) {
+    sidebarOpen.value = false
+  }
 }
 
 const handleCreateRoom = async () => {
@@ -377,6 +381,13 @@ const handleViewerKeydown = (e) => {
   if (e.key === 'ArrowRight') moveImageViewer(1)
 }
 
+const syncMobileViewport = () => {
+  if (typeof window === 'undefined') return
+  const nextIsMobile = window.matchMedia('(max-width: 767px)').matches
+  isMobileViewport.value = nextIsMobile
+  if (!nextIsMobile && !sidebarOpen.value) sidebarOpen.value = true
+}
+
 const syncActiveRoomReadState = async () => {
   if (!activeRoomId.value) return
   if (document.visibilityState === 'hidden') return
@@ -411,30 +422,33 @@ watch(myId, async (newId) => {
 }, { immediate: true })
 
 onMounted(() => {
+  syncMobileViewport()
+  window.addEventListener('resize', syncMobileViewport)
   window.addEventListener('keydown', handleViewerKeydown)
   document.addEventListener('visibilitychange', handleVisibilityChange)
 })
 onBeforeUnmount(() => {
   clearPendingFiles()
   unsubscribeAll()
+  window.removeEventListener('resize', syncMobileViewport)
   window.removeEventListener('keydown', handleViewerKeydown)
   document.removeEventListener('visibilitychange', handleVisibilityChange)
 })
 </script>
 
 <template>
-  <section class="flex h-[calc(100vh-72px)] bg-slate-50">
+  <section class="relative flex h-[calc(100dvh-56px)] overflow-hidden bg-slate-50 md:h-[calc(100vh-72px)]">
 
     <!-- 사이드바 -->
     <aside
-      class="flex shrink-0 flex-col border-r border-slate-200 bg-white transition-all duration-200 overflow-hidden"
-      :class="sidebarOpen ? 'w-72' : 'w-0'"
+      class="absolute inset-0 z-20 flex shrink-0 flex-col overflow-hidden border-r border-slate-200 bg-white transition-all duration-200 md:relative md:inset-auto md:z-auto"
+      :class="sidebarOpen ? 'w-full md:w-72' : 'w-0'"
     >
       <div class="flex items-center justify-between border-b border-slate-100 px-4 py-3.5">
         <h2 class="text-base font-extrabold text-slate-900">채팅방</h2>
         <button
           type="button"
-          class="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-indigo-700 active:scale-95 transition"
+          class="min-h-10 rounded-xl bg-indigo-600 px-4 text-sm font-extrabold text-white transition hover:bg-indigo-700 active:scale-95"
           @click="showCreateRoomDialog = true"
         >+ 새 채팅방</button>
       </div>
@@ -447,7 +461,7 @@ onBeforeUnmount(() => {
         <li
           v-for="room in rooms"
           :key="room.id"
-          class="group relative cursor-pointer border-b border-slate-100 px-4 py-3 transition hover:bg-slate-50"
+          class="group relative cursor-pointer border-b border-slate-100 px-4 py-4 transition hover:bg-slate-50 md:py-3"
           :class="activeRoomId === room.id ? 'bg-indigo-50 border-l-2 border-l-indigo-500' : ''"
           @click="handleSelectRoom(room)"
         >
@@ -467,7 +481,7 @@ onBeforeUnmount(() => {
             </div>
             <button
               type="button"
-              class="mt-0.5 shrink-0 rounded-md p-1 text-slate-300 opacity-0 transition hover:bg-red-50 hover:text-red-400 group-hover:opacity-100"
+              class="mt-0.5 shrink-0 rounded-md p-2 text-slate-300 opacity-100 transition hover:bg-red-50 hover:text-red-400 md:p-1 md:opacity-0 md:group-hover:opacity-100"
               @click.stop="handleDeleteRoom(room)"
             >
               <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2">
@@ -480,15 +494,15 @@ onBeforeUnmount(() => {
     </aside>
 
     <!-- 채팅 영역 + 멤버 패널 wrapper -->
-    <div class="flex flex-1 min-w-0">
+    <div class="flex min-w-0 flex-1">
     <!-- 채팅 영역 -->
-    <div class="flex flex-1 flex-col min-w-0">
+    <div class="min-w-0 flex-1 flex-col" :class="sidebarOpen ? 'hidden md:flex' : 'flex'">
 
       <!-- 헤더 -->
-      <div class="flex items-center gap-3 border-b border-slate-200 bg-white px-4 py-3.5">
+      <div class="flex min-h-[60px] items-center gap-3 border-b border-slate-200 bg-white px-3 py-2.5 md:px-4 md:py-3.5">
         <button
           type="button"
-          class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50"
+          class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50"
           @click="sidebarOpen = !sidebarOpen"
         >
           <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2">
@@ -504,7 +518,7 @@ onBeforeUnmount(() => {
         <button
           v-if="activeRoom"
           type="button"
-          class="flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-bold transition"
+          class="flex min-h-10 shrink-0 items-center gap-1.5 rounded-xl border px-3 text-xs font-extrabold transition"
           :class="memberPanelOpen ? 'border-indigo-300 bg-indigo-50 text-indigo-600' : 'border-slate-200 text-slate-500 hover:bg-slate-50'"
           @click="memberPanelOpen ? memberPanelOpen = false : openMemberPanel()"
         >
@@ -517,7 +531,7 @@ onBeforeUnmount(() => {
       </div>
 
       <!-- 메시지 목록 -->
-      <div ref="messageListRef" class="flex-1 overflow-y-auto px-4 py-4">
+      <div ref="messageListRef" class="flex-1 overflow-y-auto px-3 py-4 md:px-4">
         <div v-if="!activeRoomId" class="flex h-full items-center justify-center">
           <div class="text-center text-slate-400">
             <svg viewBox="0 0 24 24" class="mx-auto mb-3 h-12 w-12 opacity-30" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -553,7 +567,7 @@ onBeforeUnmount(() => {
               </div>
 
               <div
-                class="flex max-w-[70%] flex-col gap-1"
+                class="flex max-w-[84%] flex-col gap-1 md:max-w-[70%]"
                 :class="(item.type === 'message' ? item.msg.sender_id : item.sender_id) === myId ? 'items-end' : 'items-start'"
               >
                 <!-- 이름 (상대방) -->
@@ -566,7 +580,7 @@ onBeforeUnmount(() => {
 
                 <div
                   v-if="item.type === 'image-group'"
-                  class="grid max-w-[520px] gap-1.5 rounded-2xl"
+                  class="grid max-w-[calc(100vw-96px)] gap-1.5 rounded-2xl md:max-w-[520px]"
                   :class="item.sender_id === myId ? 'rounded-br-sm' : 'rounded-bl-sm'"
                   :style="getImageGroupGridStyle(item.messages.length)"
                 >
@@ -580,7 +594,7 @@ onBeforeUnmount(() => {
                   >
                     <img
                       :src="imageMsg.file_url"
-                      class="h-[120px] w-[120px] object-cover transition hover:opacity-90"
+                      class="h-[96px] w-[96px] object-cover transition hover:opacity-90 sm:h-[120px] sm:w-[120px]"
                       :alt="`chat-image-${imageMsg.id}`"
                     />
                     <button
@@ -600,7 +614,7 @@ onBeforeUnmount(() => {
                 <img
                   v-else-if="item.msg.file_type === 'image' && item.msg.file_url"
                   :src="item.msg.file_url"
-                  class="max-w-[312px] cursor-pointer rounded-2xl border border-slate-200 object-cover shadow-sm transition hover:opacity-90"
+                  class="max-w-[min(312px,calc(100vw-96px))] cursor-pointer rounded-2xl border border-slate-200 object-cover shadow-sm transition hover:opacity-90"
                   :class="item.msg.sender_id === myId ? 'rounded-br-sm' : 'rounded-bl-sm'"
                   @click="openImageViewer(item.msg.file_url)"
                 />
@@ -610,7 +624,7 @@ onBeforeUnmount(() => {
                   v-else-if="item.msg.file_type === 'video' && item.msg.file_url"
                   :src="item.msg.file_url"
                   controls
-                  class="max-w-[300px] rounded-2xl border border-slate-200 shadow-sm"
+                  class="max-w-[min(300px,calc(100vw-96px))] rounded-2xl border border-slate-200 shadow-sm"
                   :class="item.msg.sender_id === myId ? 'rounded-br-sm' : 'rounded-bl-sm'"
                 />
 
@@ -665,7 +679,7 @@ onBeforeUnmount(() => {
       </div>
 
       <!-- 파일 미리보기 (다중) -->
-      <div v-if="pendingFiles.length > 0" class="border-t border-slate-100 bg-white px-4 py-2.5">
+      <div v-if="pendingFiles.length > 0" class="border-t border-slate-100 bg-white px-3 py-2.5 md:px-4">
         <div class="flex items-center justify-between mb-2">
           <span class="text-xs font-semibold text-slate-500">첨부 파일 {{ pendingFiles.length }}/{{ MAX_FILES }}</span>
           <button type="button" class="text-[11px] font-semibold text-red-400 hover:text-red-600" @click="clearPendingFiles">전체 삭제</button>
@@ -729,7 +743,7 @@ onBeforeUnmount(() => {
       </div>
 
       <!-- 입력창 -->
-      <div v-if="activeRoomId" class="border-t border-slate-200 bg-white px-4 py-3 flex-shrink-0">
+      <div v-if="activeRoomId" class="flex-shrink-0 border-t border-slate-200 bg-white px-3 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] md:px-4">
         <div class="flex items-end gap-2">
           <!-- 파일 첨부 버튼 -->
           <button
@@ -755,7 +769,7 @@ onBeforeUnmount(() => {
           <textarea
             v-model="messageInput"
             rows="1"
-            class="flex-1 resize-none rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-300 focus:bg-white focus:outline-none transition"
+            class="min-h-10 flex-1 resize-none rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition focus:border-indigo-300 focus:bg-white focus:outline-none"
             placeholder="메시지를 입력하세요 (Enter 전송, Shift+Enter 줄바꿈)"
             :disabled="sending || uploading"
             @keydown="handleKeydown"
@@ -783,7 +797,7 @@ onBeforeUnmount(() => {
     <!-- 멤버 관리 패널 -->
     <aside
       v-if="memberPanelOpen && activeRoom"
-      class="flex w-72 shrink-0 flex-col border-l border-slate-200 bg-white overflow-hidden"
+      class="fixed inset-x-0 bottom-0 top-[56px] z-30 flex w-full shrink-0 flex-col overflow-hidden border-l border-slate-200 bg-white md:static md:w-72"
     >
       <div class="flex items-center justify-between border-b border-slate-100 px-4 py-3.5">
         <h3 class="text-sm font-extrabold text-slate-900">멤버 관리</h3>

@@ -169,6 +169,29 @@ ipcMain.on('show-notification', (_, payload) => {
   bringToNotice(payload || {})
 })
 
+ipcMain.handle('print-report', async (_, requestedOptions = {}) => {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return { success: false, errorType: 'Window is not available' }
+  }
+
+  const scaleFactor = Number(requestedOptions.scaleFactor)
+  const printOptions = {
+    silent: false,
+    printBackground: requestedOptions.printBackground !== false,
+    color: true,
+    landscape: requestedOptions.landscape !== false,
+    pageSize: requestedOptions.pageSize || 'A4',
+    margins: { marginType: 'printableArea' },
+    scaleFactor: Number.isFinite(scaleFactor) ? Math.max(10, Math.min(200, scaleFactor)) : 90,
+  }
+
+  return new Promise((resolve) => {
+    mainWindow.webContents.print(printOptions, (success, errorType) => {
+      resolve({ success, errorType: errorType || '' })
+    })
+  })
+})
+
 ipcMain.on('auth-user-id', (_, userId) => {
   if (userId) {
     supabaseListener.start(userId, (payload) => bringToNotice(payload))

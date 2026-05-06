@@ -595,7 +595,7 @@ onBeforeUnmount(() => {
 
 <template>
   <section class="min-h-screen w-full">
-    <header class="sticky top-[72px] z-20 border-b border-slate-200 bg-white">
+    <header class="sticky top-[56px] z-20 border-b border-slate-200 bg-white md:top-[72px]">
       <div class="flex flex-col gap-2 px-2 py-2 md:flex-row md:flex-wrap md:items-center md:justify-between md:px-6 md:py-2.5">
         <div class="flex items-center justify-between gap-2">
           <h1 class="text-sm font-bold text-slate-900 md:text-lg">{{ pageTitle }}</h1>

@@ -1,11 +1,13 @@
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import Button from '@/components/ui/button/Button.vue'
 import Input from '@/components/ui/input/Input.vue'
 import { normalizeCompanyType } from '@/constants/companyTypes'
 import { useDialog } from '@/composables/useDialog'
+import ReportPrintSettingsDialog from './ReportPrintSettingsDialog.vue'
+import { printManagementReport } from './reportPrint'
 
 const { confirm, alert } = useDialog()
 
@@ -37,6 +39,7 @@ const deletingWeeklySales = ref(false)
 const savingAsEntry = ref(false)
 const deletingAsEntry = ref(false)
 const isSalesDialogOpen = ref(false)
+const isPrintSettingsOpen = ref(false)
 const activeSalesTab = ref('head')
 const isAsDialogOpen = ref(false)
 const selectedSalesMonth = ref(new Date())
@@ -506,12 +509,16 @@ const openSalesDialog = () => {
   activeSalesTab.value = 'head'
   isSalesDialogOpen.value = true
 }
-const printReport = async () => {
-  if (typeof window === 'undefined') return
-  isPrinting.value = true
-  await nextTick()
-  window.print()
-  isPrinting.value = false
+const openPrintSettings = () => {
+  if (typeof window !== 'undefined' && window.electronAPI?.printReport) {
+    isPrintSettingsOpen.value = true
+    return
+  }
+  printReport()
+}
+const printReport = async (options = {}) => {
+  isPrintSettingsOpen.value = false
+  await printManagementReport(isPrinting, options)
 }
 const closeSalesDialog = () => {
   if (savingWeeklySales.value || deletingWeeklySales.value) return
@@ -601,7 +608,7 @@ onBeforeUnmount(revokeAsPreviewUrls)
           <p class="mt-2 text-[13px] text-slate-600">매출, 수주, AS 현황을 정리한 화면입니다.</p>
         </div>
         <div class="flex shrink-0 gap-2">
-          <Button class="shrink-0" variant="outline" @click="printReport">인쇄</Button>
+          <Button class="shrink-0" variant="outline" @click="openPrintSettings">인쇄</Button>
           <Button v-if="props.showBackButton" class="shrink-0" variant="outline" @click="emit('go-back')">가이드로 돌아가기</Button>
         </div>
       </div>
@@ -954,6 +961,11 @@ onBeforeUnmount(revokeAsPreviewUrls)
         </div>
       </div>
     </div>
+    <ReportPrintSettingsDialog
+      :open="isPrintSettingsOpen"
+      @close="isPrintSettingsOpen = false"
+      @print="printReport"
+    />
   </section>
 </template>
 
@@ -1020,4 +1032,3 @@ onBeforeUnmount(revokeAsPreviewUrls)
   }
 }
 </style>
-

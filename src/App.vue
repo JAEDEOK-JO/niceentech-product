@@ -237,7 +237,7 @@ onBeforeUnmount(() => {
     <AppDialog />
     <DesktopInstallGate v-if="desktopInstallGateVisible" @unlocked="handleDesktopGateUnlocked" />
     <GlobalAppBar v-if="showGlobalAppBar" />
-    <div :class="showGlobalAppBar ? 'app-with-bar pt-[72px]' : ''">
+    <div :class="showGlobalAppBar ? 'app-with-bar pt-[56px] md:pt-[72px]' : ''">
       <RouterView />
     </div>
 

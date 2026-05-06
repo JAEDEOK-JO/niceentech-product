@@ -1,7 +1,9 @@
 <script setup>
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { supabase } from '@/lib/supabase'
 import Button from '@/components/ui/button/Button.vue'
+import ReportPrintSettingsDialog from './ReportPrintSettingsDialog.vue'
+import { printManagementReport } from './reportPrint'
 import { useDialog } from '@/composables/useDialog'
 
 const { confirm, alert } = useDialog()
@@ -28,6 +30,7 @@ const deletingRepairEntry = ref(false)
 const repairEntryError = ref('')
 const editingRepairId = ref(null)
 const isPrinting = ref(false)
+const isPrintSettingsOpen = ref(false)
 
 const now = new Date()
 const reportYear = now.getFullYear()
@@ -556,12 +559,17 @@ const deleteRepairEntry = async (rowId) => {
   }
 }
 
-const printReport = async () => {
-  if (typeof window === 'undefined') return
-  isPrinting.value = true
-  await nextTick()
-  window.print()
-  isPrinting.value = false
+const openPrintSettings = () => {
+  if (typeof window !== 'undefined' && window.electronAPI?.printReport) {
+    isPrintSettingsOpen.value = true
+    return
+  }
+  printReport()
+}
+
+const printReport = async (options = {}) => {
+  isPrintSettingsOpen.value = false
+  await printManagementReport(isPrinting, options)
 }
 
 onMounted(async () => {
@@ -580,7 +588,7 @@ onMounted(async () => {
           <p class="mt-2 text-[13px] text-slate-600">{{ reportYearLabel }} 누적과 {{ reportMonthLabel }} 생산 현황입니다.</p>
         </div>
         <div class="flex shrink-0 gap-2">
-          <Button class="shrink-0" variant="outline" @click="printReport">인쇄</Button>
+          <Button class="shrink-0" variant="outline" @click="openPrintSettings">인쇄</Button>
           <Button v-if="props.showBackButton" class="shrink-0" variant="outline" @click="emit('go-back')">가이드로 돌아가기</Button>
         </div>
       </div>
@@ -935,6 +943,11 @@ onMounted(async () => {
         </div>
       </div>
     </div>
+    <ReportPrintSettingsDialog
+      :open="isPrintSettingsOpen"
+      @close="isPrintSettingsOpen = false"
+      @print="printReport"
+    />
   </section>
 </template>
 

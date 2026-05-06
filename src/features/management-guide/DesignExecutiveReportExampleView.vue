@@ -1,7 +1,9 @@
 <script setup>
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { supabase } from '@/lib/supabase'
 import Button from '@/components/ui/button/Button.vue'
+import ReportPrintSettingsDialog from './ReportPrintSettingsDialog.vue'
+import { printManagementReport } from './reportPrint'
 
 const PRODUCT_LIST_TABLE = 'product_list'
 
@@ -16,6 +18,7 @@ const rows = ref([])
 const monthRows = ref([])
 const distributionRows = ref([])
 const isPrinting = ref(false)
+const isPrintSettingsOpen = ref(false)
 
 const startOfDay = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate())
 const addDays = (date, days) => {
@@ -379,12 +382,17 @@ const fetchRows = async () => {
   loading.value = false
 }
 
-const printReport = async () => {
-  if (typeof window === 'undefined') return
-  isPrinting.value = true
-  await nextTick()
-  window.print()
-  isPrinting.value = false
+const openPrintSettings = () => {
+  if (typeof window !== 'undefined' && window.electronAPI?.printReport) {
+    isPrintSettingsOpen.value = true
+    return
+  }
+  printReport()
+}
+
+const printReport = async (options = {}) => {
+  isPrintSettingsOpen.value = false
+  await printManagementReport(isPrinting, options)
 }
 
 onMounted(async () => {
@@ -402,7 +410,7 @@ onMounted(async () => {
           <h1 class="mt-1 text-lg font-extrabold text-slate-900 md:text-xl">설계부 화요일 회의 보고</h1>
         </div>
         <div class="flex shrink-0 gap-2">
-          <Button class="shrink-0" variant="outline" @click="printReport">인쇄</Button>
+          <Button class="shrink-0" variant="outline" @click="openPrintSettings">인쇄</Button>
           <Button v-if="props.showBackButton" class="shrink-0" variant="outline" @click="emit('go-back')">가이드로 돌아가기</Button>
         </div>
       </div>
@@ -652,6 +660,11 @@ onMounted(async () => {
         </div>
       </template>
     </main>
+    <ReportPrintSettingsDialog
+      :open="isPrintSettingsOpen"
+      @close="isPrintSettingsOpen = false"
+      @print="printReport"
+    />
   </section>
 </template>
 

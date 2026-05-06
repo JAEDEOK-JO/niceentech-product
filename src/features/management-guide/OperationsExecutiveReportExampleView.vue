@@ -1,7 +1,9 @@
 <script setup>
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { supabase } from '@/lib/supabase'
 import Button from '@/components/ui/button/Button.vue'
+import ReportPrintSettingsDialog from './ReportPrintSettingsDialog.vue'
+import { printManagementReport } from './reportPrint'
 
 const COMPANY_LIST_TABLE = 'company_list'
 const METRIC_DEFINITIONS_TABLE = 'department_metric_definitions'
@@ -49,6 +51,7 @@ const currentPage = ref(1)
 const loading = ref(false)
 const errorMessage = ref('')
 const isPrinting = ref(false)
+const isPrintSettingsOpen = ref(false)
 const isInventoryDialogOpen = ref(false)
 const selectedInventoryMonth = ref(new Date(reportYear, reportMonth - 1, 1))
 const inventoryError = ref('')
@@ -607,12 +610,17 @@ const saveInventory = async () => {
   }
 }
 
-const printReport = async () => {
-  if (typeof window === 'undefined') return
-  isPrinting.value = true
-  await nextTick()
-  window.print()
-  isPrinting.value = false
+const openPrintSettings = () => {
+  if (typeof window !== 'undefined' && window.electronAPI?.printReport) {
+    isPrintSettingsOpen.value = true
+    return
+  }
+  printReport()
+}
+
+const printReport = async (options = {}) => {
+  isPrintSettingsOpen.value = false
+  await printManagementReport(isPrinting, options)
 }
 
 onMounted(fetchReportData)
@@ -627,7 +635,7 @@ onMounted(fetchReportData)
           <h1 class="mt-1 text-lg font-extrabold text-slate-900 md:text-xl">공무부 대표 보고</h1>
         </div>
         <div class="flex shrink-0 gap-2">
-          <Button class="shrink-0" variant="outline" @click="printReport">인쇄</Button>
+          <Button class="shrink-0" variant="outline" @click="openPrintSettings">인쇄</Button>
           <Button v-if="props.showBackButton" class="shrink-0" variant="outline" @click="emit('go-back')">가이드로 돌아가기</Button>
         </div>
       </div>
@@ -1053,6 +1061,11 @@ onMounted(fetchReportData)
       </div>
     </div>
 
+    <ReportPrintSettingsDialog
+      :open="isPrintSettingsOpen"
+      @close="isPrintSettingsOpen = false"
+      @print="printReport"
+    />
   </section>
 </template>
 

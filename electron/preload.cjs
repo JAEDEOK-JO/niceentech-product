@@ -24,6 +24,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.send('show-notification', options)
   },
 
+  printReport: (options) => ipcRenderer.invoke('print-report', options),
+
   /**
    * 메인 프로세스에서 보내는 '특정 경로로 이동' 이벤트 수신
    * @param {(url: string) => void} callback
