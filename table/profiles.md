@@ -19,7 +19,7 @@
   - `2200_17496_13_not_null` (CHECK): `work_man IS NOT NULL`
 - 인덱스(Indexes):
   - `profiles_pkey` (UNIQUE INDEX on `id`)
-  - `idx_profiles_role` (btree `lower(coalesce(role, ''))`)
+  - `idx_profiles_role` (btree `role`)
 - 트리거(Triggers):
   - 조회 결과 없음
 
@@ -31,7 +31,7 @@
 | name | string (text) | N |  | 이름 |
 | department | string (text) | N |  | 부서 |
 | position | string (text) | N |  | 직급 |
-| role | string (text) | N |  | 권한 역할 |
+| role | enum (`profile_role`) | N | `'일반'::profile_role` | 권한 역할 (`admin`, `관리자`, `작업반장`, `일반`, `외주`) |
 | activate | boolean (boolean) | N | true | 활성화 여부 |
 | phone | string (text) | N |  | 연락처 |
 | created_at | string (timestamp with time zone) | N | now() | 생성일시 |
@@ -39,11 +39,12 @@
 | is_vendor | boolean (boolean) | N | false | 협력사 여부 |
 | email | string (text) | N |  | 이메일 |
 | signature_path | string (text) | N |  | 서명 파일 경로 |
-| work_man | string (text) | Y | `'없음'::text` | 워크맨 표시값 |
+| work_man | enum (`profile_work_man`) | Y | `'없음'::profile_work_man` | 워크맨 표시값 |
 
 ## 앱 연동 메모
 - 현재 프론트에서 사용 중인 필드:
   - `name`
   - `position`
   - `department`
+  - `role` (없을 때 `'일반'` 보정)
   - `work_man` (없을 때 `'없음'` 보정)

@@ -2,20 +2,36 @@ import { ref } from 'vue'
 
 const isElectronEnv = typeof window !== 'undefined' && window.electronAPI?.isElectron === true
 
-// OneSignal CDK 초기화 대기 (window.OneSignalDeferred 큐 활용)
+// OneSignal SDK 객체 생성과 init 완료는 시점이 다르므로 init 완료 플래그까지 기다린다.
 const waitForOS = () =>
   new Promise((resolve) => {
-    // 이미 초기화됐으면 즉시 반환
-    if (window.OneSignal) { resolve(window.OneSignal); return }
+    if (typeof window === 'undefined') {
+      resolve(null)
+      return
+    }
 
-    // 아직 초기화 전이면 OneSignalDeferred 큐에 등록
-    // OneSignal SDK가 준비되면 자동으로 호출됨
+    const startedAt = Date.now()
+    const poll = () => {
+      if (window.__oneSignalReady === false) {
+        resolve(null)
+        return
+      }
+      if (window.__oneSignalReady === true && window.OneSignal?.login) {
+        resolve(window.OneSignal)
+        return
+      }
+      if (Date.now() - startedAt > 6000) {
+        resolve(null)
+        return
+      }
+      setTimeout(poll, 100)
+    }
+
     window.OneSignalDeferred = window.OneSignalDeferred || []
-    const timeout = setTimeout(() => resolve(null), 6000)
-    window.OneSignalDeferred.push((os) => {
-      clearTimeout(timeout)
-      resolve(os)
+    window.OneSignalDeferred.push(() => {
+      setTimeout(poll, 0)
     })
+    poll()
   })
 
 export function usePushNotification() {

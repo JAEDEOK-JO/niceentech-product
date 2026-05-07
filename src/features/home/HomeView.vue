@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import Button from '@/components/ui/button/Button.vue'
 import { productTableColumns, tableTotalWidth } from '@/features/home/productTableConfig'
-import { isAdminRole, normalizeWorkMan } from '@/utils/adminAccess'
+import { isProductionAdmin, normalizeWorkMan } from '@/utils/adminAccess'
 import { isWorkerDoneStatus, normalizeProductionWorkType } from '@/utils/productionStatus'
 
 const props = defineProps({
@@ -126,13 +126,14 @@ const getCellText = (row, key) => {
 const normalizeWorkType = (value) => normalizeProductionWorkType(value)
 const NASA_HOME_STAGE_KEY = 'marking_laser_1'
 const NASA_HOME_ONLY_STAGE_MESSAGE = '레이저1을 클릭해주세요.'
-const canReorderRows = computed(() => isAdminRole(props.currentRole))
+const canReorderRows = computed(() => isProductionAdmin(props.currentRole))
 const isHoleBasedRow = (row) => {
   const workType = normalizeWorkType(row?.work_type)
   return workType.includes('전실/입상') || workType.includes('전실입상')
 }
 const isNasaHomeRow = (row) => normalizeWorkType(row?.work_type) === '나사'
-const isNasaHomeRestrictedStage = (row, stageKey) => isNasaHomeRow(row) && stageKey !== NASA_HOME_STAGE_KEY
+const isNasaHomeRestrictedStage = (row, stageKey) =>
+  !isProductionAdmin(props.currentRole) && isNasaHomeRow(row) && stageKey !== NASA_HOME_STAGE_KEY
 const mobileStageRows = [
   ['marking_weld_a', 'marking_weld_b', 'marking_laser_1', 'marking_laser_2'],
   ['beveling', 'main_work', 'nasa'],
@@ -190,7 +191,7 @@ const getWorkerSavedDateText = (lineType) =>
     : formatKoreanDateText(activeCallRow.value?.worker_main_time)
 
 const resolveStageKeyFromWorkMan = (currentWorkMan) => {
-  if (isAdminRole(props.currentRole)) return 'all'
+  if (isProductionAdmin(props.currentRole)) return 'all'
   const normalized = normalizeWorkMan(currentWorkMan)
   if (!normalized || normalized === '없음') return null
   for (const [workMan, stageKey] of Object.entries(workManToStageKey)) {
@@ -200,7 +201,7 @@ const resolveStageKeyFromWorkMan = (currentWorkMan) => {
 }
 
 const canControlStageByWorkMan = (currentWorkMan, stageKey) => {
-  if (isAdminRole(props.currentRole)) return true
+  if (isProductionAdmin(props.currentRole)) return true
   const resolved = resolveStageKeyFromWorkMan(currentWorkMan)
   if (!resolved) return false
   if (resolved === 'all') return true
@@ -220,14 +221,14 @@ const showSnack = (message) => {
 const isMobileRowEditing = (rowId) => Boolean(mobileEditModeByRow.value[rowId])
 const toggleMobileRowEdit = (rowId) => {
   if (!canReorderRows.value) {
-    showSnack('관리자만 수정할 수 있습니다')
+    showSnack('관리자/작업반장만 수정할 수 있습니다')
     return
   }
   mobileEditModeByRow.value[rowId] = !isMobileRowEditing(rowId)
 }
 const ensureMobileRowEditable = (rowId) => {
   if (!canReorderRows.value) {
-    showSnack('관리자만 수정할 수 있습니다')
+    showSnack('관리자/작업반장만 수정할 수 있습니다')
     return false
   }
   if (!isMobileRowEditing(rowId)) {

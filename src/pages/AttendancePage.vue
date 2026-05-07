@@ -37,7 +37,7 @@ import {
   fetchSignatures,
   subscribeAttendanceRequests,
   unsubscribeAttendance,
-  fetchDailyWorkHours,
+  fetchDailyWorkHoursRange,
   upsertDailyWorkHoursBulk,
   deleteDailyWorkHour,
   type EmployeeFormData,
@@ -101,30 +101,73 @@ const stats = computed<AttendanceDashboardStats>(() => {
 const employees = ref<Employee[]>([])
 const employeesLoading = ref(false)
 
-// ─── 금일 작업시간 상태 ───────────────────────────────────────────────────────
-const todayWorkDate = computed(() => new Date().toISOString().slice(0, 10))
+// ─── 작업시간 상태 ───────────────────────────────────────────────────────────
+function formatLocalDate(date = new Date()) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function getMonthRange(value: string) {
+  const base = new Date(`${value}T00:00:00`)
+  const start = new Date(base.getFullYear(), base.getMonth(), 1)
+  const end = new Date(base.getFullYear(), base.getMonth() + 1, 0)
+  return {
+    startDate: formatLocalDate(start),
+    endDate: formatLocalDate(end),
+  }
+}
+
+const dailyWorkDate = ref(formatLocalDate())
 const dailyWorkHours = ref<DailyWorkHour[]>([])
 const dailyWorkHoursLoading = ref(false)
 
-async function loadDailyWorkHours() {
-  dailyWorkHoursLoading.value = true
+function upsertLocalDailyWorkHours(records: { workDate: string; employeeId: number; endTime: string }[]) {
+  const updatedAt = new Date().toISOString()
+  const next = [...dailyWorkHours.value]
+
+  for (const record of records) {
+    const index = next.findIndex((item) => item.workDate === record.workDate && item.employeeId === record.employeeId)
+    const current = index >= 0 ? next[index] : null
+    const item: DailyWorkHour = {
+      id: current?.id ?? 0,
+      workDate: record.workDate,
+      employeeId: record.employeeId,
+      endTime: record.endTime,
+      createdAt: current?.createdAt ?? updatedAt,
+      updatedAt,
+    }
+
+    if (index >= 0) {
+      next.splice(index, 1, item)
+    } else {
+      next.push(item)
+    }
+  }
+
+  dailyWorkHours.value = next
+}
+
+async function loadDailyWorkHours({ silent = false } = {}) {
+  if (!silent) dailyWorkHoursLoading.value = true
   try {
-    dailyWorkHours.value = await fetchDailyWorkHours(todayWorkDate.value)
+    const { startDate, endDate } = getMonthRange(dailyWorkDate.value)
+    dailyWorkHours.value = await fetchDailyWorkHoursRange(startDate, endDate)
   } catch {
     dailyWorkHours.value = []
   } finally {
-    dailyWorkHoursLoading.value = false
+    if (!silent) dailyWorkHoursLoading.value = false
   }
 }
 
 async function handleSaveDailyWorkHours(records: { employeeId: number; endTime: string }[]) {
   if (records.length === 0) return
   try {
-    await upsertDailyWorkHoursBulk(
-      records.map((r) => ({ workDate: todayWorkDate.value, employeeId: r.employeeId, endTime: r.endTime })),
-    )
+    const payload = records.map((r) => ({ workDate: dailyWorkDate.value, employeeId: r.employeeId, endTime: r.endTime }))
+    await upsertDailyWorkHoursBulk(payload)
+    upsertLocalDailyWorkHours(payload)
     showToast(`${records.length}명 저장되었습니다.`)
-    await loadDailyWorkHours()
   } catch {
     showToast('저장 중 오류가 발생했습니다.', 'error')
   }
@@ -133,9 +176,30 @@ async function handleSaveDailyWorkHours(records: { employeeId: number; endTime: 
 async function handleDeleteDailyWorkHour(payload: { workDate: string; employeeId: number }) {
   try {
     await deleteDailyWorkHour(payload.workDate, payload.employeeId)
-    await loadDailyWorkHours()
+    dailyWorkHours.value = dailyWorkHours.value.filter(
+      (item) => !(item.workDate === payload.workDate && item.employeeId === payload.employeeId),
+    )
   } catch {
     showToast('삭제 중 오류가 발생했습니다.', 'error')
+  }
+}
+
+async function handleUpdateDailyWorkHour(payload: { workDate: string; employeeId: number; endTime: string }) {
+  try {
+    await upsertDailyWorkHoursBulk([payload])
+    upsertLocalDailyWorkHours([payload])
+    showToast('작업시간이 수정되었습니다.')
+  } catch {
+    showToast('수정 중 오류가 발생했습니다.', 'error')
+  }
+}
+
+async function setDailyWorkDate(workDate: string) {
+  const currentRange = getMonthRange(dailyWorkDate.value)
+  const nextRange = getMonthRange(workDate)
+  dailyWorkDate.value = workDate
+  if (currentRange.startDate !== nextRange.startDate || currentRange.endDate !== nextRange.endDate) {
+    await loadDailyWorkHours({ silent: true })
   }
 }
 
@@ -647,11 +711,13 @@ async function handleDeleteEmployee(id: number) {
     @update-employee="handleUpdateEmployee"
     @delete-employee="handleDeleteEmployee"
     @open-form-for-employee="openFormForEmployee"
-    :today-work-date="todayWorkDate"
+    :today-work-date="dailyWorkDate"
     :daily-work-hours="dailyWorkHours"
     :daily-work-hours-loading="dailyWorkHoursLoading"
     @save-daily-work-hours="handleSaveDailyWorkHours"
     @refresh-daily-work-hours="loadDailyWorkHours"
     @delete-daily-work-hour="handleDeleteDailyWorkHour"
+    @update-daily-work-hour="handleUpdateDailyWorkHour"
+    @select-daily-work-date="setDailyWorkDate"
   />
 </template>

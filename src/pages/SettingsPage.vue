@@ -5,6 +5,7 @@ import { useProfile } from '@/composables/useProfile'
 import { usePushNotification } from '@/composables/usePushNotification'
 import { fetchEmployees } from '@/features/attendance/services/attendance.service'
 import AttendanceEmployeeMappingPanel from '@/features/attendance/components/AttendanceEmployeeMappingPanel.vue'
+import EmployeeAccountRegisterPanel from '@/features/settings/components/EmployeeAccountRegisterPanel.vue'
 import packageJson from '../../package.json'
 
 const appVersion = packageJson.version
@@ -12,6 +13,7 @@ const { session } = useAuth()
 const { profile } = useProfile(session)
 
 const isRootAdmin = computed(() => profile.value?.role === 'admin')
+const activePanel = ref('app-info')
 
 const employees = ref([])
 const loadEmployees = async () => {
@@ -23,7 +25,13 @@ const loadEmployees = async () => {
 }
 watch(
   isRootAdmin,
-  (v) => { if (v) loadEmployees() },
+  (v) => {
+    if (v) {
+      loadEmployees()
+      return
+    }
+    if (activePanel.value === 'employee-register') activePanel.value = 'app-info'
+  },
   { immediate: true },
 )
 const {
@@ -120,32 +128,50 @@ watch(
 
 <template>
   <main class="min-h-[calc(100vh-72px)] bg-slate-50 px-4 py-6 md:px-6">
-    <div class="mx-auto flex w-full max-w-3xl flex-col gap-5">
-      <section class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div class="flex flex-col gap-2">
-          <p class="text-sm font-bold text-slate-500">설정</p>
-          <h1 class="text-2xl font-extrabold text-slate-900">앱 정보</h1>
+    <div class="mx-auto grid w-full max-w-6xl gap-5 lg:grid-cols-[3fr_7fr]">
+      <aside class="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+        <div class="px-2 py-2">
+          <p class="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">설정</p>
+          <h1 class="mt-1 text-lg font-extrabold text-slate-900">관리 메뉴</h1>
         </div>
-      </section>
+        <nav class="mt-3 grid gap-2">
+          <button
+            type="button"
+            class="rounded-xl px-4 py-3 text-left text-sm font-extrabold transition-colors"
+            :class="activePanel === 'app-info' ? 'bg-slate-900 text-white' : 'bg-slate-50 text-slate-700 hover:bg-slate-100'"
+            @click="activePanel = 'app-info'"
+          >
+            앱정보
+          </button>
+          <button
+            v-if="isRootAdmin"
+            type="button"
+            class="rounded-xl px-4 py-3 text-left text-sm font-extrabold transition-colors"
+            :class="activePanel === 'employee-register' ? 'bg-slate-900 text-white' : 'bg-slate-50 text-slate-700 hover:bg-slate-100'"
+            @click="activePanel = 'employee-register'"
+          >
+            사원등록
+          </button>
+        </nav>
+      </aside>
 
-      <section class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div class="grid gap-3">
+      <section class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div v-if="activePanel === 'app-info'" class="grid gap-5">
+          <div class="border-b border-slate-200 pb-4">
+            <p class="text-sm font-bold text-slate-500">설정</p>
+            <h1 class="mt-1 text-2xl font-extrabold text-slate-900">앱 정보</h1>
+          </div>
+
           <article class="rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4">
             <div class="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <p class="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">메신저 알림</p>
                 <p class="mt-2 text-sm text-slate-600">{{ notificationStatus }}</p>
-                <p
-                  v-if="permission === 'denied'"
-                  class="mt-2 text-xs text-slate-500"
-                >
+                <p v-if="permission === 'denied'" class="mt-2 text-xs text-slate-500">
                   브라우저 주소창의 알림 설정 또는 사이트 권한에서 다시 허용해 주세요.
                 </p>
               </div>
-              <span
-                class="inline-flex rounded-full px-3 py-1 text-xs font-extrabold"
-                :class="statusToneClass"
-              >
+              <span class="inline-flex rounded-full px-3 py-1 text-xs font-extrabold" :class="statusToneClass">
                 {{
                   isElectron
                     ? '자동'
@@ -184,19 +210,23 @@ watch(
             <p class="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">업데이트</p>
             <p class="mt-2 text-sm text-slate-600">새 버전이 배포되면 화면 하단에 알림이 표시됩니다.</p>
           </article>
-        </div>
-      </section>
 
-      <!-- 직원 ID 매칭 (role=admin 전용, 관리자 계정 제외) -->
-      <section v-if="isRootAdmin" class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div class="mb-4 flex flex-col gap-1">
-          <p class="text-xs font-bold uppercase tracking-[0.18em] text-red-500">ROOT ADMIN</p>
-          <h2 class="text-lg font-extrabold text-slate-900">직원 ID 매칭</h2>
-          <p class="text-sm text-slate-500">
-            근태 엑셀의 ID를 직원목록과 연결합니다. 최초 1회만 수행하세요.
-          </p>
+          <article v-if="isRootAdmin" class="rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4">
+            <div class="mb-4 flex flex-col gap-1">
+              <p class="text-xs font-bold uppercase tracking-[0.18em] text-red-500">ROOT ADMIN</p>
+              <h2 class="text-lg font-extrabold text-slate-900">직원 ID 매칭</h2>
+              <p class="text-sm text-slate-500">
+                근태 엑셀의 ID를 직원목록과 연결합니다. 최초 1회만 수행하세요.
+              </p>
+            </div>
+            <AttendanceEmployeeMappingPanel :employees="employees" @refresh-employees="loadEmployees" />
+          </article>
         </div>
-        <AttendanceEmployeeMappingPanel :employees="employees" @refresh-employees="loadEmployees" />
+
+        <EmployeeAccountRegisterPanel
+          v-else-if="isRootAdmin && activePanel === 'employee-register'"
+          @registered="loadEmployees"
+        />
       </section>
     </div>
 

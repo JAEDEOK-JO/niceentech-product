@@ -96,6 +96,8 @@ const emit = defineEmits<{
   (e: 'saveDailyWorkHours', records: { employeeId: number; endTime: string }[]): void
   (e: 'refreshDailyWorkHours'): void
   (e: 'deleteDailyWorkHour', payload: { workDate: string; employeeId: number }): void
+  (e: 'selectDailyWorkDate', workDate: string): void
+  (e: 'updateDailyWorkHour', payload: { workDate: string; employeeId: number; endTime: string }): void
 }>()
 
 // ─── 비밀번호 키패드 상태 ─────────────────────────────────────────────────────
@@ -129,6 +131,9 @@ function onSaveDailyWorkHours(records: { employeeId: number; endTime: string }[]
   emit('saveDailyWorkHours', records)
   workHoursDialogVisible.value = false
 }
+const selectedDailyWorkHours = computed(() =>
+  props.dailyWorkHours.filter((item) => item.workDate === props.todayWorkDate),
+)
 const REQUESTS_PER_PAGE = 10
 const requestsPage = ref(1)
 
@@ -204,8 +209,8 @@ watch(
 </script>
 
 <template>
-  <div class="min-h-screen bg-slate-50 pt-[72px]">
-    <div class="w-full px-[5px] py-8 sm:px-5">
+  <div class="min-h-screen bg-slate-50">
+    <div class="w-full px-[5px] pb-8 pt-[15px] sm:px-5">
 
       <!-- 페이지 헤더 -->
       <div class="mb-7 flex flex-wrap items-start justify-between gap-3">
@@ -213,19 +218,10 @@ watch(
           <h1 class="text-2xl font-extrabold text-slate-900">생산부 근태관리</h1>
           <p class="mt-1 text-sm text-slate-500">{{ thisMonthLabel }} 휴가 신청 및 근태 현황</p>
         </div>
-        <div v-if="isAdmin && activeTab === 'requests'" class="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            class="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-slate-700"
-            @click="emit('openForm')"
-          >
-            + 휴가 신청
-          </button>
-        </div>
       </div>
 
-      <!-- 통계 카드 4개 (관리자만) -->
-      <div v-if="isAdmin" class="mb-7 grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <!-- 통계 카드 (관리자만) -->
+      <div v-if="isAdmin" class="mb-7 grid grid-cols-2 gap-4 sm:grid-cols-3">
         <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <p class="text-xs font-medium text-slate-400">총 직원</p>
           <p class="mt-2 text-3xl font-extrabold text-slate-900">
@@ -242,12 +238,6 @@ watch(
           <p class="text-xs font-medium text-amber-500">승인 대기</p>
           <p class="mt-2 text-3xl font-extrabold text-amber-700">
             {{ stats.pendingCount }}<span class="ml-1 text-base font-bold text-amber-400">건</span>
-          </p>
-        </div>
-        <div class="rounded-2xl border border-emerald-100 bg-emerald-50 p-5 shadow-sm">
-          <p class="text-xs font-medium text-emerald-500">내 잔여연차</p>
-          <p class="mt-2 text-3xl font-extrabold text-emerald-700">
-            {{ stats.myRemainingDays }}<span class="ml-1 text-base font-bold text-emerald-400">일</span>
           </p>
         </div>
       </div>
@@ -326,12 +316,14 @@ watch(
       <DailyWorkHoursPanel
         v-if="isAdmin && activeTab === 'workhours'"
         :employees="employees"
-        :today-hours="dailyWorkHours"
+        :work-hours="dailyWorkHours"
         :work-date="todayWorkDate"
         :loading="dailyWorkHoursLoading"
         @open-input="openWorkHoursDialog"
         @refresh="emit('refreshDailyWorkHours')"
         @delete="emit('deleteDailyWorkHour', $event)"
+        @update="emit('updateDailyWorkHour', $event)"
+        @select-date="emit('selectDailyWorkDate', $event)"
       />
 
       <!-- ═══ 직원 목록 탭 (관리자) ═══ -->
@@ -478,17 +470,6 @@ watch(
           <p class="mt-1.5 text-right text-xs text-slate-400">잔여 {{ quota.remainingDays }}일</p>
         </div>
 
-        <!-- 액션 버튼 -->
-        <div class="mb-6">
-          <button
-            type="button"
-            class="w-full rounded-2xl bg-emerald-600 px-5 py-4 text-base font-extrabold text-white shadow-sm transition-colors hover:bg-emerald-500"
-            @click="openWorkHoursDialog"
-          >
-            오늘 근무시간 입력
-          </button>
-        </div>
-
         <!-- 직원 명단 -->
         <div class="rounded-2xl border border-slate-200 bg-white p-5">
           <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -549,7 +530,7 @@ watch(
       <DailyWorkHoursInputDialog
         v-if="workHoursDialogVisible"
         :employees="employees"
-        :today-hours="dailyWorkHours"
+        :today-hours="selectedDailyWorkHours"
         :work-date="todayWorkDate"
         @close="closeWorkHoursDialog"
         @save="onSaveDailyWorkHours"

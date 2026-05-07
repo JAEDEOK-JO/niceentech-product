@@ -527,6 +527,17 @@ export async function fetchDailyWorkHours(workDate: string): Promise<DailyWorkHo
   return (data ?? []).map((r) => mapDailyWorkHour(r as Record<string, unknown>))
 }
 
+export async function fetchDailyWorkHoursRange(startDate: string, endDate: string): Promise<DailyWorkHour[]> {
+  const { data, error } = await supabase
+    .from('daily_work_hours')
+    .select('*')
+    .gte('work_date', startDate)
+    .lte('work_date', endDate)
+
+  if (error) throw error
+  return (data ?? []).map((r) => mapDailyWorkHour(r as Record<string, unknown>))
+}
+
 export async function upsertDailyWorkHoursBulk(
   records: { workDate: string; employeeId: number; endTime: string }[],
 ): Promise<void> {

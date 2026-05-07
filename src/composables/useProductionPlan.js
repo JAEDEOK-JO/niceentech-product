@@ -46,6 +46,8 @@ const homeWorkerTShortcutFields = [
 ]
 const homeWorkerMainShortcutFields = ['marking_laser_2_status', 'main_status']
 const workManRoleToStages = {
+  작업반장: ['*'],
+  전체: ['*'],
   마킹1: ['marking_weld_a'],
   마킹2: ['marking_weld_b'],
   레이저1: ['marking_laser_1'],

@@ -23,6 +23,12 @@ if (!isElectron && !desktopBrowser && typeof window !== 'undefined') {
   window.OneSignalDeferred = window.OneSignalDeferred || []
   window.OneSignalDeferred.push(async function (OneSignal) {
     try {
+      const oneSignalAppId = import.meta.env.VITE_ONESIGNAL_APP_ID ?? ''
+      if (!oneSignalAppId) {
+        window.__oneSignalReady = false
+        return
+      }
+
       // 이전 OneSignal 서비스워커 제거 (AppID 충돌 방지)
       if ('serviceWorker' in navigator) {
         const regs = await navigator.serviceWorker.getRegistrations()
@@ -35,7 +41,7 @@ if (!isElectron && !desktopBrowser && typeof window !== 'undefined') {
       }
 
       await OneSignal.init({
-        appId: import.meta.env.VITE_ONESIGNAL_APP_ID ?? '',
+        appId: oneSignalAppId,
         serviceWorkerParam: { scope: '/push/' },
         notifyButton: { enable: false },
         allowLocalhostAsSecureOrigin: true,
