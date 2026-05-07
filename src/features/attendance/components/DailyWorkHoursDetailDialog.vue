@@ -21,6 +21,7 @@ const emit = defineEmits<{
   (e: 'close'): void
   (e: 'update', payload: { workDate: string; employeeId: number; endTime: string }): void
   (e: 'delete', payload: { workDate: string; employeeId: number }): void
+  (e: 'deleteAll', payload: { workDate: string; employeeIds: number[] }): void
 }>()
 
 const localTimes = ref<Map<number, string>>(new Map())
@@ -37,12 +38,14 @@ function updateTime(employeeId: number, endTime: string) {
   const next = new Map(localTimes.value)
   next.set(employeeId, endTime)
   localTimes.value = next
+  emit('update', { workDate: props.workDate, employeeId, endTime })
 }
 
-function saveRow(employeeId: number) {
-  const endTime = localTimes.value.get(employeeId)
-  if (!endTime) return
-  emit('update', { workDate: props.workDate, employeeId, endTime })
+function deleteAll() {
+  emit('deleteAll', {
+    workDate: props.workDate,
+    employeeIds: props.rows.map((row) => row.employeeId),
+  })
 }
 </script>
 
@@ -58,11 +61,19 @@ function saveRow(employeeId: number) {
             <h2 class="text-lg font-extrabold text-slate-900">{{ department }} 작업자</h2>
             <p class="mt-1 text-sm font-semibold text-slate-500">{{ workDate }} · {{ timeLabel }} · {{ rows.length }}명</p>
           </div>
-          <button
-            type="button"
-            class="rounded-lg p-2 text-slate-400 hover:bg-slate-100"
-            @click="emit('close')"
-          >✕</button>
+          <div class="flex items-center gap-2">
+            <button
+              v-if="rows.length > 0"
+              type="button"
+              class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-extrabold text-red-600 hover:bg-red-100"
+              @click="deleteAll"
+            >일괄삭제</button>
+            <button
+              type="button"
+              class="rounded-lg p-2 text-slate-400 hover:bg-slate-100"
+              @click="emit('close')"
+            >✕</button>
+          </div>
         </div>
 
         <div class="flex-1 overflow-y-auto p-5">
@@ -95,11 +106,6 @@ function saveRow(employeeId: number) {
                     {{ option.label }}
                   </option>
                 </select>
-                <button
-                  type="button"
-                  class="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-extrabold text-white hover:bg-slate-700"
-                  @click="saveRow(row.employeeId)"
-                >수정</button>
                 <button
                   type="button"
                   class="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-extrabold text-red-600 hover:bg-red-100"

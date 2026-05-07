@@ -184,6 +184,20 @@ async function handleDeleteDailyWorkHour(payload: { workDate: string; employeeId
   }
 }
 
+async function handleDeleteDailyWorkHoursBulk(payload: { workDate: string; employeeIds: number[] }) {
+  if (payload.employeeIds.length === 0) return
+  try {
+    await Promise.all(payload.employeeIds.map((employeeId) => deleteDailyWorkHour(payload.workDate, employeeId)))
+    const ids = new Set(payload.employeeIds)
+    dailyWorkHours.value = dailyWorkHours.value.filter(
+      (item) => !(item.workDate === payload.workDate && ids.has(item.employeeId)),
+    )
+    showToast(`${payload.employeeIds.length}명 삭제되었습니다.`)
+  } catch {
+    showToast('일괄삭제 중 오류가 발생했습니다.', 'error')
+  }
+}
+
 async function handleUpdateDailyWorkHour(payload: { workDate: string; employeeId: number; endTime: string }) {
   try {
     await upsertDailyWorkHoursBulk([payload])
@@ -717,6 +731,7 @@ async function handleDeleteEmployee(id: number) {
     @save-daily-work-hours="handleSaveDailyWorkHours"
     @refresh-daily-work-hours="loadDailyWorkHours"
     @delete-daily-work-hour="handleDeleteDailyWorkHour"
+    @delete-daily-work-hours-bulk="handleDeleteDailyWorkHoursBulk"
     @update-daily-work-hour="handleUpdateDailyWorkHour"
     @select-daily-work-date="setDailyWorkDate"
   />

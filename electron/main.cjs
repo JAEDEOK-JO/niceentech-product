@@ -169,20 +169,51 @@ ipcMain.on('show-notification', (_, payload) => {
   bringToNotice(payload || {})
 })
 
+ipcMain.handle('get-printers', async () => {
+  if (!mainWindow || mainWindow.isDestroyed()) return []
+  const printers = await mainWindow.webContents.getPrintersAsync()
+  return printers.map((printer) => ({
+    name: printer.name,
+    displayName: printer.displayName || printer.name,
+    description: printer.description || '',
+    status: printer.status || 0,
+    isDefault: Boolean(printer.isDefault),
+  }))
+})
+
 ipcMain.handle('print-report', async (_, requestedOptions = {}) => {
   if (!mainWindow || mainWindow.isDestroyed()) {
     return { success: false, errorType: 'Window is not available' }
   }
 
   const scaleFactor = Number(requestedOptions.scaleFactor)
+  const copies = Number(requestedOptions.copies)
+  const deviceName = String(requestedOptions.deviceName || '').trim()
+  const pageRanges = Array.isArray(requestedOptions.pageRanges)
+    ? requestedOptions.pageRanges
+      .map((range) => ({
+        from: Number(range?.from),
+        to: Number(range?.to),
+      }))
+      .filter((range) => (
+        Number.isInteger(range.from) &&
+        Number.isInteger(range.to) &&
+        range.from >= 0 &&
+        range.to >= range.from
+      ))
+    : []
   const printOptions = {
-    silent: false,
-    printBackground: requestedOptions.printBackground !== false,
+    silent: true,
+    printBackground: true,
     color: true,
     landscape: requestedOptions.landscape !== false,
     pageSize: requestedOptions.pageSize || 'A4',
+    preferCSSPageSize: false,
     margins: { marginType: 'printableArea' },
     scaleFactor: Number.isFinite(scaleFactor) ? Math.max(10, Math.min(200, scaleFactor)) : 90,
+    copies: Number.isFinite(copies) ? Math.max(1, Math.min(999, Math.round(copies))) : 1,
+    ...(pageRanges.length ? { pageRanges } : {}),
+    ...(deviceName ? { deviceName } : {}),
   }
 
   return new Promise((resolve) => {

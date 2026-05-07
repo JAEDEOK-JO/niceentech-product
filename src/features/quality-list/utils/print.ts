@@ -168,7 +168,7 @@ export function printQualityList(items: QualityListRow[], title: string) {
         <meta charset="utf-8" />
         <title>${escapeHtml(title)}</title>
         <style>
-          @page { size: A4 landscape; margin: 8mm; }
+          @page { margin: 8mm; }
           * { box-sizing: border-box; }
           body { font-family: 'Malgun Gothic', Arial, sans-serif; margin: 0; padding: 14px 18px; color: #111; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           h1 { margin: 0 0 10px; font-size: 20px; text-align: center; color: #1e3a8a; font-weight: 700; }

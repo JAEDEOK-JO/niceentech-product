@@ -4,6 +4,8 @@ import { useRoute, useRouter } from 'vue-router'
 import '@/features/quality-list/quality.css'
 import QualityFilters from '@/features/quality-list/components/QualityFilters.vue'
 import QualityTable from '@/features/quality-list/components/QualityTable.vue'
+import PrintSettingsDialog from '@/features/printing/PrintSettingsDialog.vue'
+import { printCurrentPage } from '@/features/printing/pagePrint'
 import { useDialog } from '@/composables/useDialog'
 
 const { confirm, alert } = useDialog()
@@ -20,7 +22,7 @@ import {
   updateReturnFlag,
 } from '@/features/quality-list/services/quality.service'
 import { formatIsoDate, formatQualityDate, getNextTuesday, moveByWeeks, parseQualityDate } from '@/features/quality-list/utils/date'
-import { exportQualityListToExcel, exportQualityStampToExcel, printQualityList } from '@/features/quality-list/utils/print'
+import { exportQualityListToExcel, exportQualityStampToExcel } from '@/features/quality-list/utils/print'
 import type { QualityCountField } from '@/features/quality-list/services/quality.service'
 import type { QualityListRow } from '@/features/quality-list/types/quality'
 import { mapQualityListRow } from '@/features/quality-list/types/quality'
@@ -34,11 +36,32 @@ const searchQuery = ref('')
 const showAllRecords = ref(false)
 const loading = ref(false)
 const items = ref<QualityListRow[]>([])
+const isPrinting = ref(false)
+const isPrintSettingsOpen = ref(false)
 
 const currentDateLabel = computed(() =>
   showAllRecords.value ? '검수리스트 전체 검색결과' : formatQualityDate(currentTuesday.value),
 )
 const calendarValue = computed(() => formatIsoDate(currentTuesday.value))
+const printTotal = computed(() =>
+  items.value.reduce(
+    (sum, item) => sum + item.a32 + item.a40 + item.a50 + item.a65 + item.m65 + item.m80 + item.m100 + item.m125 + item.m150 + item.m200,
+    0,
+  ),
+)
+
+const printCountColumns = [
+  { label: '32A', key: 'a32', className: 'quality-print-inch' },
+  { label: '40A', key: 'a40', className: 'quality-print-inch' },
+  { label: '50A', key: 'a50', className: 'quality-print-inch' },
+  { label: '65A', key: 'a65', className: 'quality-print-inch' },
+  { label: '65A', key: 'm65', className: 'quality-print-metric' },
+  { label: '80A', key: 'm80', className: 'quality-print-metric' },
+  { label: '100A', key: 'm100', className: 'quality-print-metric' },
+  { label: '125A', key: 'm125', className: 'quality-print-metric' },
+  { label: '150A', key: 'm150', className: 'quality-print-metric' },
+  { label: '200A', key: 'm200', className: 'quality-print-metric' },
+] as const
 
 function testDate() {
   return formatQualityDate(currentTuesday.value)
@@ -221,8 +244,20 @@ function onStamp(item: QualityListRow) {
   exportQualityStampToExcel(item)
 }
 
+function getLotRoundStyle(round: string) {
+  if (round === '2차') return { color: '#ea580c' }
+  if (round === '3차') return { color: '#16a34a' }
+  if (round === '4차') return { color: '#7c3aed' }
+  return { color: '#111827' }
+}
+
 function onPrint() {
-  printQualityList(items.value, `${currentDateLabel.value} 검수리스트`)
+  isPrintSettingsOpen.value = true
+}
+
+async function printQualityListPage(options = {}) {
+  isPrintSettingsOpen.value = false
+  await printCurrentPage(isPrinting, options, { margin: '8mm' })
 }
 
 onMounted(() => {
@@ -236,34 +271,257 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="page-shell">
-    <QualityFilters
-      v-model:search-query="searchQuery"
-      v-model:show-all-records="showAllRecords"
-      :current-date-label="currentDateLabel"
-      :calendar-value="calendarValue"
-      :loading="loading"
-      @calendar-change="handleCalendarChange"
-      @search="load"
-      @clear="clearSearch"
-      @previous-week="previousWeek"
-      @next-week="nextWeek"
-      @this-week="thisWeek"
-      @refresh="load"
-      @create="goCreate"
-      @export="onExport"
-      @print="onPrint"
-      @calculation="goCalculation"
-    />
+    <div class="quality-screen">
+      <QualityFilters
+        v-model:search-query="searchQuery"
+        v-model:show-all-records="showAllRecords"
+        :current-date-label="currentDateLabel"
+        :calendar-value="calendarValue"
+        :loading="loading"
+        @calendar-change="handleCalendarChange"
+        @search="load"
+        @clear="clearSearch"
+        @previous-week="previousWeek"
+        @next-week="nextWeek"
+        @this-week="thisWeek"
+        @refresh="load"
+        @create="goCreate"
+        @export="onExport"
+        @print="onPrint"
+        @calculation="goCalculation"
+      />
 
-    <QualityTable
-      :items="items"
-      :loading="loading"
-      :show-all-records="showAllRecords"
-      @edit="goEdit"
-      @delete="onDelete"
-      @stamp="onStamp"
-      @update-range="onUpdateRange"
-      @update-cancel="onUpdateCancel"
+      <QualityTable
+        :items="items"
+        :loading="loading"
+        :show-all-records="showAllRecords"
+        @edit="goEdit"
+        @delete="onDelete"
+        @stamp="onStamp"
+        @update-range="onUpdateRange"
+        @update-cancel="onUpdateCancel"
+      />
+    </div>
+
+    <section class="quality-print-page">
+      <h1>{{ currentDateLabel }} 검수리스트</h1>
+      <div class="quality-print-summary">총합 : {{ printTotal }}개</div>
+      <table class="quality-print-table">
+        <colgroup>
+          <col style="width: 32px" />
+          <col style="width: 52px" />
+          <col style="width: 26%" />
+          <col style="width: 22%" />
+          <col v-for="column in printCountColumns" :key="column.key" style="width: 46px" />
+          <col style="width: 54px" />
+        </colgroup>
+        <thead>
+          <tr>
+            <th class="quality-print-base">N</th>
+            <th class="quality-print-base">도번</th>
+            <th class="quality-print-base">현장명</th>
+            <th class="quality-print-base">확관</th>
+            <th
+              v-for="column in printCountColumns"
+              :key="column.key"
+              :class="column.className"
+            >
+              {{ column.label }}
+            </th>
+            <th class="quality-print-base">합계</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-if="items.length === 0">
+            <td colspan="15">검수리스트가 없습니다.</td>
+          </tr>
+          <tr v-for="(item, index) in items" :key="item.id">
+            <td>{{ index + 1 }}</td>
+            <td class="quality-print-initial">{{ item.initial }}</td>
+            <td class="quality-print-place">
+              {{ item.company }} {{ item.place }}{{ item.area ? ' ' + item.area : '' }}
+              <span v-if="showAllRecords && item.testDate" class="quality-print-date">({{ item.testDate.replace(/\s/g, '').slice(2) }})</span>
+            </td>
+            <td class="quality-print-lot">
+              <div class="quality-print-lot-inner" :style="getLotRoundStyle(item.lotRound)">
+                <span>({{ item.lotNumH ? String(item.lotNumH).slice(-3) : '---' }})</span>
+                <strong>{{ item.lotNameH || '-' }}</strong>
+                <span>{{ item.lotNumStartH || '' }} ~ {{ item.lotNumEndH || '' }}</span>
+              </div>
+            </td>
+            <td
+              v-for="column in printCountColumns"
+              :key="column.key"
+              :class="column.className"
+            >
+              {{ item[column.key] || '' }}
+            </td>
+            <td class="quality-print-total">{{ item.totalH || '' }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <PrintSettingsDialog
+      :open="isPrintSettingsOpen"
+      @close="isPrintSettingsOpen = false"
+      @print="printQualityListPage"
     />
   </div>
 </template>
+
+<style scoped>
+.quality-print-page {
+  display: none;
+}
+
+@media print {
+  .page-shell {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+
+  .quality-screen {
+    display: none !important;
+  }
+
+  .quality-print-page {
+    display: block !important;
+    color: #111827;
+    font-family: "Malgun Gothic", Arial, sans-serif;
+  }
+
+  .quality-print-page h1 {
+    margin: 0 0 10px;
+    color: #1e3a8a;
+    font-size: 20px;
+    font-weight: 800;
+    text-align: center;
+  }
+
+  .quality-print-summary {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 8px;
+    color: #1e293b;
+    font-size: 18px;
+    font-weight: 800;
+  }
+
+  .quality-print-table {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 14px;
+  }
+
+  .quality-print-table th,
+  .quality-print-table td {
+    border-right: 1px solid #94a3b8;
+    border-bottom: 1px solid #94a3b8;
+    padding: 0;
+    text-align: center;
+    vertical-align: middle;
+  }
+
+  .quality-print-table th:first-child,
+  .quality-print-table td:first-child {
+    border-left: 1px solid #94a3b8;
+  }
+
+  .quality-print-table thead th {
+    height: 40px;
+    border-top: 1px solid #94a3b8;
+    border-right: 1px solid #64748b;
+    border-bottom: 2px solid #475569;
+    color: #1e3a8a;
+    font-size: 14px;
+    font-weight: 800;
+    white-space: nowrap;
+  }
+
+  .quality-print-base {
+    background: #eff6ff;
+  }
+
+  .quality-print-inch {
+    background: #dbeafe;
+  }
+
+  .quality-print-metric {
+    background: #ffedd5;
+    color: #7c2d12;
+  }
+
+  .quality-print-table tbody tr {
+    height: 58px;
+    page-break-inside: avoid;
+  }
+
+  .quality-print-initial {
+    color: #334155;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.4;
+    word-break: break-all;
+  }
+
+  .quality-print-place {
+    padding: 6px 8px !important;
+    color: #0f172a;
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1.5;
+    text-align: left !important;
+    word-break: keep-all;
+  }
+
+  .quality-print-date {
+    color: #ea580c;
+    white-space: nowrap;
+  }
+
+  .quality-print-lot {
+    padding: 0 4px !important;
+  }
+
+  .quality-print-lot-inner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    white-space: nowrap;
+  }
+
+  .quality-print-lot-inner strong {
+    min-width: 0;
+    overflow: hidden;
+    font-size: 13px;
+    font-weight: 800;
+    text-overflow: ellipsis;
+  }
+
+  .quality-print-lot-inner span {
+    flex-shrink: 0;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .quality-print-table tbody .quality-print-inch {
+    background: #fff;
+    color: #111827;
+    font-weight: 800;
+  }
+
+  .quality-print-table tbody .quality-print-metric {
+    background: #fff7ed;
+    color: #111827;
+    font-weight: 800;
+  }
+
+  .quality-print-total {
+    font-weight: 800;
+  }
+}
+</style>

@@ -1,6 +1,8 @@
 <script setup>
-import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import Button from '@/components/ui/button/Button.vue'
+import PrintSettingsDialog from '@/features/printing/PrintSettingsDialog.vue'
+import { printCurrentPage } from '@/features/printing/pagePrint'
 import { useAuth } from '@/composables/useAuth'
 import { supabase } from '@/lib/supabase'
 
@@ -35,6 +37,7 @@ const pendingLoading = ref(false)
 const pendingError = ref('')
 const loadingCompanyOptions = ref(false)
 const saving = ref(false)
+const deleting = ref(false)
 const errorMessage = ref('')
 const saveError = ref('')
 const isDialogOpen = ref(false)
@@ -44,6 +47,8 @@ const currentViewDate = ref(formatIsoDate())
 const companyPlaceSearchText = ref('')
 const companyPlaceResults = ref([])
 const activeTab = ref('shipment')
+const isPrinting = ref(false)
+const isPrintSettingsOpen = ref(false)
 
 const form = reactive({
   id: null,
@@ -154,10 +159,13 @@ const closeDialog = () => {
   resetForm()
 }
 
-const printScheduleTable = async () => {
-  if (typeof window === 'undefined') return
-  await nextTick()
-  window.print()
+const openPrintSettings = () => {
+  isPrintSettingsOpen.value = true
+}
+
+const printScheduleTable = async (options = {}) => {
+  isPrintSettingsOpen.value = false
+  await printCurrentPage(isPrinting, options, { margin: '0' })
 }
 
 const moveViewDate = (days) => {
@@ -512,6 +520,26 @@ const submit = async () => {
   closeDialog()
 }
 
+const deleteShipmentSchedule = async () => {
+  if (!form.id || deleting.value) return
+
+  const targetName = [form.company, form.place, form.area].filter(Boolean).join(' ')
+  if (!window.confirm(`${targetName || '선택한 출하일정'}을 삭제할까요?`)) return
+
+  saveError.value = ''
+  deleting.value = true
+  const { error } = await supabase.from(SHIPMENT_SCHEDULE_TABLE).delete().eq('id', form.id)
+  deleting.value = false
+
+  if (error) {
+    saveError.value = `출하일정 삭제 실패: ${error.message}`
+    return
+  }
+
+  await fetchShipmentSchedules()
+  closeDialog()
+}
+
 watch(
   () => session.value,
   async (nextSession) => {
@@ -545,7 +573,7 @@ onMounted(async () => {
             <Button v-if="activeTab === 'shipment'" variant="outline" @click="fetchShipmentSchedules">새로고침</Button>
             <Button v-else variant="outline" @click="fetchPendingShipments({ silent: true })">새로고침</Button>
             <Button v-if="activeTab === 'shipment'" @click="openCreateDialog">출하일정 등록</Button>
-            <Button v-if="activeTab === 'shipment'" variant="outline" @click="printScheduleTable">인쇄</Button>
+            <Button v-if="activeTab === 'shipment'" variant="outline" :disabled="isPrinting" @click="openPrintSettings">인쇄</Button>
           </div>
         </div>
         <div class="mt-5 flex gap-2 border-b border-slate-200">
@@ -735,6 +763,12 @@ onMounted(async () => {
       </section>
     </div>
 
+    <PrintSettingsDialog
+      :open="isPrintSettingsOpen"
+      @close="isPrintSettingsOpen = false"
+      @print="printScheduleTable"
+    />
+
     <div
       v-if="isDialogOpen"
       class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 px-4"
@@ -746,7 +780,7 @@ onMounted(async () => {
             <p class="text-sm font-bold text-slate-500">출하일정</p>
             <h2 class="mt-1 text-2xl font-extrabold text-slate-900">{{ dialogTitle }}</h2>
           </div>
-          <Button variant="outline" @click="closeDialog">닫기</Button>
+          <Button variant="outline" :disabled="saving || deleting" @click="closeDialog">닫기</Button>
         </div>
 
         <div v-if="saveError" class="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">
@@ -832,8 +866,17 @@ onMounted(async () => {
         </div>
 
         <div class="mt-6 flex justify-end gap-2">
-          <Button variant="outline" @click="closeDialog">취소</Button>
-          <Button :disabled="saving" @click="submit">{{ saving ? '저장 중...' : form.id ? '수정 저장' : '등록 저장' }}</Button>
+          <Button :disabled="saving || deleting" @click="submit">{{ saving ? '저장 중...' : form.id ? '수정 저장' : '등록 저장' }}</Button>
+          <Button
+            v-if="form.id"
+            variant="outline"
+            class="border-rose-200 text-rose-600 hover:bg-rose-50"
+            :disabled="saving || deleting"
+            @click="deleteShipmentSchedule"
+          >
+            {{ deleting ? '삭제 중...' : '삭제' }}
+          </Button>
+          <Button variant="outline" :disabled="saving || deleting" @click="closeDialog">취소</Button>
         </div>
       </section>
     </div>
@@ -843,7 +886,6 @@ onMounted(async () => {
 <style scoped>
 @media print {
   @page {
-    size: A4 landscape;
     margin: 0;
   }
 

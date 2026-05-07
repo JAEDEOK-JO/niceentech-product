@@ -96,6 +96,7 @@ const emit = defineEmits<{
   (e: 'saveDailyWorkHours', records: { employeeId: number; endTime: string }[]): void
   (e: 'refreshDailyWorkHours'): void
   (e: 'deleteDailyWorkHour', payload: { workDate: string; employeeId: number }): void
+  (e: 'deleteDailyWorkHoursBulk', payload: { workDate: string; employeeIds: number[] }): void
   (e: 'selectDailyWorkDate', workDate: string): void
   (e: 'updateDailyWorkHour', payload: { workDate: string; employeeId: number; endTime: string }): void
 }>()
@@ -322,6 +323,7 @@ watch(
         @open-input="openWorkHoursDialog"
         @refresh="emit('refreshDailyWorkHours')"
         @delete="emit('deleteDailyWorkHour', $event)"
+        @delete-all="emit('deleteDailyWorkHoursBulk', $event)"
         @update="emit('updateDailyWorkHour', $event)"
         @select-date="emit('selectDailyWorkDate', $event)"
       />

@@ -19,6 +19,7 @@ const emit = defineEmits<{
   (e: 'openInput'): void
   (e: 'refresh'): void
   (e: 'delete', payload: { workDate: string; employeeId: number }): void
+  (e: 'deleteAll', payload: { workDate: string; employeeIds: number[] }): void
   (e: 'update', payload: { workDate: string; employeeId: number; endTime: string }): void
   (e: 'selectDate', workDate: string): void
 }>()
@@ -230,6 +231,10 @@ function handleDelete(payload: { workDate: string; employeeId: number }) {
   emit('delete', payload)
 }
 
+function handleDeleteAll(payload: { workDate: string; employeeIds: number[] }) {
+  emit('deleteAll', payload)
+}
+
 function handleUpdate(payload: { workDate: string; employeeId: number; endTime: string }) {
   emit('update', payload)
 }
@@ -349,6 +354,7 @@ function handleUpdate(payload: { workDate: string; employeeId: number; endTime: 
       @close="closeDetail"
       @update="handleUpdate"
       @delete="handleDelete"
+      @delete-all="handleDeleteAll"
     />
   </div>
 </template>
