@@ -42,9 +42,41 @@ function renderPng(svg, outputPath) {
   console.log(`✓ ${outputPath}`)
 }
 
+function createIcns(entries, outputPath) {
+  const chunks = entries.map(({ type, png }) => {
+    const header = Buffer.alloc(8)
+    header.write(type, 0, 4, 'ascii')
+    header.writeUInt32BE(png.length + 8, 4)
+    return Buffer.concat([header, png])
+  })
+  const body = Buffer.concat(chunks)
+  const header = Buffer.alloc(8)
+  header.write('icns', 0, 4, 'ascii')
+  header.writeUInt32BE(body.length + 8, 4)
+  writeFileSync(outputPath, Buffer.concat([header, body]))
+  console.log(`✓ ${outputPath}`)
+}
+
+function renderPngBuffer(svg) {
+  const resvg = new Resvg(svg)
+  return resvg.render().asPng()
+}
+
 renderPng(iconSvg(256),       join(buildDir, 'icon.png'))       // 앱 아이콘 (256x256)
 renderPng(iconSvg(32),        join(buildDir, 'tray.png'))        // 기본 트레이 (32x32)
 renderPng(trayNotifySvg(32),  join(buildDir, 'tray-notify.png')) // 알림 트레이 (32x32)
 renderPng(badgeSvg,           join(buildDir, 'badge.png'))       // 배지 (16x16)
+createIcns(
+  [
+    { type: 'icp4', png: renderPngBuffer(iconSvg(16)) },
+    { type: 'icp5', png: renderPngBuffer(iconSvg(32)) },
+    { type: 'icp6', png: renderPngBuffer(iconSvg(64)) },
+    { type: 'ic07', png: renderPngBuffer(iconSvg(128)) },
+    { type: 'ic08', png: renderPngBuffer(iconSvg(256)) },
+    { type: 'ic09', png: renderPngBuffer(iconSvg(512)) },
+    { type: 'ic10', png: renderPngBuffer(iconSvg(1024)) },
+  ],
+  join(buildDir, 'icon.icns'),
+)
 
 console.log('\n아이콘 생성 완료 → build/')

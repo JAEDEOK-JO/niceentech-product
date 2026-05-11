@@ -2,59 +2,35 @@ export const qtyColumnWidth = 60
 export const statusColumnWidth = 55
 export const areaColumnWidth = 300
 
-const formatDrawingDate = (value) => {
-  if (!value) return ''
-  const d = new Date(value)
-  if (Number.isNaN(d.getTime())) return ''
-  const yy = String(d.getFullYear()).slice(2)
-  const mm = String(d.getMonth() + 1).padStart(2, '0')
-  const dd = String(d.getDate()).padStart(2, '0')
-  return `${yy}.${mm}.${dd}`
-}
-
-const formatStatusDate = (value) => {
-  const raw = String(value ?? '').trim()
-  if (!raw) return ''
-
-  const shipmentMatched = raw.match(/^(\d{2})\.(\d{1,2})\.(\d{1,2})(?:\s+\d{2}:\d{2})?$/)
-  if (shipmentMatched) {
-    const [, yy, month, day] = shipmentMatched
-    return `${yy}.${String(month).padStart(2, '0')}.${String(day).padStart(2, '0')}`
-  }
-
-  const isoMatched = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/)
-  if (isoMatched) {
-    const [, , month, day] = isoMatched
-    return `${month}.${day}`
-  }
-
-  const dotMatched = raw.match(/^(\d{1,2})\.(\d{1,2})$/)
-  if (dotMatched) {
-    const [, month, day] = dotMatched
-    return `${String(month).padStart(2, '0')}.${String(day).padStart(2, '0')}`
-  }
-
-  return raw
-}
-
-const formatShortFullDate = (value) => {
+const formatPlanDate = (value, includeYear = false) => {
   const raw = String(value ?? '').trim()
   if (!raw) return ''
 
   const isoMatched = raw.match(/^(\d{4})-(\d{2})-(\d{2})/)
   if (isoMatched) {
     const [, year, month, day] = isoMatched
-    return `${year.slice(2)}.${month}.${day}`
+    return includeYear ? `${year.slice(2)}.${month}.${day}` : `${month}.${day}`
   }
 
-  const dotMatched = raw.match(/^(\d{2})\.(\d{1,2})\.(\d{1,2})$/)
-  if (dotMatched) {
-    const [, year, month, day] = dotMatched
-    return `${year}.${String(month).padStart(2, '0')}.${String(day).padStart(2, '0')}`
+  const dotYearMatched = raw.match(/^(\d{2})\.(\d{1,2})\.(\d{1,2})(?:\s+\d{2}:\d{2})?$/)
+  if (dotYearMatched) {
+    const [, year, month, day] = dotYearMatched
+    const monthDay = `${String(month).padStart(2, '0')}.${String(day).padStart(2, '0')}`
+    return includeYear ? `${year}.${monthDay}` : monthDay
+  }
+
+  const dotMonthMatched = raw.match(/^(\d{1,2})\.(\d{1,2})$/)
+  if (dotMonthMatched) {
+    const [, month, day] = dotMonthMatched
+    return `${String(month).padStart(2, '0')}.${String(day).padStart(2, '0')}`
   }
 
   return raw
 }
+
+const formatDrawingDate = (value, includeYear = false) => formatPlanDate(value, includeYear)
+const formatStatusDate = (value, includeYear = false) => formatPlanDate(value, includeYear)
+const formatShortFullDate = (value, includeYear = false) => formatPlanDate(value, includeYear)
 
 export const tableColumns = [
   { label: '도번', key: 'initial', align: 'center', width: 80 },
@@ -115,7 +91,7 @@ const hasAllWorkerSourcesNone = (row, key) => {
   return fields.every((field) => isNoneLikeStatus(row?.[field]))
 }
 
-const getWorkerDisplayInfo = (row, key) => {
+const getWorkerDisplayInfo = (row, key, options = {}) => {
   const meta = workerColumnMeta[key]
   if (!meta) return null
 
@@ -123,12 +99,13 @@ const getWorkerDisplayInfo = (row, key) => {
   const status = normalizeStageStatus(rawStatus)
   const finalTime = String(row?.[meta.finalTimeField] ?? '').trim()
   const completedTime = String(row?.[meta.timeField] ?? '').trim()
+  const includeYear = Boolean(options.includeYear)
 
   if (rawStatus === '출하완료' && finalTime) {
-    return { text: formatStatusDate(finalTime), tone: '출하완료' }
+    return { text: formatStatusDate(finalTime, includeYear), tone: '출하완료' }
   }
   if (status === '작업완료' && completedTime) {
-    return { text: formatStatusDate(completedTime), tone: '작업완료' }
+    return { text: formatStatusDate(completedTime, includeYear), tone: '작업완료' }
   }
 
   // worker 필드 자체가 없음/빈값일 때만 소스 stage 기준으로 없음 판단
@@ -136,20 +113,20 @@ const getWorkerDisplayInfo = (row, key) => {
     return { text: '없음', tone: '없음' }
   }
 
-  return { text: rawStatus || '', tone: rawStatus || status || '작업전' }
+  return { text: formatPlanDate(rawStatus, includeYear), tone: rawStatus || status || '작업전' }
 }
 
-export const getCellText = (row, key) => {
+export const getCellText = (row, key, options = {}) => {
   const stage = stageMeta[key]
   if (stage) return normalizeStageStatus(row?.[stage.field])
   if (Object.hasOwn(workerColumnMeta, key)) {
-    return getWorkerDisplayInfo(row, key)?.text ?? ''
+    return getWorkerDisplayInfo(row, key, options)?.text ?? ''
   }
   if (key === 'design_distributed') {
-    return formatDrawingDate(row?.drawing_date)
+    return formatDrawingDate(row?.drawing_date, Boolean(options.includeYear))
   }
   if (key === 'delivery_due_date') {
-    return formatShortFullDate(row?.delivery_due_date)
+    return formatShortFullDate(row?.delivery_due_date, Boolean(options.includeYear))
   }
   if (key === 'drawing') {
     if (Boolean(row?.is_drawing)) return '있음'
@@ -184,10 +161,10 @@ export const statusClass = (status) => {
 
 export const getWorkerStatusClass = (row, columnKey) => {
   const tone = getStatusTone(row, columnKey, getCellText(row, columnKey))
-  if (columnKey === 'worker_welding' && (tone === '작업중' || tone === '작업완료')) {
+  if (columnKey === 'worker_welding' && (tone === '작업중' || tone === '작업완료' || tone === '출하완료')) {
     const inspector = String(row?.welding_inspector ?? '').trim()
-    if (inspector === '민뚜라') return 'bg-pink-200 text-pink-900'
-    if (inspector === '진민택') return 'bg-purple-200 text-purple-900'
+    if (inspector === '민뚜라') return 'bg-cyan-200 text-cyan-950'
+    if (inspector === '진민택') return 'bg-fuchsia-200 text-fuchsia-950'
   }
   return statusClass(tone)
 }
@@ -209,7 +186,7 @@ export const getBodyCellClass = (row, column) => {
     classes.push('bg-orange-100')
   } else if (isStatusCompactColumn(column.key)) {
     if (Boolean(row?.shipment)) {
-      classes.push('bg-red-500', 'text-white')
+      classes.push(column.key === 'worker_welding' ? getWorkerStatusClass(row, column.key) : 'bg-red-500 text-white')
     } else if (Boolean(row?.outsourcing)) {
       classes.push('bg-slate-100')
     } else {

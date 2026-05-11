@@ -72,6 +72,12 @@ const activeTestDateRow = ref(null)
 const isShipmentConfirmOpen = ref(false)
 const activeShipmentRow = ref(null)
 const shipmentMode = ref('ship') // 'ship' | 'cancel'
+const activeShipmentWorkerName = computed(() => String(activeShipmentRow.value?.welding_inspector ?? '').trim() || '미지정')
+const activeShipmentWorkerClass = computed(() => {
+  if (activeShipmentWorkerName.value === '민뚜라') return 'border-cyan-300 bg-cyan-200 text-cyan-950'
+  if (activeShipmentWorkerName.value === '진민택') return 'border-fuchsia-300 bg-fuchsia-200 text-fuchsia-950'
+  return 'border-slate-200 bg-slate-100 text-slate-700'
+})
 const snackbarMessage = ref('')
 const snackbarVisible = ref(false)
 let snackbarTimer = null
@@ -127,8 +133,8 @@ const headerLegendBadges = [
   { label: '산출완료', className: 'border-lime-200 bg-lime-100 text-lime-900' },
   { label: '도면배포', className: 'border-slate-300 bg-slate-100 text-slate-700' },
   { label: '보류', className: 'border-orange-200 bg-orange-100 text-orange-900' },
-  { label: '민뚜라', className: 'border-pink-300 bg-pink-200 text-pink-900' },
-  { label: '진민택', className: 'border-purple-300 bg-purple-200 text-purple-900' },
+  { label: '민뚜라', className: 'border-cyan-300 bg-cyan-200 text-cyan-950' },
+  { label: '진민택', className: 'border-fuchsia-300 bg-fuchsia-200 text-fuchsia-950' },
 ]
 
 const formatKoreanDateLabel = (value) => {
@@ -583,6 +589,16 @@ const selectDrawingFile = (file) => {
           <div class="min-w-0">
             <div class="flex flex-col gap-2 xl:flex-row xl:items-center xl:gap-3">
               <h1 class="shrink-0 text-lg font-extrabold text-slate-900 md:text-xl">{{ pageTitle }}</h1>
+              <div class="flex flex-wrap items-center gap-1.5">
+                <span
+                  v-for="badge in headerLegendBadges"
+                  :key="badge.label"
+                  class="inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold whitespace-nowrap"
+                  :class="badge.className"
+                >
+                  {{ badge.label }}
+                </span>
+              </div>
             </div>
           </div>
           <div class="print-hide flex flex-col gap-2 xl:min-w-[520px] xl:flex-row xl:items-center xl:justify-end">
@@ -717,6 +733,7 @@ const selectDrawingFile = (file) => {
           :group-data="groupData"
           :group-index="groupIndex"
           :overall-totals="overallTotals"
+          :show-full-dates="searchAllDates"
           @cell-click="handleCellClick"
           @cell-long-press="handleCellLongPress"
           @open-row-menu="openRowMenu"
@@ -909,6 +926,10 @@ const selectDrawingFile = (file) => {
           {{ activeShipmentRow.company || '-' }} / {{ activeShipmentRow.place || '-' }}
         </p>
         <p class="text-sm text-slate-500">{{ activeShipmentRow.area || '-' }}</p>
+        <div class="mt-5 rounded-2xl border px-4 py-4 text-center" :class="activeShipmentWorkerClass">
+          <p class="text-xs font-extrabold">용접 작업자</p>
+          <p class="mt-1 text-3xl font-black leading-none">{{ activeShipmentWorkerName }}</p>
+        </div>
         <div class="mt-6 flex justify-end gap-2">
           <Button class="h-10 px-4 text-sm" variant="outline" @click="closeShipmentConfirm">취소</Button>
           <Button
@@ -938,14 +959,14 @@ const selectDrawingFile = (file) => {
         <div class="mt-5 grid grid-cols-2 gap-3">
           <button
             type="button"
-            class="rounded-xl border-2 border-blue-300 bg-blue-50 py-4 text-base font-extrabold text-blue-800 transition hover:bg-blue-100 active:bg-blue-200"
+            class="rounded-xl border-2 border-cyan-300 bg-cyan-50 py-4 text-base font-extrabold text-cyan-900 transition hover:bg-cyan-100 active:bg-cyan-200"
             @click="selectWeldingInspector('민뚜라')"
           >
             민뚜라
           </button>
           <button
             type="button"
-            class="rounded-xl border-2 border-indigo-300 bg-indigo-50 py-4 text-base font-extrabold text-indigo-800 transition hover:bg-indigo-100 active:bg-indigo-200"
+            class="rounded-xl border-2 border-fuchsia-300 bg-fuchsia-50 py-4 text-base font-extrabold text-fuchsia-900 transition hover:bg-fuchsia-100 active:bg-fuchsia-200"
             @click="selectWeldingInspector('진민택')"
           >
             진민택

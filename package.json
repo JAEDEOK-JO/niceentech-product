@@ -18,6 +18,7 @@
     "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron . --dev-server\"",
     "build:electron": "node scripts/gen-electron-env.mjs && vite build --base ./",
     "electron:build": "npm run build:electron && electron-builder",
+    "electron:build:mac": "npm run build:electron && electron-builder --mac --publish=never",
     "electron:start": "electron ."
   },
   "build": {
@@ -44,6 +45,20 @@
         }
       ],
       "icon": "build/icon.png"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "build/icon.icns",
+      "category": "public.app-category.business",
+      "identity": null
     },
     "nsis": {
       "oneClick": false,
