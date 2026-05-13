@@ -726,7 +726,7 @@ const selectDrawingFile = (file) => {
       <div v-if="planLoading" class="py-16 text-center text-sm text-slate-500">데이터 로딩 중...</div>
       <div v-else-if="planError" class="py-16 text-center text-sm text-red-600">{{ planError }}</div>
       <div v-else-if="hasActiveSearch && visibleGroups.length === 0" class="py-16 text-center text-sm text-slate-500">검색 결과가 없습니다.</div>
-      <div v-else class="mt-6 space-y-6">
+      <div v-else class="production-plan-groups-scroll mt-6 space-y-6">
         <MainProductionPlanGroupTable
           v-for="(groupData, groupIndex) in visibleGroups"
           :key="groupData.group"
@@ -1020,6 +1020,25 @@ const selectDrawingFile = (file) => {
 
   main {
     padding: 0 !important;
+  }
+}
+
+.production-plan-groups-scroll {
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (min-width: 768px) and (max-width: 1279px) {
+  .production-plan-groups-scroll {
+    margin-right: -1.5rem;
+    margin-left: -1.5rem;
+    overflow-x: auto;
+    padding-right: 1.5rem;
+    padding-left: 1.5rem;
+    scrollbar-width: none;
+  }
+
+  .production-plan-groups-scroll::-webkit-scrollbar {
+    display: none;
   }
 }
 </style>

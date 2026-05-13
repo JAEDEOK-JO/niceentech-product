@@ -7,6 +7,7 @@ import {
   isCompactTextColumn,
   getColumnStyle,
   getBodyCellClass,
+  totalTableWidth,
 } from '@/features/main/mainProductionPlanConfig'
 
 const props = defineProps({
@@ -52,6 +53,9 @@ const onCellClick = (row, columnKey) => {
   emit('cell-click', { row, columnKey })
 }
 const displayCellText = (row, key) => getCellText(row, key, { includeYear: props.showFullDates })
+const tableWidthStyle = {
+  '--production-plan-table-width': `${totalTableWidth}px`,
+}
 </script>
 
 <template>
@@ -135,7 +139,7 @@ const displayCellText = (row, key) => getCellText(row, key, { includeYear: props
       </article>
     </div>
 
-    <div class="hidden overflow-x-auto md:block">
+    <div class="production-plan-table-wrap hidden md:block" :style="tableWidthStyle">
       <div class="mb-2 flex w-full items-center justify-between gap-4">
         <h2 class="shrink-0 text-base font-extrabold text-slate-900 md:text-lg">{{ groupData.group }}</h2>
         <div v-if="groupIndex === 0" class="flex flex-wrap items-center justify-end gap-2">
@@ -154,7 +158,7 @@ const displayCellText = (row, key) => getCellText(row, key, { includeYear: props
         </div>
       </div>
 
-      <table class="w-full table-fixed border-collapse bg-white">
+      <table class="production-plan-table w-full table-fixed border-collapse bg-white">
         <colgroup>
           <col v-for="column in tableColumns" :key="`${groupData.group}-col-${column.key}`" :style="getColumnStyle(column)" />
         </colgroup>
@@ -230,14 +234,21 @@ const displayCellText = (row, key) => getCellText(row, key, { includeYear: props
 
 <style scoped>
 .cell-fixed-text {
-  display: -webkit-box;
+  display: block;
   overflow: hidden;
-  max-height: 2.4rem;
   line-height: 1.2rem;
   text-overflow: ellipsis;
-  white-space: normal;
-  word-break: break-word;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  white-space: nowrap;
+  word-break: normal;
+}
+
+.production-plan-table-wrap {
+  min-width: 100%;
+}
+
+@media (min-width: 768px) and (max-width: 1279px) {
+  .production-plan-table-wrap {
+    min-width: var(--production-plan-table-width);
+  }
 }
 </style>

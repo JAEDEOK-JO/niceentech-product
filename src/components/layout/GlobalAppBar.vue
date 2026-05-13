@@ -102,7 +102,7 @@ watch(
       <div class="flex min-w-0 items-center gap-3 md:flex-1 md:gap-5">
         <button
           type="button"
-          class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 active:bg-slate-100 md:hidden"
+          class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 active:bg-slate-100 xl:hidden"
           aria-label="메뉴 열기"
           @click="mobileMenuOpen = true"
         >
@@ -118,7 +118,7 @@ watch(
           NICEENTECH
         </button>
 
-        <nav class="hidden min-w-0 items-center gap-2 overflow-x-auto md:flex">
+        <nav class="hidden min-w-0 items-center gap-2 xl:flex">
           <button
             v-for="item in navItems"
             :key="item.key"
@@ -144,7 +144,7 @@ watch(
         </nav>
       </div>
 
-      <div class="hidden shrink-0 items-center gap-2 md:flex">
+      <div class="hidden shrink-0 items-center gap-2 xl:flex">
         <button
           type="button"
           class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
@@ -165,10 +165,10 @@ watch(
     <Transition name="mobile-nav-fade">
       <div
         v-if="mobileMenuOpen"
-        class="fixed inset-0 top-[56px] z-50 bg-slate-950/45 md:hidden"
+        class="fixed inset-0 top-[56px] z-50 bg-slate-950/45 md:top-[72px] xl:hidden"
         @click.self="mobileMenuOpen = false"
       >
-        <aside class="flex h-[calc(100dvh-56px)] w-[min(86vw,320px)] flex-col border-r border-slate-200 bg-white shadow-2xl">
+        <aside class="flex h-[calc(100dvh-56px)] w-[min(86vw,320px)] flex-col border-r border-slate-200 bg-white shadow-2xl md:h-[calc(100dvh-72px)] md:w-[360px]">
           <div class="flex items-center justify-between border-b border-slate-100 px-4 py-4">
             <div class="min-w-0">
               <p class="text-xs font-extrabold tracking-[0.18em] text-slate-400">NICEENTECH</p>

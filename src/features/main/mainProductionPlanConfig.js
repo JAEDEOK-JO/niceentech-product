@@ -172,7 +172,7 @@ export const getWorkerStatusClass = (row, columnKey) => {
 export const isStatusCompactColumn = (key) => ['worker_t', 'worker_nasa', 'worker_main', 'worker_welding'].includes(key)
 export const isCompactTextColumn = (key) => ['drawing'].includes(key)
 
-const totalTableWidth = tableColumns.reduce((sum, column) => sum + column.width, 0)
+export const totalTableWidth = tableColumns.reduce((sum, column) => sum + column.width, 0)
 
 export const getColumnStyle = (column) => ({
   width: `${(column.width / totalTableWidth) * 100}%`,
