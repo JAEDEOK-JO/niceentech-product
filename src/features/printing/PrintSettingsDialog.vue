@@ -129,7 +129,7 @@ watch(
             :disabled="printerLoading || printers.length === 0"
           >
             <option value="">
-              {{ printerLoading ? '프린터 불러오는 중...' : '기본 프린터' }}
+              {{ printerLoading ? '프린터 불러오는 중...' : '시스템 기본 프린터' }}
             </option>
             <option
               v-for="printer in printers"

@@ -188,8 +188,69 @@ function isCompletedOnDate(row, lineType, targetDate) {
   return completedDate ? isSameDay(completedDate, targetDate) : false
 }
 
+const branchHeadStartFields = [
+  'marking_weld_a_started_on',
+  'marking_weld_b_started_on',
+  'marking_laser_1_started_on',
+  'beveling_started_on',
+  'nasa_started_on',
+]
+
+function getEarliestDate(dates) {
+  return dates.reduce((earliest, date) => {
+    if (!date) return earliest
+    if (!earliest || date.getTime() < earliest.getTime()) return date
+    return earliest
+  }, null)
+}
+
+function getBranchHeadStartDate(row) {
+  return getEarliestDate(branchHeadStartFields.map((field) => parseIsoDate(row?.[field])))
+}
+
+function getInclusiveDayCount(startDate, endDate) {
+  return Math.floor((startOfDay(endDate).getTime() - startOfDay(startDate).getTime()) / 86400000) + 1
+}
+
+function getBranchHeadDisplayDate(workDate) {
+  const date = startOfDay(workDate)
+  return date.getDay() === 0 ? addDays(date, 1) : date
+}
+
+function getDistributedBranchHeadQty(row, targetDate) {
+  const completedDate = getStageCompletedDate(row, 'branch_head')
+  if (!completedDate) return 0
+
+  const headQty = Math.max(0, Math.floor(toNumber(row?.head)))
+  if (headQty <= 0) return 0
+
+  const startedDate = getBranchHeadStartDate(row)
+  if (!startedDate || startedDate.getTime() > completedDate.getTime()) {
+    return isSameDay(getBranchHeadDisplayDate(completedDate), targetDate) ? headQty : 0
+  }
+
+  const dayCount = getInclusiveDayCount(startedDate, completedDate)
+  if (dayCount <= 1) {
+    return isSameDay(getBranchHeadDisplayDate(startedDate), targetDate) ? headQty : 0
+  }
+
+  const baseQty = Math.floor(headQty / dayCount)
+  const remainder = headQty % dayCount
+  let targetQty = 0
+  for (let dayOffset = 0; dayOffset < dayCount; dayOffset += 1) {
+    const workDate = addDays(startedDate, dayOffset)
+    if (!isSameDay(getBranchHeadDisplayDate(workDate), targetDate)) continue
+    targetQty += baseQty + (dayOffset < remainder ? 1 : 0)
+  }
+  return targetQty
+}
+
 function sumHead(targetRows) {
   return targetRows.reduce((sum, row) => sum + Math.max(0, toNumber(row?.head)), 0)
+}
+
+function sumDistributedBranchHead(targetRows, targetDate) {
+  return targetRows.reduce((sum, row) => sum + getDistributedBranchHeadQty(row, targetDate), 0)
 }
 
 function sumHole(targetRows) {
@@ -268,7 +329,7 @@ async function fetchRows() {
     return
   }
 
-  const columns = 'id,work_type,head,hole,worker_t,worker_t_time,worker_main,worker_main_time'
+  const columns = 'id,work_type,head,hole,worker_t,worker_t_time,worker_main,worker_main_time,marking_weld_a_started_on,marking_weld_b_started_on,marking_laser_1_started_on,beveling_started_on,nasa_started_on'
   const { data, error: queryError } = await supabase
     .from(PRODUCT_LIST_TABLE)
     .select(columns)
@@ -321,7 +382,7 @@ const dailyBranchRows = computed(() =>
   weekDates.value.map((date) => ({
     key: formatKoreanDate(date),
     dateLabel: formatDayLabel(date),
-    completedQty: sumHead(rows.value.filter((row) => isCompletedOnDate(row, 'branch_head', date))),
+    completedQty: sumDistributedBranchHead(rows.value, date),
     isToday: isSameDay(date, new Date()),
   })),
 )
@@ -779,4 +840,3 @@ watch(
     </main>
   </section>
 </template>
-
