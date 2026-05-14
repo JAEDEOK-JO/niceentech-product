@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import Button from '@/components/ui/button/Button.vue'
 import ReportPrintSettingsDialog from './ReportPrintSettingsDialog.vue'
 import { printManagementReport } from './reportPrint'
+import { DEFAULT_WELDING_REPORT_MANAGERS, WELDING_INSPECTORS } from '@/utils/productionStatus'
 
 const COMPANY_LIST_TABLE = 'company_list'
 const METRIC_DEFINITIONS_TABLE = 'department_metric_definitions'
@@ -16,7 +17,7 @@ const METRIC_KEYS = {
   used: 'monthly_used_ton',
   balance: 'monthly_balance_ton',
 }
-const MANAGERS = ['진민택', '민뚜라']
+const MANAGERS = DEFAULT_WELDING_REPORT_MANAGERS
 
 const emit = defineEmits(['go-back'])
 const props = defineProps({
@@ -67,6 +68,20 @@ const weldingIssueError = ref('')
 const weldingIssueCompanySearchText = ref('')
 const weldingIssueCompanySearchLoading = ref(false)
 const weldingIssueCompanySearchResults = ref([])
+const createWeldingMetricState = (managers, detail = false) =>
+  managers.reduce((acc, manager) => {
+    acc[manager] = detail
+      ? {
+          inProgressHead: 0,
+          completedHead: 0,
+          misproductionCount: 0,
+          shortageCount: 0,
+          inspectionRows: [],
+          issueRows: [],
+        }
+      : { completedHead: 0, misproductionCount: 0, shortageCount: 0 }
+    return acc
+  }, {})
 
 const reportPeriodMonth = `${reportYear}-${String(reportMonth).padStart(2, '0')}`
 
@@ -422,23 +437,33 @@ const summaryCards = computed(() => [
   },
 ])
 
+const weldingComparisonManagers = computed(() => {
+  const names = new Set(MANAGERS)
+  for (const row of weldingInspections.value) {
+    const inspector = normalizeText(row?.inspector)
+    if (inspector && !MANAGERS.includes(inspector)) names.add(inspector)
+  }
+  for (const row of weldingIssues.value) {
+    const inspector = normalizeText(row?.inspector)
+    if (inspector && !MANAGERS.includes(inspector)) names.add(inspector)
+  }
+  return [...names]
+})
+const weldingIssueManagerOptions = computed(() => {
+  const names = new Set([...WELDING_INSPECTORS, ...weldingComparisonManagers.value])
+  return [...names]
+})
+const weldingComparisonTitle = computed(() => `${weldingComparisonManagers.value.join(' / ')} 비교`)
+const weldingStatusTitle = computed(() => `${weldingComparisonManagers.value.join(' / ')} 작업 현황`)
+
 const weldingMetrics = computed(() => {
-  const state = MANAGERS.reduce((acc, m) => {
-    acc[m] = {
-      inProgressHead: 0,
-      completedHead: 0,
-      misproductionCount: 0,
-      shortageCount: 0,
-      inspectionRows: [],
-      issueRows: [],
-    }
-    return acc
-  }, {})
+  const state = createWeldingMetricState(weldingComparisonManagers.value, true)
 
   for (const row of weldingInspections.value) {
     const monthKey = String(row.created_at ?? '').slice(0, 7)
     if (monthKey !== reportPeriodMonth) continue
-    const inspector = MANAGERS.includes(row.inspector) ? row.inspector : null
+    const inspectorName = normalizeText(row.inspector)
+    const inspector = weldingComparisonManagers.value.includes(inspectorName) ? inspectorName : null
     if (!inspector) continue
     if (row.welding_status === '작업중') state[inspector].inProgressHead += toNumber(row.head_count)
     if (row.welding_status === '작업완료') state[inspector].completedHead += toNumber(row.head_count)
@@ -447,7 +472,8 @@ const weldingMetrics = computed(() => {
 
   for (const row of weldingIssues.value) {
     if (row.period_month !== reportPeriodMonth) continue
-    const inspector = MANAGERS.includes(row.inspector) ? row.inspector : null
+    const inspectorName = normalizeText(row.inspector)
+    const inspector = weldingComparisonManagers.value.includes(inspectorName) ? inspectorName : null
     if (!inspector) continue
     if (row.issue_type === 'misproduction') state[inspector].misproductionCount += 1
     if (row.issue_type === 'shortage') state[inspector].shortageCount += 1
@@ -459,22 +485,21 @@ const weldingMetrics = computed(() => {
 
 const monthlyWeldingMetrics = computed(() =>
   last3Months.map((month) => {
-    const state = MANAGERS.reduce((acc, m) => {
-      acc[m] = { completedHead: 0, misproductionCount: 0, shortageCount: 0 }
-      return acc
-    }, {})
+    const state = createWeldingMetricState(weldingComparisonManagers.value)
 
     for (const row of weldingInspections.value) {
       const monthKey = String(row.created_at ?? '').slice(0, 7)
       if (monthKey !== month.key) continue
-      const inspector = MANAGERS.includes(row.inspector) ? row.inspector : null
+      const inspectorName = normalizeText(row.inspector)
+      const inspector = weldingComparisonManagers.value.includes(inspectorName) ? inspectorName : null
       if (!inspector) continue
       if (row.welding_status === '작업완료') state[inspector].completedHead += toNumber(row.head_count)
     }
 
     for (const row of weldingIssues.value) {
       if (row.period_month !== month.key) continue
-      const inspector = MANAGERS.includes(row.inspector) ? row.inspector : null
+      const inspectorName = normalizeText(row.inspector)
+      const inspector = weldingComparisonManagers.value.includes(inspectorName) ? inspectorName : null
       if (!inspector) continue
       if (row.issue_type === 'misproduction') state[inspector].misproductionCount += 1
       if (row.issue_type === 'shortage') state[inspector].shortageCount += 1
@@ -698,7 +723,7 @@ onMounted(fetchReportData)
 
         <section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
           <div class="flex items-center justify-between gap-3">
-            <p class="text-[13px] font-extrabold text-slate-900">진민택 / 민뚜라 비교</p>
+            <p class="text-[13px] font-extrabold text-slate-900">{{ weldingComparisonTitle }}</p>
             <p class="text-[12px] text-slate-500">최근 3개월</p>
           </div>
 
@@ -717,7 +742,7 @@ onMounted(fetchReportData)
                 </tr>
               </thead>
               <tbody>
-                <template v-for="(manager, mIdx) in MANAGERS" :key="manager">
+                <template v-for="(manager, mIdx) in weldingComparisonManagers" :key="manager">
                   <tr :class="mIdx > 0 ? 'border-t-2 border-slate-300' : ''">
                     <td class="border border-slate-200 px-3 text-center text-xs font-extrabold text-slate-800" rowspan="3">{{ manager }}</td>
                     <td class="border border-slate-200 px-3 py-0 text-center text-xs font-semibold text-slate-600" style="height:48px">완료 헤드</td>
@@ -780,12 +805,12 @@ onMounted(fetchReportData)
               </div>
               <div>
                 <p class="mb-1.5 text-xs font-bold text-slate-600">담당자</p>
-                <div class="flex gap-2">
+                <div class="flex flex-wrap gap-2">
                   <button
-                    v-for="name in MANAGERS"
+                    v-for="name in weldingIssueManagerOptions"
                     :key="name"
                     type="button"
-                    class="flex-1 rounded-lg border px-3 py-2 text-sm font-semibold transition"
+                    class="min-w-[72px] flex-1 rounded-lg border px-3 py-2 text-sm font-semibold transition"
                     :class="weldingIssueForm.inspector === name ? 'border-indigo-500 bg-indigo-600 text-white' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'"
                     @click="weldingIssueForm.inspector = name"
                   >{{ name }}</button>
@@ -798,7 +823,7 @@ onMounted(fetchReportData)
                     v-model="weldingIssueCompanySearchText"
                     type="text"
                     placeholder="회사명 또는 현장명 검색"
-                    class="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none"
+                    class="w-1/2 rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none"
                     @keydown.enter.prevent="searchWeldingIssueCompanies"
                   />
                   <button
@@ -864,9 +889,9 @@ onMounted(fetchReportData)
 
         <!-- 작업 현황 -->
         <section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
-          <p class="mb-4 text-[13px] font-extrabold text-slate-900">진민택 / 민뚜라 작업 현황</p>
+          <p class="mb-4 text-[13px] font-extrabold text-slate-900">{{ weldingStatusTitle }}</p>
           <div class="space-y-5">
-            <div v-for="manager in MANAGERS" :key="`ws-${manager}`">
+            <div v-for="manager in weldingComparisonManagers" :key="`ws-${manager}`">
               <p class="mb-2 text-[12px] font-bold text-slate-700">{{ manager }} 작업 현황</p>
               <div v-if="weldingMetrics[manager].inspectionRows.length === 0" class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">
                 이번 달 데이터 없음

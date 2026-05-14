@@ -56,6 +56,8 @@ const workManRoleToStages = {
   용접: ['welding'],
   진민택: ['welding'],
   민뚜라: ['welding'],
+  석산: ['welding'],
+  조경천: ['welding'],
   '티&면치': ['beveling'],
   메인: ['main_work'],
 }

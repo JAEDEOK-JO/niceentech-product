@@ -6,6 +6,7 @@ import Input from '@/components/ui/input/Input.vue'
 import MainProductionPlanGroupTable from '@/features/main/MainProductionPlanGroupTable.vue'
 import { useDialog } from '@/composables/useDialog'
 import { isAdminRole, isProductionAdmin } from '@/utils/adminAccess'
+import { WELDING_INSPECTORS, getWeldingInspectorClass } from '@/utils/productionStatus'
 
 const { confirm, alert } = useDialog()
 
@@ -75,11 +76,7 @@ const isShipmentConfirmOpen = ref(false)
 const activeShipmentRow = ref(null)
 const shipmentMode = ref('ship') // 'ship' | 'cancel'
 const activeShipmentWorkerName = computed(() => String(activeShipmentRow.value?.welding_inspector ?? '').trim() || '미지정')
-const activeShipmentWorkerClass = computed(() => {
-  if (activeShipmentWorkerName.value === '민뚜라') return 'border-cyan-300 bg-cyan-200 text-cyan-950'
-  if (activeShipmentWorkerName.value === '진민택') return 'border-fuchsia-300 bg-fuchsia-200 text-fuchsia-950'
-  return 'border-slate-200 bg-slate-100 text-slate-700'
-})
+const activeShipmentWorkerClass = computed(() => getWeldingInspectorClass(activeShipmentWorkerName.value))
 const snackbarMessage = ref('')
 const snackbarVisible = ref(false)
 let snackbarTimer = null
@@ -105,6 +102,11 @@ const canControlNasaWork = () => {
   const workMan = String(props.currentWorkMan ?? '').trim()
   return workMan === '무용접' || workMan === '나사' || isAdminRole(props.currentRole)
 }
+const canOpenShipmentConfirm = (row) =>
+  Boolean(row?.complete) ||
+  row?.worker_t === '작업완료' ||
+  row?.worker_nasa === '작업완료' ||
+  row?.worker_main === '작업완료'
 
 const isDrawingDialogOpen = ref(false)
 const drawingFiles = ref([])
@@ -137,6 +139,8 @@ const headerLegendBadges = [
   { label: '보류', className: 'border-orange-200 bg-orange-100 text-orange-900' },
   { label: '민뚜라', className: 'border-cyan-300 bg-cyan-200 text-cyan-950' },
   { label: '진민택', className: 'border-fuchsia-300 bg-fuchsia-200 text-fuchsia-950' },
+  { label: '석산', className: 'border-amber-300 bg-amber-200 text-amber-950' },
+  { label: '조경천', className: 'border-emerald-300 bg-emerald-200 text-emerald-950' },
 ]
 
 const formatKoreanDateLabel = (value) => {
@@ -391,7 +395,14 @@ const handleCellClick = ({ row, columnKey }) => {
     return
   }
   if (columnKey === 'worker_welding') {
-    const isWeldingTeam = props.currentWorkMan === '용접반'
+    if (row?.shipment || String(row?.worker_welding ?? '').trim() === '출하완료') {
+      activeShipmentRow.value = row
+      shipmentMode.value = 'cancel'
+      isShipmentConfirmOpen.value = true
+      return
+    }
+    const currentWorkMan = String(props.currentWorkMan ?? '').trim()
+    const isWeldingTeam = currentWorkMan === '용접반' || currentWorkMan === '용접' || WELDING_INSPECTORS.includes(currentWorkMan)
     const isAdmin = isAdminRole(props.currentRole)
     if (!isWeldingTeam && !isAdmin) {
       showSnackbar('용접반만 작업할 수 있습니다.')
@@ -407,6 +418,18 @@ const handleCellClick = ({ row, columnKey }) => {
     return
   }
   if (columnKey === 'worker_nasa' && isNasaWorkRow(row)) {
+    if (row?.shipment) {
+      activeShipmentRow.value = row
+      shipmentMode.value = 'cancel'
+      isShipmentConfirmOpen.value = true
+      return
+    }
+    if (canOpenShipmentConfirm(row)) {
+      activeShipmentRow.value = row
+      shipmentMode.value = 'ship'
+      isShipmentConfirmOpen.value = true
+      return
+    }
     if (!canControlNasaWork()) {
       showSnackbar('무용접만 작업할 수 있습니다.')
       return
@@ -420,7 +443,7 @@ const handleCellClick = ({ row, columnKey }) => {
       activeShipmentRow.value = row
       shipmentMode.value = 'cancel'
       isShipmentConfirmOpen.value = true
-    } else if (Boolean(row?.complete) || row?.worker_t === '작업완료' || row?.worker_main === '작업완료') {
+    } else if (canOpenShipmentConfirm(row)) {
       activeShipmentRow.value = row
       shipmentMode.value = 'ship'
       isShipmentConfirmOpen.value = true
@@ -639,7 +662,7 @@ const selectDrawingFile = (file) => {
               </button>
               <button
                 type="button"
-                class="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 md:hidden"
+                class="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 xl:hidden"
                 :class="hasActiveSearch || searchAllDates ? 'border-blue-200 bg-blue-50 text-blue-700' : ''"
                 aria-label="검색"
                 @click="openSearchDialog"
@@ -647,8 +670,8 @@ const selectDrawingFile = (file) => {
                 <Search class="h-4 w-4" />
               </button>
             </div>
-            <div class="hidden items-center gap-2 md:flex">
-              <div class="relative min-w-0 flex-1 xl:w-[320px] xl:flex-none">
+            <div class="hidden items-center gap-2 xl:flex">
+              <div class="relative min-w-0 flex-1 xl:w-[160px] xl:flex-none">
                 <svg viewBox="0 0 24 24" class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 fill-none stroke-slate-400" stroke-width="2">
                   <circle cx="11" cy="11" r="7" />
                   <path d="m20 20-3.5-3.5" />
@@ -758,7 +781,7 @@ const selectDrawingFile = (file) => {
           </div>
           <div class="mt-4 space-y-3">
             <Input
-              class="h-11 border-slate-200 text-sm"
+              class="h-11 w-1/2 border-slate-200 text-sm"
               :model-value="localSearchText"
               :placeholder="searchPlaceholder"
               autofocus
@@ -1017,18 +1040,14 @@ const selectDrawingFile = (file) => {
         </p>
         <div class="mt-5 grid grid-cols-2 gap-3">
           <button
+            v-for="inspector in WELDING_INSPECTORS"
+            :key="inspector"
             type="button"
-            class="rounded-xl border-2 border-cyan-300 bg-cyan-50 py-4 text-base font-extrabold text-cyan-900 transition hover:bg-cyan-100 active:bg-cyan-200"
-            @click="selectWeldingInspector('민뚜라')"
+            class="rounded-xl border-2 py-4 text-base font-extrabold transition active:scale-[0.98]"
+            :class="getWeldingInspectorClass(inspector)"
+            @click="selectWeldingInspector(inspector)"
           >
-            민뚜라
-          </button>
-          <button
-            type="button"
-            class="rounded-xl border-2 border-fuchsia-300 bg-fuchsia-50 py-4 text-base font-extrabold text-fuchsia-900 transition hover:bg-fuchsia-100 active:bg-fuchsia-200"
-            @click="selectWeldingInspector('진민택')"
-          >
-            진민택
+            {{ inspector }}
           </button>
         </div>
         <button

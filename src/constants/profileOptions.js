@@ -26,6 +26,8 @@ export const PROFILE_WORK_MAN_OPTIONS = [
   '용접반',
   '진민택',
   '민뚜라',
+  '석산',
+  '조경천',
 ]
 
 export const PROFILE_DEPARTMENT_OPTIONS = ['설계부', '영업부', '관리부', '공무부', '품질관리부', '생산부']

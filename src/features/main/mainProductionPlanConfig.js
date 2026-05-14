@@ -1,3 +1,5 @@
+import { getWeldingInspectorClass } from '@/utils/productionStatus'
+
 export const qtyColumnWidth = 60
 export const statusColumnWidth = 55
 export const areaColumnWidth = 300
@@ -161,10 +163,9 @@ export const statusClass = (status) => {
 
 export const getWorkerStatusClass = (row, columnKey) => {
   const tone = getStatusTone(row, columnKey, getCellText(row, columnKey))
-  if (columnKey === 'worker_welding' && (tone === '작업중' || tone === '작업완료' || tone === '출하완료')) {
-    const inspector = String(row?.welding_inspector ?? '').trim()
-    if (inspector === '민뚜라') return 'bg-cyan-200 text-cyan-950'
-    if (inspector === '진민택') return 'bg-fuchsia-200 text-fuchsia-950'
+  if (columnKey === 'worker_welding' && tone === '출하완료') return statusClass(tone)
+  if (columnKey === 'worker_welding' && (tone === '작업중' || tone === '작업완료')) {
+    return getWeldingInspectorClass(row?.welding_inspector, { includeBorder: false })
   }
   return statusClass(tone)
 }

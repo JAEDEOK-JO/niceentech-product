@@ -9,6 +9,7 @@ import {
   getBodyCellClass,
   totalTableWidth,
 } from '@/features/main/mainProductionPlanConfig'
+import { getWorkTypeBadgeClass } from '@/utils/productionStatus'
 
 const props = defineProps({
   groupData: { type: Object, required: true },
@@ -125,7 +126,7 @@ const tableWidthStyle = {
             비고 {{ row.memo || '' }}
           </button>
           <div class="flex w-full justify-end">
-            <span class="inline-flex items-center rounded-full bg-slate-900 px-2.5 py-1 font-bold text-white whitespace-nowrap">
+            <span class="inline-flex items-center rounded-full px-2.5 py-1 font-bold whitespace-nowrap" :class="getWorkTypeBadgeClass(row?.work_type)">
               {{ displayWorkType(row) }}
             </span>
             <button

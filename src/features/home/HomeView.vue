@@ -1,9 +1,11 @@
 <script setup>
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { Search } from 'lucide-vue-next'
 import Button from '@/components/ui/button/Button.vue'
+import Input from '@/components/ui/input/Input.vue'
 import { productTableColumns, tableTotalWidth } from '@/features/home/productTableConfig'
 import { isProductionAdmin, normalizeWorkMan } from '@/utils/adminAccess'
-import { isWorkerDoneStatus, normalizeProductionWorkType } from '@/utils/productionStatus'
+import { getWorkTypeBadgeClass, isWorkerDoneStatus, normalizeProductionWorkType } from '@/utils/productionStatus'
 
 const props = defineProps({
   pageTitle: { type: String, required: true },
@@ -78,6 +80,7 @@ const delayTimeInput = ref(0)
 const workerTDateInput = ref('')
 const workerMainDateInput = ref('')
 const isDrawingDialogOpen = ref(false)
+const isSearchDialogOpen = ref(false)
 const drawingFiles = ref([])
 const drawingLoading = ref(false)
 const drawingError = ref('')
@@ -102,6 +105,19 @@ const emitSearchChange = () => {
     text: localSearchText.value,
     allDates: localSearchAllDates.value,
   })
+  isSearchDialogOpen.value = false
+}
+
+const openSearchDialog = () => {
+  localSearchText.value = String(props.searchText ?? '')
+  localSearchAllDates.value = Boolean(props.searchAllDates)
+  isSearchDialogOpen.value = true
+}
+
+const closeSearchDialog = () => {
+  localSearchText.value = String(props.searchText ?? '')
+  localSearchAllDates.value = Boolean(props.searchAllDates)
+  isSearchDialogOpen.value = false
 }
 
 const normalizeStageStatus = (value) => {
@@ -596,7 +612,7 @@ onBeforeUnmount(() => {
 
 <template>
   <section class="min-h-screen w-full">
-    <header class="sticky top-[56px] z-20 border-b border-slate-200 bg-white md:top-[72px]">
+    <header class="sticky top-[56px] z-30 border-b border-slate-200 bg-white/95 backdrop-blur md:top-[72px]">
       <div class="flex flex-col gap-2 px-2 py-2 md:flex-row md:flex-wrap md:items-center md:justify-between md:px-6 md:py-2.5">
         <div class="flex items-center justify-between gap-2">
           <h1 class="text-sm font-bold text-slate-900 md:text-lg">{{ pageTitle }}</h1>
@@ -607,12 +623,21 @@ onBeforeUnmount(() => {
             {{ realtimeConnected ? '실시간 연결됨' : '실시간 재연결 중' }}
           </span>
         </div>
-        <div class="grid grid-cols-[1fr_1fr_1fr_auto_auto] items-center gap-1 md:flex md:items-center md:gap-2">
+        <div class="grid grid-cols-[1fr_1fr_1fr_auto_auto_auto] items-center gap-1 md:flex md:items-center md:gap-2">
           <Button class="h-8 px-2 text-[11px] md:h-9 md:px-3 md:text-xs" variant="outline" @click="emit('move-week', -1)">지난주</Button>
           <Button class="h-8 px-2 text-[11px] md:h-9 md:px-3 md:text-xs" variant="outline" :disabled="weekOffset === 0" @click="emit('reset-week')">
             이번주
           </Button>
           <Button class="h-8 px-2 text-[11px] md:h-9 md:px-3 md:text-xs" variant="outline" @click="emit('move-week', 1)">다음주</Button>
+          <button
+            type="button"
+            class="relative flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 md:h-9 md:w-9"
+            :class="searchText || searchAllDates ? 'border-indigo-200 bg-indigo-50 text-indigo-700' : ''"
+            aria-label="검색"
+            @click="openSearchDialog"
+          >
+            <Search class="h-4 w-4" />
+          </button>
           <button
             type="button"
             class="relative flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 md:h-9 md:w-9"
@@ -646,57 +671,70 @@ onBeforeUnmount(() => {
       </div>
     </header>
 
+    <div
+      v-if="isSearchDialogOpen"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 px-4"
+      @click.self="closeSearchDialog"
+    >
+      <div class="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl">
+        <div class="flex items-start justify-between gap-3">
+          <h2 class="text-base font-extrabold text-slate-900">검색</h2>
+          <button type="button" class="text-sm text-slate-500 hover:text-slate-700" @click="closeSearchDialog">닫기</button>
+        </div>
+        <div class="mt-4 space-y-3">
+          <Input
+            class="h-11 w-1/2 border-slate-200 text-sm"
+            v-model="localSearchText"
+            placeholder="회사명, 현장명, 구역명 검색"
+            autofocus
+            @keydown.enter.prevent="emitSearchChange"
+          />
+          <label class="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700">
+            <input
+              v-model="localSearchAllDates"
+              type="checkbox"
+              class="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-400"
+            />
+            <span>전체</span>
+          </label>
+        </div>
+        <div class="mt-5 flex gap-2">
+          <Button class="h-10 flex-1 text-sm" variant="outline" @click="closeSearchDialog">취소</Button>
+          <Button class="h-10 flex-1 text-sm" @click="emitSearchChange">검색</Button>
+        </div>
+      </div>
+    </div>
+
     <div class="px-1.5 py-2.5 md:px-6 md:py-4">
       <div v-if="planLoading" class="p-8 text-center text-sm text-slate-500">데이터 로딩 중...</div>
       <div v-else-if="planError" class="p-8 text-center text-sm text-red-600">{{ planError }}</div>
       <div v-else>
-        <div class="mb-3 flex h-[80px] items-stretch gap-2 rounded-xl border border-slate-200 bg-white px-2.5 shadow-sm">
-          <div class="flex shrink-0 basis-[18%] items-center justify-center gap-2.5 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 px-4 my-2">
-            <span class="text-xs font-bold leading-tight text-indigo-100">오늘<br/>목표</span>
-            <span class="text-2xl font-black tabular-nums text-white">{{ scheduleCard.todayTargetQty }}</span>
+        <div class="mb-3 grid grid-cols-3 gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
+          <div class="flex min-w-0 items-center justify-center gap-1.5 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 px-2 py-2 md:gap-2.5 md:px-4">
+            <span class="text-[10px] font-bold leading-tight text-indigo-100 md:text-xs">오늘<br/>목표</span>
+            <span class="text-xl font-black tabular-nums text-white md:text-2xl">{{ scheduleCard.todayTargetQty }}</span>
           </div>
 
-          <div class="flex shrink-0 basis-[25%] flex-col justify-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50/60 px-3 my-2">
-            <div class="flex items-center justify-between">
-              <span class="text-sm font-bold text-emerald-700">{{ scheduleCard.branch.title }}</span>
-              <span class="text-sm font-extrabold tabular-nums text-slate-900">{{ scheduleCard.branch.distributedQty }}<span class="text-xs font-medium text-slate-400"> / {{ scheduleCard.branch.totalQty }}</span></span>
+          <div class="min-w-0 rounded-lg border border-emerald-200 bg-emerald-50/60 px-2 py-2 md:px-3">
+            <div class="flex items-center justify-between gap-1">
+              <span class="truncate text-xs font-bold text-emerald-700 md:text-sm">{{ scheduleCard.branch.title }}</span>
+              <span class="shrink-0 text-xs font-extrabold tabular-nums text-slate-900 md:text-sm">{{ scheduleCard.branch.distributedQty }}<span class="text-[10px] font-medium text-slate-400 md:text-xs"> / {{ scheduleCard.branch.totalQty }}</span></span>
             </div>
-            <div class="h-2 w-full overflow-hidden rounded-full bg-emerald-200/60">
+            <div class="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-emerald-200/60 md:h-2">
               <div class="h-full rounded-full bg-emerald-500 transition-all duration-500" :style="{ width: scheduleCard.branch.totalQty > 0 ? `${Math.min(100, (scheduleCard.branch.distributedQty / scheduleCard.branch.totalQty) * 100)}%` : '0%' }" />
             </div>
-            <span class="text-[11px] font-semibold text-amber-600">미배포 {{ scheduleCard.branch.remainingQty }}</span>
+            <span class="mt-1 block truncate text-[10px] font-semibold text-amber-600 md:text-[11px]">미배포 {{ scheduleCard.branch.remainingQty }}</span>
           </div>
 
-          <div class="flex shrink-0 basis-[25%] flex-col justify-center gap-1 rounded-xl border border-cyan-200 bg-cyan-50/60 px-3 my-2">
-            <div class="flex items-center justify-between">
-              <span class="text-sm font-bold text-cyan-700">{{ scheduleCard.main.title }}</span>
-              <span class="text-sm font-extrabold tabular-nums text-slate-900">{{ scheduleCard.main.distributedQty }}<span class="text-xs font-medium text-slate-400"> / {{ scheduleCard.main.totalQty }}</span></span>
+          <div class="min-w-0 rounded-lg border border-cyan-200 bg-cyan-50/60 px-2 py-2 md:px-3">
+            <div class="flex items-center justify-between gap-1">
+              <span class="truncate text-xs font-bold text-cyan-700 md:text-sm">{{ scheduleCard.main.title }}</span>
+              <span class="shrink-0 text-xs font-extrabold tabular-nums text-slate-900 md:text-sm">{{ scheduleCard.main.distributedQty }}<span class="text-[10px] font-medium text-slate-400 md:text-xs"> / {{ scheduleCard.main.totalQty }}</span></span>
             </div>
-            <div class="h-2 w-full overflow-hidden rounded-full bg-cyan-200/60">
+            <div class="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-cyan-200/60 md:h-2">
               <div class="h-full rounded-full bg-cyan-500 transition-all duration-500" :style="{ width: scheduleCard.main.totalQty > 0 ? `${Math.min(100, (scheduleCard.main.distributedQty / scheduleCard.main.totalQty) * 100)}%` : '0%' }" />
             </div>
-            <span class="text-[11px] font-semibold text-amber-600">미배포 {{ scheduleCard.main.remainingQty }}</span>
-          </div>
-
-          <div class="mx-0.5 w-px self-stretch bg-slate-200" />
-
-          <div class="flex min-w-0 basis-[20%] items-center gap-2">
-            <svg viewBox="0 0 24 24" class="h-4 w-4 shrink-0 text-slate-400" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" /></svg>
-            <input
-              v-model="localSearchText"
-              type="text"
-              class="h-8 min-w-0 flex-1 border-0 bg-transparent text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none"
-              placeholder="검색..."
-              @keydown.enter.prevent="emitSearchChange"
-            />
-            <label class="flex shrink-0 cursor-pointer select-none items-center gap-1.5 rounded-lg border px-2 py-1 text-xs font-semibold transition hover:bg-slate-50" :class="localSearchAllDates ? 'border-indigo-300 bg-indigo-50 text-indigo-700' : 'border-slate-200 text-slate-500'">
-              <input v-model="localSearchAllDates" type="checkbox" class="sr-only" @change="emitSearchChange" />
-              <span class="inline-flex h-4 w-4 items-center justify-center rounded border transition" :class="localSearchAllDates ? 'border-indigo-500 bg-indigo-500 text-white' : 'border-slate-300 bg-white'">
-                <svg v-if="localSearchAllDates" viewBox="0 0 24 24" class="h-2.5 w-2.5" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7" /></svg>
-              </span>
-              전체
-            </label>
-            <button type="button" class="shrink-0 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-indigo-700 active:scale-95" @click="emitSearchChange">검색</button>
+            <span class="mt-1 block truncate text-[10px] font-semibold text-amber-600 md:text-[11px]">미배포 {{ scheduleCard.main.remainingQty }}</span>
           </div>
         </div>
 
@@ -728,7 +766,7 @@ onBeforeUnmount(() => {
                 <div class="flex items-start justify-between gap-2">
                   <div class="min-w-0">
                     <div class="flex items-center gap-1.5 text-xs font-bold text-slate-500">
-                      <span class="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-extrabold text-indigo-700">
+                      <span class="rounded-full px-2 py-0.5 text-[10px] font-extrabold" :class="getWorkTypeBadgeClass(row?.work_type)">
                         {{ row.work_type || '-' }}
                       </span>
                       <span>No. {{ row.no ?? '-' }}</span>
