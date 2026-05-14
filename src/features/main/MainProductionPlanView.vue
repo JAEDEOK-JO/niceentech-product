@@ -786,8 +786,8 @@ const selectDrawingFile = (file) => {
       class="print-hide fixed inset-0 z-[60] bg-slate-900/60"
       @click.self="closeDrawingDialog"
     >
-      <div class="grid h-screen w-screen gap-0 overflow-hidden bg-white md:grid-cols-[320px_1fr]">
-        <div class="border-b border-slate-200 bg-white p-4 md:border-b-0 md:border-r">
+      <div class="flex h-[100dvh] w-screen flex-col gap-0 overflow-hidden bg-white md:grid md:h-screen md:grid-cols-[320px_1fr]">
+        <div class="shrink-0 border-b border-slate-200 bg-white p-4 md:border-b-0 md:border-r">
           <div class="mb-4 flex items-start justify-between gap-3">
             <div class="min-w-0">
               <h3 class="text-base font-extrabold text-slate-900">도면 목록</h3>
@@ -812,7 +812,7 @@ const selectDrawingFile = (file) => {
               {{ drawingUploading ? '등록 중...' : '도면 등록' }}
             </Button>
           </div>
-          <div class="max-h-[calc(100vh-220px)] space-y-2 overflow-y-auto">
+          <div class="max-h-[28dvh] space-y-2 overflow-y-auto md:max-h-[calc(100vh-220px)]">
             <div v-if="drawingLoading" class="rounded-xl border border-slate-200 px-3 py-4 text-sm text-slate-500">도면 조회 중...</div>
             <div v-else-if="drawingError" class="rounded-xl border border-red-200 bg-red-50 px-3 py-4 text-sm text-red-600">{{ drawingError }}</div>
             <div v-else-if="drawingFiles.length === 0" class="rounded-xl border border-slate-200 px-3 py-4 text-sm text-slate-500">등록된 도면이 없습니다.</div>
@@ -843,7 +843,7 @@ const selectDrawingFile = (file) => {
             </button>
           </div>
         </div>
-        <div class="h-full bg-slate-50">
+        <div class="min-h-0 flex-1 bg-slate-50 md:h-full">
           <iframe v-if="selectedDrawingUrl" :src="selectedDrawingUrl" class="h-full w-full" title="drawing-viewer" />
           <div v-else class="flex h-full items-center justify-center text-sm text-slate-500">미리볼 도면을 선택해주세요.</div>
         </div>

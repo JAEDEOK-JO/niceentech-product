@@ -124,16 +124,18 @@ const tableWidthStyle = {
             비고 {{ row.memo || '' }}
           </button>
           <div class="flex w-full justify-end">
-            <p
+            <button
+              type="button"
               class="inline-flex items-center rounded-full px-2.5 py-1 font-bold whitespace-nowrap"
               :class="
                 displayCellText(row, 'drawing') === '있음'
                   ? 'bg-orange-100 text-orange-800'
                   : 'bg-white text-black'
               "
+              @click="onCellClick(row, 'drawing')"
             >
               도면
-            </p>
+            </button>
           </div>
         </div>
       </article>
