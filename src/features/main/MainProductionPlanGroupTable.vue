@@ -53,6 +53,7 @@ const onCellClick = (row, columnKey) => {
   emit('cell-click', { row, columnKey })
 }
 const displayCellText = (row, key) => getCellText(row, key, { includeYear: props.showFullDates })
+const displayWorkType = (row) => String(row?.work_type ?? '').trim() || '기타'
 const tableWidthStyle = {
   '--production-plan-table-width': `${totalTableWidth}px`,
 }
@@ -124,9 +125,12 @@ const tableWidthStyle = {
             비고 {{ row.memo || '' }}
           </button>
           <div class="flex w-full justify-end">
+            <span class="inline-flex items-center rounded-full bg-slate-900 px-2.5 py-1 font-bold text-white whitespace-nowrap">
+              {{ displayWorkType(row) }}
+            </span>
             <button
               type="button"
-              class="inline-flex items-center rounded-full px-2.5 py-1 font-bold whitespace-nowrap"
+              class="ml-2 inline-flex items-center rounded-full px-2.5 py-1 font-bold whitespace-nowrap"
               :class="
                 displayCellText(row, 'drawing') === '있음'
                   ? 'bg-orange-100 text-orange-800'

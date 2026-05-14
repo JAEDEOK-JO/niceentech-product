@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onUnmounted, ref, watch } from 'vue'
+import { Search } from 'lucide-vue-next'
 import Button from '@/components/ui/button/Button.vue'
 import Input from '@/components/ui/input/Input.vue'
 import MainProductionPlanGroupTable from '@/features/main/MainProductionPlanGroupTable.vue'
@@ -57,6 +58,7 @@ const overallTotals = computed(() =>
 )
 
 const isCalendarDialogOpen = ref(false)
+const isSearchDialogOpen = ref(false)
 const localCalendarValue = ref('')
 const localSearchText = ref('')
 const localSearchAllDates = ref(false)
@@ -246,6 +248,17 @@ const openCalendarDialog = () => {
   isCalendarDialogOpen.value = true
 }
 
+const openSearchDialog = () => {
+  localSearchText.value = String(props.searchText ?? '')
+  localSearchAllDates.value = Boolean(props.searchAllDates)
+  isSearchDialogOpen.value = true
+}
+
+const closeSearchDialog = () => {
+  localSearchText.value = String(props.searchText ?? '')
+  localSearchAllDates.value = Boolean(props.searchAllDates)
+  isSearchDialogOpen.value = false
+}
 
 const closeCalendarDialog = () => {
   isCalendarDialogOpen.value = false
@@ -280,6 +293,7 @@ const submitSearch = () => {
     text: localSearchText.value,
     allDates: localSearchAllDates.value,
   })
+  isSearchDialogOpen.value = false
 }
 
 const moveCalendarMonth = (delta) => {
@@ -589,7 +603,7 @@ const selectDrawingFile = (file) => {
           <div class="min-w-0">
             <div class="flex flex-col gap-2 xl:flex-row xl:items-center xl:gap-3">
               <h1 class="shrink-0 text-lg font-extrabold text-slate-900 md:text-xl">{{ pageTitle }}</h1>
-              <div class="flex flex-wrap items-center gap-1.5">
+              <div class="hidden flex-wrap items-center gap-1.5 md:flex">
                 <span
                   v-for="badge in headerLegendBadges"
                   :key="badge.label"
@@ -623,8 +637,17 @@ const selectDrawingFile = (file) => {
                   <path d="M3 10h18" />
                 </svg>
               </button>
+              <button
+                type="button"
+                class="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 md:hidden"
+                :class="hasActiveSearch || searchAllDates ? 'border-blue-200 bg-blue-50 text-blue-700' : ''"
+                aria-label="검색"
+                @click="openSearchDialog"
+              >
+                <Search class="h-4 w-4" />
+              </button>
             </div>
-            <div class="flex items-center gap-2">
+            <div class="hidden items-center gap-2 md:flex">
               <div class="relative min-w-0 flex-1 xl:w-[320px] xl:flex-none">
                 <svg viewBox="0 0 24 24" class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 fill-none stroke-slate-400" stroke-width="2">
                   <circle cx="11" cy="11" r="7" />
@@ -719,6 +742,42 @@ const selectDrawingFile = (file) => {
             <p class="mt-3 text-xs" :class="isCalendarTuesday ? 'text-slate-500' : 'font-bold text-red-600'">
               {{ isCalendarTuesday ? '파란색 화요일만 선택할 수 있습니다.' : '화요일 날짜만 선택해주세요.' }}
             </p>
+          </div>
+        </div>
+      </div>
+
+      <div
+        v-if="isSearchDialogOpen"
+        class="print-hide fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 px-4"
+        @click.self="closeSearchDialog"
+      >
+        <div class="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl">
+          <div class="flex items-start justify-between gap-3">
+            <h2 class="text-base font-extrabold text-slate-900">검색</h2>
+            <button type="button" class="text-sm text-slate-500 hover:text-slate-700" @click="closeSearchDialog">닫기</button>
+          </div>
+          <div class="mt-4 space-y-3">
+            <Input
+              class="h-11 border-slate-200 text-sm"
+              :model-value="localSearchText"
+              :placeholder="searchPlaceholder"
+              autofocus
+              @update:model-value="handleSearchInput"
+              @keydown.enter="submitSearch"
+            />
+            <label class="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700">
+              <input
+                :checked="localSearchAllDates"
+                type="checkbox"
+                class="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-400"
+                @change="localSearchAllDates = Boolean($event?.target?.checked)"
+              />
+              <span>전체</span>
+            </label>
+          </div>
+          <div class="mt-5 flex gap-2">
+            <Button class="h-10 flex-1 text-sm" variant="outline" @click="closeSearchDialog">취소</Button>
+            <Button class="h-10 flex-1 text-sm" @click="submitSearch">검색</Button>
           </div>
         </div>
       </div>
