@@ -56,6 +56,7 @@ const navItems = computed(() => {
     to: { name: 'messenger' },
     badgeCount: totalUnreadCount.value,
   })
+  items.push({ key: 'attendance', label: '근태관리', to: { name: 'attendance' } })
   return items
 })
 

@@ -7,6 +7,7 @@ import AppDialog from '@/components/ui/AppDialog.vue'
 import { supabase } from '@/lib/supabase'
 import { usePushNotification } from '@/composables/usePushNotification'
 import { isDesktopBrowser } from '@/utils/device'
+import { buildDesktopInstallerUrl } from '@/constants/desktopInstall'
 import packageJson from '../package.json'
 
 const route = useRoute()
@@ -116,6 +117,11 @@ const handleUpdate = () => {
       bytesPerSecond: 0,
     }
     window.electronAPI.checkForUpdate()
+    return
+  }
+  const targetVersion = normalizeVersion(remoteVersion.value)
+  if (targetVersion) {
+    window.location.href = buildDesktopInstallerUrl(targetVersion)
     return
   }
   window.location.reload()
