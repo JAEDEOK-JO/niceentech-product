@@ -121,6 +121,7 @@ function getMonthRange(value: string) {
 
 const dailyWorkDate = ref(formatLocalDate())
 const dailyWorkHours = ref<DailyWorkHour[]>([])
+const dailyWorkRequests = ref<AttendanceRequest[]>([])
 const dailyWorkHoursLoading = ref(false)
 
 function upsertLocalDailyWorkHours(records: { workDate: string; employeeId: number; endTime: string }[]) {
@@ -158,6 +159,21 @@ async function loadDailyWorkHours({ silent = false } = {}) {
     dailyWorkHours.value = []
   } finally {
     if (!silent) dailyWorkHoursLoading.value = false
+  }
+}
+
+async function loadDailyWorkRequests() {
+  const target = new Date(`${dailyWorkDate.value}T00:00:00`)
+  try {
+    dailyWorkRequests.value = await fetchAttendanceRequests({
+      year: target.getFullYear(),
+      month: target.getMonth() + 1,
+      department: '',
+      status: '',
+      searchQuery: '',
+    })
+  } catch {
+    dailyWorkRequests.value = []
   }
 }
 
@@ -213,7 +229,7 @@ async function setDailyWorkDate(workDate: string) {
   const nextRange = getMonthRange(workDate)
   dailyWorkDate.value = workDate
   if (currentRange.startDate !== nextRange.startDate || currentRange.endDate !== nextRange.endDate) {
-    await loadDailyWorkHours({ silent: true })
+    await Promise.all([loadDailyWorkHours({ silent: true }), loadDailyWorkRequests()])
   }
 }
 
@@ -355,7 +371,7 @@ function markLocalAttendanceMutation() {
 }
 
 async function refreshAttendanceAfterMutation() {
-  await Promise.all([loadItems({ silent: true }), loadQuota(), loadMonthlySummary({ silent: true })])
+  await Promise.all([loadItems({ silent: true }), loadQuota(), loadMonthlySummary({ silent: true }), loadDailyWorkRequests()])
 }
 
 function openSummaryDetail(summary: AttendanceMonthlySummary) {
@@ -390,7 +406,7 @@ watch([summaryYear, summaryMonth, isAdmin], () => {
 
 watch(() => profile.value, async (p) => {
   if (!p) return
-  await Promise.all([loadItems(), loadQuota(), loadMeta(), loadEmployees(), loadMonthlySummary(), loadDailyWorkHours()])
+  await Promise.all([loadItems(), loadQuota(), loadMeta(), loadEmployees(), loadMonthlySummary(), loadDailyWorkHours(), loadDailyWorkRequests()])
 }, { immediate: true })
 
 // ─── 실시간 구독 ───────────────────────────────────────────────────────────────
@@ -402,6 +418,7 @@ onMounted(() => {
     void loadItems({ silent: true })
     void loadQuota()
     void loadMonthlySummary({ silent: true })
+    void loadDailyWorkRequests()
   })
 })
 
@@ -727,6 +744,7 @@ async function handleDeleteEmployee(id: number) {
     @open-form-for-employee="openFormForEmployee"
     :today-work-date="dailyWorkDate"
     :daily-work-hours="dailyWorkHours"
+    :daily-work-requests="dailyWorkRequests"
     :daily-work-hours-loading="dailyWorkHoursLoading"
     @save-daily-work-hours="handleSaveDailyWorkHours"
     @refresh-daily-work-hours="loadDailyWorkHours"

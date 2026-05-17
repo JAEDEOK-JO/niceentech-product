@@ -28,18 +28,16 @@ export async function fetchAttendanceRequests(
     .select('*')
     .order('created_at', { ascending: false })
 
-  if (filters.year) {
-    const start = `${filters.year}-01-01`
-    const end = `${filters.year}-12-31`
-    query = query.gte('start_date', start).lte('start_date', end)
-  }
-
   if (filters.month) {
     const mm = String(filters.month).padStart(2, '0')
     const start = `${filters.year}-${mm}-01`
     const lastDay = new Date(filters.year, filters.month, 0).getDate()
     const endDate = `${filters.year}-${mm}-${String(lastDay).padStart(2, '0')}`
-    query = query.gte('start_date', start).lte('start_date', endDate)
+    query = query.lte('start_date', endDate).gte('end_date', start)
+  } else if (filters.year) {
+    const start = `${filters.year}-01-01`
+    const end = `${filters.year}-12-31`
+    query = query.lte('start_date', end).gte('end_date', start)
   }
 
   if (filters.department) {

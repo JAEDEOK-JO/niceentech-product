@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { WORK_END_TIME_OPTIONS, type DailyWorkHour, type Employee } from '../types/attendance'
+import { WORK_END_TIME_OPTIONS, type AttendanceRequest, type DailyWorkHour, type Employee } from '../types/attendance'
 import {
   DAILY_WORK_DEPARTMENT_ORDER,
   getDailyWorkDepartmentRank,
   normalizeDailyWorkDepartment,
 } from '../utils/dailyWorkDepartment'
+import { getDailyWorkAbsence } from '../utils/dailyWorkAbsence'
 import DailyWorkHoursDetailDialog from './DailyWorkHoursDetailDialog.vue'
 
 const props = defineProps<{
   employees: Employee[]
+  requests: AttendanceRequest[]
   workHours: DailyWorkHour[]
   workDate: string
   loading: boolean
@@ -62,20 +64,20 @@ const selectedDetail = ref<SelectedDetailKey | null>(null)
 
 const employeeById = computed(() => new Map(props.employees.map((employee) => [employee.id, employee] as const)))
 
-const departmentTotals = computed(() => {
-  const counts = new Map<string, number>()
-  for (const employee of props.employees) {
-    const department = normalizeDailyWorkDepartment(employee.assignedDepartment)
-    counts.set(department, (counts.get(department) ?? 0) + 1)
-  }
-  return counts
-})
+function getDepartmentTotal(department: string, workDate: string) {
+  return props.employees.filter(
+    (employee) =>
+      normalizeDailyWorkDepartment(employee.assignedDepartment) === department &&
+      !getDailyWorkAbsence(employee, workDate, props.requests),
+  ).length
+}
 
 const rows = computed<WorkHourRow[]>(() => {
   return props.workHours
     .map((record) => {
       const employee = employeeById.value.get(record.employeeId)
       if (!employee) return null
+      if (getDailyWorkAbsence(employee, record.workDate, props.requests)) return null
       return {
         employeeId: employee.id,
         name: employee.name,
@@ -86,6 +88,9 @@ const rows = computed<WorkHourRow[]>(() => {
     })
     .filter((row): row is WorkHourRow => row !== null)
     .sort((left, right) => {
+      const leftFullTime = employeeById.value.get(left.employeeId)?.isFullTime ? 0 : 1
+      const rightFullTime = employeeById.value.get(right.employeeId)?.isFullTime ? 0 : 1
+      if (leftFullTime !== rightFullTime) return leftFullTime - rightFullTime
       const dept = getDailyWorkDepartmentRank(left.assignedDepartment) - getDailyWorkDepartmentRank(right.assignedDepartment)
       if (dept !== 0) return dept
       return left.name.localeCompare(right.name, 'ko')
@@ -146,7 +151,7 @@ const badgesByDate = computed(() => {
         endTime: row.endTime,
         label: labelOfTime(row.endTime),
         count: 0,
-        total: departmentTotals.value.get(row.assignedDepartment) ?? 0,
+        total: getDepartmentTotal(row.assignedDepartment, row.workDate),
         rows: [],
       }
       dateGroups.push(group)
@@ -193,7 +198,7 @@ const calendarDays = computed<CalendarDay[]>(() => {
 })
 
 const selectedDateTotal = computed(() => {
-  return props.workHours.filter((record) => record.workDate === props.workDate).length
+  return rows.value.filter((record) => record.workDate === props.workDate).length
 })
 
 function openDetail(group: BadgeGroup) {
@@ -222,7 +227,7 @@ const selectedDetailGroup = computed<BadgeGroup | null>(() => {
     endTime: key.endTime,
     label: labelOfTime(key.endTime),
     count: 0,
-    total: departmentTotals.value.get(key.department) ?? 0,
+    total: getDepartmentTotal(key.department, key.workDate),
     rows: [],
   }
 })
@@ -351,6 +356,8 @@ function handleUpdate(payload: { workDate: string; employeeId: number; endTime: 
       :department="selectedDetailGroup?.department ?? ''"
       :time-label="selectedDetailGroup?.label ?? ''"
       :rows="selectedDetailGroup?.rows ?? []"
+      :employees="employees"
+      :requests="requests"
       @close="closeDetail"
       @update="handleUpdate"
       @delete="handleDelete"

@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { WORK_END_TIME_OPTIONS, type Employee, type DailyWorkHour, type WorkEndTime } from '../types/attendance'
+import { WORK_END_TIME_OPTIONS, type AttendanceRequest, type Employee, type DailyWorkHour, type WorkEndTime } from '../types/attendance'
 import {
   DAILY_WORK_DEPARTMENT_ORDER,
   getDailyWorkDepartmentRank,
   normalizeDailyWorkDepartment,
 } from '../utils/dailyWorkDepartment'
+import { getDailyWorkAbsence } from '../utils/dailyWorkAbsence'
 
 const props = defineProps<{
   employees: Employee[]
+  requests: AttendanceRequest[]
   todayHours: DailyWorkHour[]
   workDate: string
 }>()
@@ -60,6 +62,7 @@ const visibleEmployees = computed(() => {
 watch(selectedDept, () => {
   const next = new Map<number, string>()
   for (const emp of visibleEmployees.value) {
+    if (getDailyWorkAbsence(emp, props.workDate, props.requests)) continue
     const existing = props.todayHours.find((h) => h.employeeId === emp.id)
     if (productionPresetTime.value && selectedDept.value === '__PRODUCTION__') {
       next.set(emp.id, productionPresetTime.value)
@@ -75,6 +78,7 @@ function applyProductionPreset(time: string) {
   selectedDept.value = '__PRODUCTION__'
   const next = new Map<number, string>()
   for (const emp of productionEmployees.value) {
+    if (getDailyWorkAbsence(emp, props.workDate, props.requests)) continue
     next.set(emp.id, time)
   }
   selections.value = next
@@ -93,6 +97,7 @@ function pickTime(empId: number, time: string) {
 function applyAll() {
   const next = new Map(selections.value)
   for (const emp of visibleEmployees.value) {
+    if (getDailyWorkAbsence(emp, props.workDate, props.requests)) continue
     next.set(emp.id, bulkTime.value)
   }
   selections.value = next
@@ -116,9 +121,13 @@ const selectedCount = computed(() => {
   return n
 })
 
+const visibleFullTimeCount = computed(() => visibleEmployees.value.filter((emp) => emp.isFullTime).length)
+const visibleContractCount = computed(() => Math.max(0, visibleEmployees.value.length - visibleFullTimeCount.value))
+
 function handleSave() {
   const records: { employeeId: number; endTime: string }[] = []
   for (const emp of visibleEmployees.value) {
+    if (getDailyWorkAbsence(emp, props.workDate, props.requests)) continue
     const time = selections.value.get(emp.id)
     if (time) records.push({ employeeId: emp.id, endTime: time })
   }
@@ -131,6 +140,7 @@ const selectedDeptLabel = computed(() => {
   if (selectedDept.value === '__PRODUCTION__') return '생산'
   return selectedDept.value
 })
+const absenceOf = (employee: Employee) => getDailyWorkAbsence(employee, props.workDate, props.requests)
 </script>
 
 <template>
@@ -209,6 +219,10 @@ const selectedDeptLabel = computed(() => {
                 @click="clearAll"
               >전체 해제</button>
             </div>
+            <div class="mt-3 flex flex-wrap gap-2 text-xs font-extrabold">
+              <span class="rounded-full bg-white px-2.5 py-1 text-slate-700">정직원 {{ visibleFullTimeCount }}명</span>
+              <span class="rounded-full bg-white px-2.5 py-1 text-slate-700">계약직 {{ visibleContractCount }}명</span>
+            </div>
           </div>
 
           <p v-if="visibleEmployees.length === 0" class="py-12 text-center text-sm text-slate-400">
@@ -225,9 +239,16 @@ const selectedDeptLabel = computed(() => {
             >
               <div class="flex min-w-0 items-center gap-2">
                 <span class="font-extrabold text-slate-900">{{ emp.name }}</span>
+                <span
+                  class="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-extrabold"
+                  :class="emp.isFullTime ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'"
+                >{{ emp.isFullTime ? '정직원' : '계약직' }}</span>
                 <span class="text-[11px] font-bold text-slate-400">{{ normalizeDailyWorkDepartment(emp.assignedDepartment || emp.department) }}</span>
               </div>
-              <div class="flex gap-1">
+              <div v-if="absenceOf(emp)" class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-extrabold text-amber-700">
+                {{ absenceOf(emp)?.label }}
+              </div>
+              <div v-else class="flex gap-1">
                 <button
                   v-for="opt in WORK_END_TIME_OPTIONS"
                   :key="opt.value"

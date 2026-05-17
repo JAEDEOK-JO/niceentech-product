@@ -59,6 +59,7 @@ const props = defineProps<{
   detailSignatures: import('../services/attendance.service').SignatureInfo[]
   todayWorkDate: string
   dailyWorkHours: DailyWorkHour[]
+  dailyWorkRequests: AttendanceRequest[]
   dailyWorkHoursLoading: boolean
 }>()
 
@@ -310,13 +311,14 @@ watch(
           class="rounded-lg px-4 py-2 text-sm font-bold transition-colors"
           :class="activeTab === 'workhours' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-800'"
           @click="activeTab = 'workhours'"
-        >금일 작업시간</button>
+        >작업시간</button>
       </div>
 
       <!-- ═══ 금일 작업시간 탭 (관리자) ═══ -->
       <DailyWorkHoursPanel
         v-if="isAdmin && activeTab === 'workhours'"
         :employees="employees"
+        :requests="dailyWorkRequests"
         :work-hours="dailyWorkHours"
         :work-date="todayWorkDate"
         :loading="dailyWorkHoursLoading"
@@ -532,6 +534,7 @@ watch(
       <DailyWorkHoursInputDialog
         v-if="workHoursDialogVisible"
         :employees="employees"
+        :requests="dailyWorkRequests"
         :today-hours="selectedDailyWorkHours"
         :work-date="todayWorkDate"
         @close="closeWorkHoursDialog"
