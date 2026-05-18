@@ -6,6 +6,7 @@ import { usePushNotification } from '@/composables/usePushNotification'
 import { fetchEmployees } from '@/features/attendance/services/attendance.service'
 import AttendanceEmployeeMappingPanel from '@/features/attendance/components/AttendanceEmployeeMappingPanel.vue'
 import EmployeeAccountRegisterPanel from '@/features/settings/components/EmployeeAccountRegisterPanel.vue'
+import EmployeeOptionSettingsPanel from '@/features/settings/components/EmployeeOptionSettingsPanel.vue'
 import packageJson from '../../package.json'
 
 const appVersion = packageJson.version
@@ -30,7 +31,7 @@ watch(
       loadEmployees()
       return
     }
-    if (activePanel.value === 'employee-register') activePanel.value = 'app-info'
+    if (activePanel.value === 'employee-register' || activePanel.value === 'employee-options') activePanel.value = 'app-info'
   },
   { immediate: true },
 )
@@ -152,6 +153,15 @@ watch(
           >
             사원등록
           </button>
+          <button
+            v-if="isRootAdmin"
+            type="button"
+            class="rounded-xl px-4 py-3 text-left text-sm font-extrabold transition-colors"
+            :class="activePanel === 'employee-options' ? 'bg-slate-900 text-white' : 'bg-slate-50 text-slate-700 hover:bg-slate-100'"
+            @click="activePanel = 'employee-options'"
+          >
+            직원 선택값
+          </button>
         </nav>
       </aside>
 
@@ -226,6 +236,10 @@ watch(
         <EmployeeAccountRegisterPanel
           v-else-if="isRootAdmin && activePanel === 'employee-register'"
           @registered="loadEmployees"
+        />
+
+        <EmployeeOptionSettingsPanel
+          v-else-if="isRootAdmin && activePanel === 'employee-options'"
         />
       </section>
     </div>

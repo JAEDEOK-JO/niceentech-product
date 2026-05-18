@@ -138,6 +138,7 @@ function badgeClass(department: string) {
   if (department === '나사') return 'border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100'
   if (department === '용접') return 'border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100'
   if (department === 'CNC') return 'border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100'
+  if (department === '지게차') return 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100'
   return 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
 }
 

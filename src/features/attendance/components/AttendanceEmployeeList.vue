@@ -1,8 +1,13 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useDialog } from '@/composables/useDialog'
 import type { Employee } from '../types/attendance'
 import type { EmployeeFormData } from '../services/attendance.service'
+import {
+  DEFAULT_EMPLOYEE_OPTIONS,
+  fetchEmployeeOptionGroups,
+  type EmployeeOptionGroups,
+} from '../services/employeeOptions.service'
 
 const { confirm } = useDialog()
 
@@ -44,9 +49,9 @@ const filtered = computed(() =>
       return true
     })
     .sort((a, b) => {
-      const d1 = (DEPT_ORDER[a.department] ?? 99) - (DEPT_ORDER[b.department] ?? 99)
+      const d1 = (departmentOrder.value.get(a.department) ?? 99) - (departmentOrder.value.get(b.department) ?? 99)
       if (d1 !== 0) return d1
-      const d2 = (ASSIGNED_DEPT_ORDER[a.assignedDepartment] ?? 99) - (ASSIGNED_DEPT_ORDER[b.assignedDepartment] ?? 99)
+      const d2 = (assignedDepartmentOrder.value.get(a.assignedDepartment) ?? 99) - (assignedDepartmentOrder.value.get(b.assignedDepartment) ?? 99)
       if (d2 !== 0) return d2
       return (a.isFullTime === b.isFullTime ? 0 : a.isFullTime ? -1 : 1)
     }),
@@ -57,21 +62,38 @@ const formVisible = ref(false)
 const isEditMode = ref(false)
 const editTargetId = ref<number | null>(null)
 
-const DEPARTMENTS = ['생산부', '용접부', '나사부', 'CNC'] as const
 const ROLES = ['반장', '작업자'] as const
-const DEPT_ORDER: Record<string, number> = { 생산부: 0, 용접부: 1, 나사부: 2, CNC: 3 }
-const ASSIGNED_DEPT_ORDER: Record<string, number> = { 가지관: 0, 메인관: 1, 치부: 2, 포장: 3, 용접: 4, 나사: 5, CNC: 6, 페인트: 7 }
-const ASSIGNED_DEPARTMENTS = ['메인관', '가지관', '치부', '포장', '용접', '나사', 'CNC', '페인트'] as const
+const optionGroups = ref<EmployeeOptionGroups>(DEFAULT_EMPLOYEE_OPTIONS)
+
+const departmentOptions = computed(() => optionGroups.value.departments)
+const assignedDepartmentOptions = computed(() => optionGroups.value.assignedDepartments)
+const nationalityOptions = computed(() => optionGroups.value.nationalities)
+const departmentOrder = computed(() => new Map(departmentOptions.value.map((value, index) => [value, index])))
+const assignedDepartmentOrder = computed(() => new Map(assignedDepartmentOptions.value.map((value, index) => [value, index])))
+
+const withCurrentOption = (options: string[], current: string) => {
+  const value = String(current ?? '').trim()
+  if (!value || options.includes(value)) return options
+  return [...options, value]
+}
+
+async function loadEmployeeOptions() {
+  try {
+    optionGroups.value = await fetchEmployeeOptionGroups()
+  } catch {
+    optionGroups.value = DEFAULT_EMPLOYEE_OPTIONS
+  }
+}
 
 const emptyForm = (): EmployeeFormData => ({
   employeeCode: '',
   name: '',
-  department: '생산부',
+  department: departmentOptions.value[0] ?? '',
   assignedDepartment: '',
   remainingAnnualLeaveCount: 10,
   hourlyWage: 10000,
   isFullTime: true,
-  nationality: '한국',
+  nationality: nationalityOptions.value[0] ?? '',
   role: '작업자',
   hireDate: '',
   homeLeaveStart: '',
@@ -162,9 +184,13 @@ const homeLeaveLabel = (emp: Employee) => {
 const nationalityClass = (n: string) => {
   if (n === '한국') return 'bg-blue-100 text-blue-700'
   if (n === '중국') return 'bg-red-100 text-red-700'
-  if (n === '베트남') return 'bg-emerald-100 text-emerald-700'
+  if (n === '태국') return 'bg-emerald-100 text-emerald-700'
+  if (n === '러시아') return 'bg-violet-100 text-violet-700'
+  if (n === '파키스탄') return 'bg-amber-100 text-amber-700'
   return 'bg-slate-100 text-slate-600'
 }
+
+onMounted(loadEmployeeOptions)
 </script>
 
 <template>
@@ -391,7 +417,7 @@ const nationalityClass = (n: string) => {
                   v-model="form.department"
                   class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
                 >
-                  <option v-for="d in DEPARTMENTS" :key="d" :value="d">{{ d }}</option>
+                  <option v-for="d in withCurrentOption(departmentOptions, form.department)" :key="d" :value="d">{{ d }}</option>
                 </select>
               </div>
             </div>
@@ -433,12 +459,12 @@ const nationalityClass = (n: string) => {
               </div>
               <div>
                 <label class="mb-1 block text-xs font-bold text-slate-600">국적</label>
-                <input
+                <select
                   v-model="form.nationality"
-                  type="text"
-                  placeholder="한국"
                   class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
-                />
+                >
+                  <option v-for="n in withCurrentOption(nationalityOptions, form.nationality)" :key="n" :value="n">{{ n }}</option>
+                </select>
               </div>
             </div>
 
@@ -450,7 +476,7 @@ const nationalityClass = (n: string) => {
                 class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
               >
                 <option value="">선택 안함</option>
-                <option v-for="d in ASSIGNED_DEPARTMENTS" :key="d" :value="d">{{ d }}</option>
+                <option v-for="d in withCurrentOption(assignedDepartmentOptions, form.assignedDepartment)" :key="d" :value="d">{{ d }}</option>
               </select>
             </div>
 

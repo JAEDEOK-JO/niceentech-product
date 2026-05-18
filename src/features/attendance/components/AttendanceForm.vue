@@ -19,7 +19,7 @@ const emit = defineEmits<{
 const form = ref<AttendanceFormState>({ ...props.modelValue })
 
 // 부서 목록 (employees에서 추출, 고정 순서)
-const DEPT_ORDER = ['생산부', '용접부', '나사부', 'CNC']
+const DEPT_ORDER = ['생산부', '용접부', '나사부', 'CNC', '지게차']
 const departments = computed(() => {
   const set = new Set(props.employees.map((e) => e.department).filter(Boolean))
   return DEPT_ORDER.filter((d) => set.has(d))

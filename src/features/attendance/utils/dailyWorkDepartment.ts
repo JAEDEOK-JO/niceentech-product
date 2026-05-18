@@ -1,4 +1,4 @@
-export const DAILY_WORK_DEPARTMENT_ORDER = ['메인관', '가지관', '나사', '용접', 'CNC'] as const
+export const DAILY_WORK_DEPARTMENT_ORDER = ['메인관', '가지관', '나사', '용접', 'CNC', '지게차'] as const
 
 const WELDING_GROUP_DEPARTMENTS = new Set(['치부', '포장', '용접', '페인트'])
 

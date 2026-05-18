@@ -140,7 +140,7 @@ const REQUESTS_PER_PAGE = 10
 const requestsPage = ref(1)
 
 // ─── 일반 사용자: 직원 명단 부서 선택 ──────────────────────────────────────────
-const DEPT_ORDER = ['생산부', '용접부', '나사부', 'CNC']
+const DEPT_ORDER = ['생산부', '용접부', '나사부', 'CNC', '지게차']
 const directoryDepartments = computed(() => {
   const set = new Set(props.employees.map((e) => e.department).filter(Boolean))
   const ordered = DEPT_ORDER.filter((d) => set.has(d))
