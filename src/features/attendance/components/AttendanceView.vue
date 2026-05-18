@@ -223,23 +223,29 @@ watch(
       </div>
 
       <!-- 통계 카드 (관리자만) -->
-      <div v-if="isAdmin" class="mb-7 grid grid-cols-2 gap-4 sm:grid-cols-3">
-        <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p class="text-xs font-medium text-slate-400">총 직원</p>
-          <p class="mt-2 text-3xl font-extrabold text-slate-900">
-            {{ stats.employeeCount }}<span class="ml-1 text-base font-bold text-slate-400">명</span>
+      <div v-if="isAdmin" class="mb-4 grid grid-cols-4 gap-1.5">
+        <div class="rounded-lg border border-slate-200 bg-white px-2 py-2 shadow-sm">
+          <p class="truncate text-[10px] font-bold text-slate-400">총 직원</p>
+          <p class="mt-0.5 text-base font-extrabold text-slate-900">
+            {{ stats.employeeCount }}<span class="ml-0.5 text-[10px] font-bold text-slate-400">명</span>
           </p>
         </div>
-        <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p class="text-xs font-medium text-slate-400">이번달 신청</p>
-          <p class="mt-2 text-3xl font-extrabold text-slate-900">
-            {{ stats.thisMonthTotal }}<span class="ml-1 text-base font-bold text-slate-400">건</span>
+        <div class="rounded-lg border border-slate-200 bg-white px-2 py-2 shadow-sm">
+          <p class="truncate text-[10px] font-bold text-slate-400">이번달 신청</p>
+          <p class="mt-0.5 text-base font-extrabold text-slate-900">
+            {{ stats.thisMonthTotal }}<span class="ml-0.5 text-[10px] font-bold text-slate-400">건</span>
           </p>
         </div>
-        <div class="rounded-2xl border border-amber-100 bg-amber-50 p-5 shadow-sm">
-          <p class="text-xs font-medium text-amber-500">승인 대기</p>
-          <p class="mt-2 text-3xl font-extrabold text-amber-700">
-            {{ stats.pendingCount }}<span class="ml-1 text-base font-bold text-amber-400">건</span>
+        <div class="rounded-lg border border-amber-100 bg-amber-50 px-2 py-2 shadow-sm">
+          <p class="truncate text-[10px] font-bold text-amber-500">승인 대기</p>
+          <p class="mt-0.5 text-base font-extrabold text-amber-700">
+            {{ stats.pendingCount }}<span class="ml-0.5 text-[10px] font-bold text-amber-400">건</span>
+          </p>
+        </div>
+        <div class="rounded-lg border border-emerald-100 bg-emerald-50 px-2 py-2 shadow-sm">
+          <p class="truncate text-[10px] font-bold text-emerald-600">승인 완료</p>
+          <p class="mt-0.5 text-base font-extrabold text-emerald-700">
+            {{ stats.approvedCount }}<span class="ml-0.5 text-[10px] font-bold text-emerald-400">건</span>
           </p>
         </div>
       </div>

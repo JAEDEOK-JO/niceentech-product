@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { WORK_END_TIME_OPTIONS, type AttendanceRequest, type DailyWorkHour, type Employee } from '../types/attendance'
 import {
   DAILY_WORK_DEPARTMENT_ORDER,
@@ -48,6 +48,8 @@ interface CalendarDay {
   workDate: string
   month: number
   day: number
+  weekdayLabel: string
+  isWeekend: boolean
   inMonth: boolean
   isToday: boolean
   isSelected: boolean
@@ -61,8 +63,10 @@ interface SelectedDetailKey {
 }
 
 const selectedDetail = ref<SelectedDetailKey | null>(null)
+const mobileDayRefs = new Map<string, HTMLElement>()
 
 const employeeById = computed(() => new Map(props.employees.map((employee) => [employee.id, employee] as const)))
+const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'] as const
 
 function getDepartmentTotal(department: string, workDate: string) {
   return props.employees.filter(
@@ -107,6 +111,11 @@ function formatLocalDate(date: Date) {
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
+}
+
+function formatKoreanDate(day: CalendarDay) {
+  const [year, month, date] = day.workDate.split('-')
+  return `${year}년 ${month}월 ${date}일`
 }
 
 function shiftMonth(delta: number) {
@@ -184,10 +193,13 @@ const calendarDays = computed<CalendarDay[]>(() => {
 
   for (const cursor = new Date(start); cursor <= end; cursor.setDate(cursor.getDate() + 1)) {
     const workDate = formatLocalDate(cursor)
+    const weekday = cursor.getDay()
     days.push({
       workDate,
       month: cursor.getMonth() + 1,
       day: cursor.getDate(),
+      weekdayLabel: WEEKDAY_LABELS[weekday],
+      isWeekend: weekday === 0 || weekday === 6,
       inMonth: cursor.getMonth() === selected.getMonth(),
       isToday: workDate === today,
       isSelected: workDate === props.workDate,
@@ -196,6 +208,8 @@ const calendarDays = computed<CalendarDay[]>(() => {
   }
   return days
 })
+
+const currentMonthDays = computed(() => calendarDays.value.filter((day) => day.inMonth))
 
 const selectedDateTotal = computed(() => {
   return rows.value.filter((record) => record.workDate === props.workDate).length
@@ -243,15 +257,45 @@ function handleDeleteAll(payload: { workDate: string; employeeIds: number[] }) {
 function handleUpdate(payload: { workDate: string; employeeId: number; endTime: string }) {
   emit('update', payload)
 }
+
+function setMobileDayRef(workDate: string, el: Element | null) {
+  if (el instanceof HTMLElement) {
+    mobileDayRefs.set(workDate, el)
+  } else {
+    mobileDayRefs.delete(workDate)
+  }
+}
+
+function isMobileViewport() {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false
+  return window.matchMedia('(max-width: 767px)').matches
+}
+
+async function scrollToSelectedMobileDay(behavior: ScrollBehavior = 'smooth') {
+  await nextTick()
+  if (!isMobileViewport()) return
+  mobileDayRefs.get(props.workDate)?.scrollIntoView({ behavior, block: 'center' })
+}
+
+onMounted(() => {
+  void scrollToSelectedMobileDay('auto')
+})
+
+watch(
+  () => [props.workDate, props.loading, currentMonthDays.value.length] as const,
+  () => {
+    void scrollToSelectedMobileDay()
+  },
+)
 </script>
 
 <template>
   <div>
-    <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
-      <div class="flex flex-wrap items-center gap-3">
+    <div class="mb-4 flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between">
+      <div class="flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center lg:gap-3">
         <h2 class="text-base font-extrabold text-slate-800">{{ monthLabel }}</h2>
-        <div class="h-5 w-px bg-slate-200" />
-        <div class="flex flex-wrap gap-2 text-xs font-bold">
+        <div class="hidden h-5 w-px bg-slate-200 lg:block" />
+        <div class="hidden flex-wrap gap-2 text-xs font-bold sm:flex">
           <span
             v-for="department in DAILY_WORK_DEPARTMENT_ORDER"
             :key="department"
@@ -262,8 +306,8 @@ function handleUpdate(payload: { workDate: string; employeeId: number; endTime: 
           </span>
         </div>
       </div>
-      <div class="flex flex-wrap gap-2">
-        <div class="flex gap-1 rounded-lg border border-slate-200 bg-white p-1">
+      <div class="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+        <div class="col-span-2 grid grid-cols-3 gap-1 rounded-lg border border-slate-200 bg-white p-1 sm:flex">
           <button
             type="button"
             class="rounded-md px-2.5 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-100"
@@ -297,7 +341,67 @@ function handleUpdate(payload: { workDate: string; employeeId: number; endTime: 
       <div class="inline-block h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-slate-700" />
     </div>
 
-    <div v-else class="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+    <div v-else>
+      <div class="space-y-2 md:hidden">
+        <div
+          v-for="day in currentMonthDays"
+          :key="day.workDate"
+          :ref="(el) => setMobileDayRef(day.workDate, el)"
+          role="button"
+          tabindex="0"
+          class="rounded-xl border bg-white p-3 shadow-sm"
+          :class="[
+            day.isSelected ? 'border-slate-900 ring-1 ring-slate-900' : 'border-slate-200',
+            day.isToday ? 'bg-slate-50' : '',
+          ]"
+          @click="emit('selectDate', day.workDate)"
+          @keydown.enter="emit('selectDate', day.workDate)"
+        >
+          <div class="flex items-center justify-between gap-3">
+            <div class="flex items-center gap-2">
+              <span
+                class="inline-flex h-9 min-w-9 items-center justify-center rounded-xl px-2 text-sm font-extrabold"
+                :class="day.isToday ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-800'"
+              >
+                {{ day.day }}
+              </span>
+              <div>
+                <p class="text-sm font-extrabold text-slate-900">
+                  {{ formatKoreanDate(day) }}
+                  <span :class="day.isWeekend ? 'text-orange-600' : 'text-slate-500'">({{ day.weekdayLabel }})</span>
+                </p>
+                <p class="text-xs font-bold text-slate-400">
+                  {{ day.isSelected ? `선택일 ${selectedDateTotal}명` : `${day.badges.length}개 작업시간` }}
+                </p>
+              </div>
+            </div>
+            <button
+              v-if="day.isSelected"
+              type="button"
+              class="rounded-lg bg-slate-900 px-2.5 py-1.5 text-xs font-extrabold text-white"
+              @click.stop="emit('openInput')"
+            >입력</button>
+          </div>
+
+          <div v-if="day.badges.length > 0" class="mt-3 grid grid-cols-2 gap-1.5">
+            <button
+              v-for="badge in day.badges"
+              :key="`${badge.department}-${badge.endTime}`"
+              type="button"
+              class="min-h-9 rounded-lg border px-2 py-1.5 text-center text-xs font-extrabold leading-tight"
+              :class="badgeClass(badge.department)"
+              @click.stop="openDetail(badge)"
+            >
+              {{ badgeText(badge) }}
+            </button>
+          </div>
+          <p v-else class="mt-3 rounded-lg border border-dashed border-slate-200 py-3 text-center text-xs font-bold text-slate-400">
+            입력된 작업시간 없음
+          </p>
+        </div>
+      </div>
+
+      <div class="hidden overflow-hidden rounded-2xl border border-slate-200 bg-white md:block">
       <div class="grid grid-cols-7 border-b border-slate-200 bg-slate-50 text-center text-xs font-extrabold text-slate-500">
         <div class="py-2 text-red-500">일</div>
         <div class="py-2">월</div>
@@ -347,6 +451,7 @@ function handleUpdate(payload: { workDate: string; employeeId: number; endTime: 
             </button>
           </div>
         </div>
+      </div>
       </div>
     </div>
 

@@ -162,6 +162,7 @@ export interface AttendanceDashboardStats {
   employeeCount: number
   thisMonthTotal: number
   pendingCount: number
+  approvedCount: number
   myRemainingDays: number
 }
 

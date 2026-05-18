@@ -33,8 +33,29 @@ if (!gotSingleInstanceLock) {
 
 /** @type {BrowserWindow | null} */
 let mainWindow = null
+/** @type {BrowserWindow[]} */
+let appWindows = []
 /** @type {Tray | null} */
 let tray = null
+const MAX_WINDOWS = 2
+
+function getOpenWindows() {
+  appWindows = appWindows.filter((window) => window && !window.isDestroyed())
+  return appWindows
+}
+
+function getPrimaryWindow() {
+  const focused = BrowserWindow.getFocusedWindow()
+  if (focused && !focused.isDestroyed() && getOpenWindows().includes(focused)) return focused
+  if (mainWindow && !mainWindow.isDestroyed()) return mainWindow
+  return getOpenWindows()[0] || null
+}
+
+function destroyTray() {
+  if (!tray) return
+  tray.destroy()
+  tray = null
+}
 
 function loadIcon(filename) {
   const iconPath = path.join(__dirname, '../build', filename)
@@ -47,14 +68,15 @@ function loadIcon(filename) {
 }
 
 function createWindow() {
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    showWindow()
-    return
+  const openWindows = getOpenWindows()
+  if (openWindows.length >= MAX_WINDOWS) {
+    showWindow(openWindows[openWindows.length - 1])
+    return openWindows[openWindows.length - 1]
   }
 
   const appIcon = loadIcon('icon.png') || loadIcon('icon.ico')
 
-  mainWindow = new BrowserWindow({
+  const window = new BrowserWindow({
     width: 1400,
     height: 900,
     minWidth: 900,
@@ -74,26 +96,34 @@ function createWindow() {
   })
 
   if (useDevServer) {
-    mainWindow.loadURL('http://localhost:5173')
+    window.loadURL('http://localhost:5173')
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
+    window.loadFile(path.join(__dirname, '../dist/index.html'))
   }
 
-  mainWindow.once('ready-to-show', () => mainWindow?.show())
-  mainWindow.on('closed', () => {
-    mainWindow = null
+  appWindows.push(window)
+  mainWindow = window
+
+  window.once('ready-to-show', () => window.show())
+  window.on('closed', () => {
+    destroyTray()
+    appWindows = appWindows.filter((item) => item !== window)
+    mainWindow = getOpenWindows()[getOpenWindows().length - 1] || null
+    if (getOpenWindows().length === 0) {
+      destroyTray()
+      app.isQuitting = true
+      app.quit()
+    }
   })
-  mainWindow.on('focus', () => mainWindow?.flashFrame(false))
-  mainWindow.on('close', (event) => {
-    if (app.isQuitting) return
-    event.preventDefault()
-    mainWindow?.hide()
-    mainWindow?.setSkipTaskbar(true)
+  window.on('focus', () => {
+    mainWindow = window
+    window.flashFrame(false)
   })
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+  window.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('http')) shell.openExternal(url)
     return { action: 'deny' }
   })
+  return window
 }
 
 function createTray() {
@@ -109,28 +139,37 @@ function createTray() {
   tray.setToolTip('NICEENTECH')
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'NICEENTECH 열기', click: showWindow },
+    { label: '새 창 열기', click: createWindow },
     { type: 'separator' },
-    { label: '종료', click: () => { app.isQuitting = true; app.quit() } },
+    { label: '종료', click: quitApp },
   ]))
   tray.on('click', () => {
-    mainWindow?.isVisible() && mainWindow?.isFocused() ? mainWindow.hide() : showWindow()
+    const window = getPrimaryWindow()
+    window?.isVisible() && window?.isFocused() ? window.minimize() : showWindow(window)
   })
   tray.on('double-click', showWindow)
 }
 
-function showWindow() {
-  if (!mainWindow || mainWindow.isDestroyed()) return
-  mainWindow.flashFrame(false)
-  mainWindow.setOpacity(1)
-  mainWindow.setSkipTaskbar(false)
-  if (mainWindow.isMinimized()) mainWindow.restore()
-  mainWindow.show()
-  mainWindow.focus()
+function showWindow(targetWindow = getPrimaryWindow()) {
+  if (!targetWindow || targetWindow.isDestroyed()) return
+  targetWindow.flashFrame(false)
+  targetWindow.setOpacity(1)
+  targetWindow.setSkipTaskbar(false)
+  if (targetWindow.isMinimized()) targetWindow.restore()
+  targetWindow.show()
+  targetWindow.focus()
+}
+
+function quitApp() {
+  app.isQuitting = true
+  destroyTray()
+  app.quit()
 }
 
 function sendUpdateStatus(status) {
-  if (!mainWindow || mainWindow.isDestroyed()) return
-  mainWindow.webContents.send('update-status', status)
+  for (const window of getOpenWindows()) {
+    window.webContents.send('update-status', status)
+  }
 }
 
 function bringToNotice({ title, body, url }) {
@@ -143,25 +182,27 @@ function bringToNotice({ title, body, url }) {
       urgency: 'critical',
     })
     notification.on('click', () => {
-      showWindow()
-      if (url) mainWindow?.webContents.send('navigate-to', url)
+      const window = getPrimaryWindow() || createWindow()
+      showWindow(window)
+      if (url) window?.webContents.send('navigate-to', url)
     })
     notification.show()
   }
 
-  if (!mainWindow || mainWindow.isDestroyed()) return
+  const window = getPrimaryWindow()
+  if (!window || window.isDestroyed()) return
 
-  if (!mainWindow.isVisible()) {
-    mainWindow.setOpacity(0)
-    mainWindow.setSkipTaskbar(false)
-    mainWindow.showInactive()
-    mainWindow.minimize()
-    mainWindow.flashFrame(true)
+  if (!window.isVisible()) {
+    window.setOpacity(0)
+    window.setSkipTaskbar(false)
+    window.showInactive()
+    window.minimize()
+    window.flashFrame(true)
     setTimeout(() => {
-      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setOpacity(1)
+      if (window && !window.isDestroyed()) window.setOpacity(1)
     }, 500)
-  } else if (mainWindow.isMinimized() || !mainWindow.isFocused()) {
-    mainWindow.flashFrame(true)
+  } else if (window.isMinimized() || !window.isFocused()) {
+    window.flashFrame(true)
   }
 }
 
@@ -170,8 +211,9 @@ ipcMain.on('show-notification', (_, payload) => {
 })
 
 ipcMain.handle('get-printers', async () => {
-  if (!mainWindow || mainWindow.isDestroyed()) return []
-  const printers = await mainWindow.webContents.getPrintersAsync()
+  const window = getPrimaryWindow()
+  if (!window || window.isDestroyed()) return []
+  const printers = await window.webContents.getPrintersAsync()
   return printers.map((printer) => ({
     name: printer.name,
     displayName: printer.displayName || printer.name,
@@ -182,7 +224,8 @@ ipcMain.handle('get-printers', async () => {
 })
 
 ipcMain.handle('print-report', async (_, requestedOptions = {}) => {
-  if (!mainWindow || mainWindow.isDestroyed()) {
+  const window = getPrimaryWindow()
+  if (!window || window.isDestroyed()) {
     return { success: false, errorType: 'Window is not available' }
   }
 
@@ -217,7 +260,7 @@ ipcMain.handle('print-report', async (_, requestedOptions = {}) => {
   }
 
   return new Promise((resolve) => {
-    mainWindow.webContents.print(printOptions, (success, errorType) => {
+    window.webContents.print(printOptions, (success, errorType) => {
       resolve({ success, errorType: errorType || '' })
     })
   })
@@ -242,7 +285,8 @@ ipcMain.on('check-for-update', () => {
 
 ipcMain.on('unread-count', (_, count) => {
   const n = Number(count) || 0
-  if (!mainWindow || mainWindow.isDestroyed()) return
+  const window = getPrimaryWindow()
+  if (!window || window.isDestroyed()) return
 
   if (n > 0) {
     const notifyIcon = loadIcon('tray-notify.png') || loadIcon('tray.png')
@@ -250,14 +294,14 @@ ipcMain.on('unread-count', (_, count) => {
     tray?.setToolTip(`NICEENTECH 새 메시지 ${n}개`)
     if (process.platform === 'win32') {
       const badge = loadIcon('badge.png')
-      mainWindow.setOverlayIcon(badge ?? null, `새 메시지 ${n}개`)
+      window.setOverlayIcon(badge ?? null, `새 메시지 ${n}개`)
     }
   } else {
     const normalIcon = loadIcon('tray.png') || loadIcon('icon.png')
     if (tray && normalIcon) tray.setImage(normalIcon)
     tray?.setToolTip('NICEENTECH')
-    if (process.platform === 'win32') mainWindow.setOverlayIcon(null, '')
-    mainWindow.flashFrame(false)
+    if (process.platform === 'win32') window.setOverlayIcon(null, '')
+    window.flashFrame(false)
   }
 })
 
@@ -283,7 +327,9 @@ function setupAutoUpdater() {
   })
   autoUpdater.on('download-progress', (progress) => {
     const percent = Math.max(0, Math.min(100, Number(progress?.percent || 0)))
-    if (process.platform === 'win32') mainWindow?.setProgressBar(percent / 100)
+    if (process.platform === 'win32') {
+      for (const window of getOpenWindows()) window.setProgressBar(percent / 100)
+    }
     sendUpdateStatus({
       phase: 'downloading',
       message: '업데이트 파일을 다운로드하고 있습니다.',
@@ -294,12 +340,16 @@ function setupAutoUpdater() {
     })
   })
   autoUpdater.on('error', (err) => {
-    if (process.platform === 'win32') mainWindow?.setProgressBar(-1)
+    if (process.platform === 'win32') {
+      for (const window of getOpenWindows()) window.setProgressBar(-1)
+    }
     sendUpdateStatus({ phase: 'error', message: err?.message || '업데이트 중 오류가 발생했습니다.', percent: 0 })
     console.error('[AutoUpdater]', err?.message || err)
   })
   autoUpdater.on('update-downloaded', (info) => {
-    if (process.platform === 'win32') mainWindow?.setProgressBar(-1)
+    if (process.platform === 'win32') {
+      for (const window of getOpenWindows()) window.setProgressBar(-1)
+    }
     sendUpdateStatus({
       phase: 'installing',
       message: `${info?.version || ''} 버전 다운로드가 완료되었습니다. 자동으로 설치합니다.`,
@@ -320,11 +370,9 @@ function setupAutoUpdater() {
 
 if (gotSingleInstanceLock) {
   app.on('second-instance', () => {
-    if (!mainWindow || mainWindow.isDestroyed()) {
-      createWindow()
-      return
-    }
-    showWindow()
+    const openWindows = getOpenWindows()
+    if (openWindows.length < MAX_WINDOWS) createWindow()
+    else showWindow(openWindows[openWindows.length - 1])
   })
 
   app.whenReady().then(() => {
@@ -340,10 +388,17 @@ if (gotSingleInstanceLock) {
     createTray()
     setupAutoUpdater()
     app.on('activate', () => {
-      BrowserWindow.getAllWindows().length === 0 ? createWindow() : showWindow()
+      getOpenWindows().length === 0 ? createWindow() : showWindow()
     })
   })
 }
 
-app.on('window-all-closed', () => { /* keep tray app running */ })
-app.on('before-quit', () => { app.isQuitting = true })
+app.on('window-all-closed', () => {
+  destroyTray()
+  app.isQuitting = true
+  app.quit()
+})
+app.on('before-quit', () => {
+  app.isQuitting = true
+  destroyTray()
+})

@@ -93,6 +93,7 @@ const stats = computed<AttendanceDashboardStats>(() => {
     employeeCount: employeeCount.value,
     thisMonthTotal: items.value.filter((i) => i.startDate.startsWith(ym)).length,
     pendingCount: items.value.filter((i) => i.status === '대기중').length,
+    approvedCount: items.value.filter((i) => i.status === '승인').length,
     myRemainingDays: quota.value?.remainingDays ?? 0,
   }
 })
