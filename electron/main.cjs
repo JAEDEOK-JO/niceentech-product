@@ -231,6 +231,7 @@ ipcMain.handle('print-report', async (_, requestedOptions = {}) => {
 
   const scaleFactor = Number(requestedOptions.scaleFactor)
   const copies = Number(requestedOptions.copies)
+  const silent = requestedOptions.silent !== false
   const deviceName = String(requestedOptions.deviceName || '').trim()
   const pageRanges = Array.isArray(requestedOptions.pageRanges)
     ? requestedOptions.pageRanges
@@ -246,17 +247,15 @@ ipcMain.handle('print-report', async (_, requestedOptions = {}) => {
       ))
     : []
   const printOptions = {
-    silent: true,
+    silent,
     printBackground: true,
     color: true,
     landscape: requestedOptions.landscape !== false,
-    pageSize: requestedOptions.pageSize || 'A4',
-    preferCSSPageSize: false,
-    margins: { marginType: 'printableArea' },
-    scaleFactor: Number.isFinite(scaleFactor) ? Math.max(10, Math.min(200, scaleFactor)) : 90,
-    copies: Number.isFinite(copies) ? Math.max(1, Math.min(999, Math.round(copies))) : 1,
-    ...(pageRanges.length ? { pageRanges } : {}),
-    ...(deviceName ? { deviceName } : {}),
+    ...(silent ? { pageSize: requestedOptions.pageSize || 'A4' } : {}),
+    ...(silent && Number.isFinite(scaleFactor) ? { scaleFactor: Math.max(10, Math.min(200, scaleFactor)) } : {}),
+    ...(silent && Number.isFinite(copies) ? { copies: Math.max(1, Math.min(999, Math.round(copies))) } : {}),
+    ...(silent && pageRanges.length ? { pageRanges } : {}),
+    ...(silent && deviceName ? { deviceName } : {}),
   }
 
   return new Promise((resolve) => {

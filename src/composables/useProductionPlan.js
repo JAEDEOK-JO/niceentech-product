@@ -73,6 +73,12 @@ const toNumber = (value) => {
   const num = Number(value)
   return Number.isFinite(num) ? num : 0
 }
+const isWorkerCompletionSatisfied = (row, workerTDone, workerMainDone) => {
+  const requiresWorkerT = toNumber(row?.head) > 0
+  const requiresWorkerMain = toNumber(row?.hole) > 0
+  if (!requiresWorkerT && !requiresWorkerMain) return workerTDone && workerMainDone
+  return (!requiresWorkerT || workerTDone) && (!requiresWorkerMain || workerMainDone)
+}
 const formatMonthDay = (date = new Date()) => {
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
@@ -655,7 +661,7 @@ export function useProductionPlan(session) {
         updatePayload.worker_t_time !== undefined ? updatePayload.worker_t_time : row?.worker_t_time ?? ''
       const nextWorkerMainTime =
         updatePayload.worker_main_time !== undefined ? updatePayload.worker_main_time : row?.worker_main_time ?? ''
-      const allDone = nextWorkerTDone && nextWorkerMainDone
+      const allDone = isWorkerCompletionSatisfied(row, nextWorkerTDone, nextWorkerMainDone)
       updatePayload.complete = allDone
       updatePayload.complete_date = allDone
         ? resolveCompleteDateFromWorkerTimes(nextWorkerTTime, nextWorkerMainTime)

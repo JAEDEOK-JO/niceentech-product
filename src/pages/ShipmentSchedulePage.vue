@@ -44,6 +44,8 @@ const isDialogOpen = ref(false)
 const listSearchText = ref('')
 const pendingSearchText = ref('')
 const currentViewDate = ref(formatIsoDate())
+const dateRangeStart = ref('')
+const dateRangeEnd = ref('')
 const companyPlaceSearchText = ref('')
 const companyPlaceResults = ref([])
 const activeTab = ref('shipment')
@@ -75,8 +77,29 @@ const formatKoreanDate = (value) => {
   const [, year, month, day] = matched
   return `${year}년 ${month}월 ${day}일`
 }
+const formatShortMonthDay = (value) => {
+  const raw = normalizeText(value)
+  const matched = raw.match(/^\d{4}-(\d{2})-(\d{2})$/)
+  if (!matched) return raw
+  const [, month, day] = matched
+  return `${month}.${day}`
+}
 const compareIsoDate = (left, right) => normalizeText(left).localeCompare(normalizeText(right))
 const formatShipmentTitle = (value) => `${formatKoreanDate(value)} 출하일정`
+const isRangeFilterActive = computed(() => Boolean(normalizeText(dateRangeStart.value) || normalizeText(dateRangeEnd.value)))
+const normalizedDateRange = computed(() => {
+  const start = normalizeText(dateRangeStart.value)
+  const end = normalizeText(dateRangeEnd.value)
+  if (start && end && compareIsoDate(start, end) > 0) return { start: end, end: start }
+  return { start, end }
+})
+const formatShipmentListTitle = computed(() => {
+  if (!isRangeFilterActive.value) return formatShipmentTitle(currentViewDate.value)
+  const { start, end } = normalizedDateRange.value
+  if (start && end) return `${formatKoreanDate(start)} ~ ${formatKoreanDate(end)} 출하일정`
+  if (start) return `${formatKoreanDate(start)} 이후 출하일정`
+  return `${formatKoreanDate(end)} 이전 출하일정`
+})
 const getScheduleTypeLabel = (value) =>
   SCHEDULE_TYPE_OPTIONS.find((item) => item.value === value)?.label ?? (normalizeText(value) || '-')
 const getFloatStatusLabel = (value) =>
@@ -96,8 +119,14 @@ const normalizeRow = (row) => ({
 
 const filteredRows = computed(() => {
   const keyword = normalizeText(listSearchText.value).toLowerCase()
+  const { start, end } = normalizedDateRange.value
   const baseRows = rows.value
-    .filter((row) => compareIsoDate(row.shipmentDate, currentViewDate.value) === 0)
+    .filter((row) => {
+      if (!isRangeFilterActive.value) return compareIsoDate(row.shipmentDate, currentViewDate.value) === 0
+      if (start && compareIsoDate(row.shipmentDate, start) < 0) return false
+      if (end && compareIsoDate(row.shipmentDate, end) > 0) return false
+      return true
+    })
     .map((row) => ({
       ...row,
       managerName: managerNameMap.value[row.managerId] ?? '',
@@ -169,11 +198,18 @@ const printScheduleTable = async (options = {}) => {
 }
 
 const moveViewDate = (days) => {
+  clearDateRange()
   currentViewDate.value = addDays(currentViewDate.value, days)
 }
 
 const resetViewDate = () => {
+  clearDateRange()
   currentViewDate.value = formatIsoDate()
+}
+
+const clearDateRange = () => {
+  dateRangeStart.value = ''
+  dateRangeEnd.value = ''
 }
 
 const isCompanyPlaceLocked = computed(() => Boolean(normalizeText(form.company)) && Boolean(normalizeText(form.place)))
@@ -623,6 +659,29 @@ onMounted(async () => {
             >
               다음일
             </Button>
+            <div class="flex flex-wrap items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 px-2 py-1">
+              <input
+                v-model="dateRangeStart"
+                type="date"
+                class="h-8 rounded-lg border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700"
+                aria-label="조회 시작일"
+              />
+              <span class="text-xs font-bold text-slate-400">~</span>
+              <input
+                v-model="dateRangeEnd"
+                type="date"
+                class="h-8 rounded-lg border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700"
+                aria-label="조회 종료일"
+              />
+              <button
+                v-if="isRangeFilterActive"
+                type="button"
+                class="h-8 rounded-lg px-2 text-xs font-bold text-slate-500 hover:bg-white hover:text-slate-700"
+                @click="clearDateRange"
+              >
+                해제
+              </button>
+            </div>
             <input
               v-model="listSearchText"
               type="text"
@@ -640,21 +699,22 @@ onMounted(async () => {
         </div>
         <div v-else class="shipment-print-table-wrap mt-4 overflow-x-auto rounded-2xl border border-slate-200">
           <div class="shipment-print-title-bar border-b border-slate-200 bg-slate-50 px-4 py-3 text-center text-lg font-extrabold text-slate-900">
-            {{ formatShipmentTitle(currentViewDate) }}
+            {{ formatShipmentListTitle }}
           </div>
           <table class="shipment-print-table w-full border-collapse text-sm">
             <colgroup>
-              
-              <col style="width: 5%" />
-              <col style="width: 10%" />
-              <col style="width: 17%" />
-              <col style="width: 35%" />
-              <col style="width: 12%" />
-              <col style="width: 12%" />
-              <col style="width: 9%" />
+              <col v-if="isRangeFilterActive" style="width: 65px" />
+              <col :style="{ width: isRangeFilterActive ? '9%' : '5%' }" />
+              <col :style="{ width: isRangeFilterActive ? '10%' : '10%' }" />
+              <col :style="{ width: isRangeFilterActive ? '16%' : '17%' }" />
+              <col :style="{ width: isRangeFilterActive ? '34%' : '35%' }" />
+              <col :style="{ width: isRangeFilterActive ? '9%' : '12%' }" />
+              <col :style="{ width: isRangeFilterActive ? '9%' : '12%' }" />
+              <col :style="{ width: isRangeFilterActive ? '6%' : '9%' }" />
             </colgroup>
             <thead class="bg-slate-50 text-slate-600">
               <tr>
+                <th v-if="isRangeFilterActive" class="border border-slate-200 px-3 py-3 text-center font-bold">날짜</th>
                 <th class="border border-slate-200 px-3 py-3 text-center font-bold">담당자</th>
                 <th class="border border-slate-200 px-3 py-3 text-center font-bold">회사명</th>
                 <th class="border border-slate-200 px-3 py-3 text-center font-bold">현장명</th>
@@ -666,7 +726,7 @@ onMounted(async () => {
             </thead>
             <tbody>
               <tr v-if="filteredRows.length === 0">
-                <td colspan="9" class="border border-slate-200 px-3 py-8 text-center text-slate-400">등록된 출하일정이 없습니다.</td>
+                <td :colspan="isRangeFilterActive ? 8 : 7" class="border border-slate-200 px-3 py-8 text-center text-slate-400">등록된 출하일정이 없습니다.</td>
               </tr>
               <tr
                 v-for="(row, index) in filteredRows"
@@ -674,6 +734,7 @@ onMounted(async () => {
                 class="cursor-pointer bg-white hover:bg-slate-50"
                 @click="openEditDialog(row)"
               >
+                <td v-if="isRangeFilterActive" class="border border-slate-200 px-3 py-3 text-center text-slate-700">{{ formatShortMonthDay(row.shipmentDate) }}</td>
                 <td class="border border-slate-200 px-3 py-3 text-center text-slate-700">{{ row.managerName || '' }}</td>
                 <td class="border border-slate-200 px-3 py-3 text-center text-slate-700">{{ row.company || '' }}</td>
                 <td class="border border-slate-200 px-3 py-3 text-center text-slate-700">{{ row.place || '' }}</td>

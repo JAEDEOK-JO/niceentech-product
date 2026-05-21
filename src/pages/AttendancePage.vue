@@ -581,7 +581,7 @@ async function handleAdminDelete(item: AttendanceRequest) {
 async function handleDaepyoApprove(item: AttendanceRequest) {
   if (!await confirm(`${item.userName}의 신청을 최종 승인하시겠습니까?`)) return
   try {
-    await daepyoApproveAttendanceRequest(item.id, currentUserName.value)
+    await daepyoApproveAttendanceRequest(item.id, '이용필')
     markLocalAttendanceMutation()
     showToast('최종 승인 처리되었습니다.')
     await refreshAttendanceAfterMutation()

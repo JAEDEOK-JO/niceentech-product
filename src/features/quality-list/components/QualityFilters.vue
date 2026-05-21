@@ -20,6 +20,7 @@ const emit = defineEmits<{
   thisWeek: []
   refresh: []
   create: []
+  noticeUpload: []
   export: []
   print: []
   calculation: []
@@ -73,6 +74,7 @@ function openCalendar() {
         <button type="button" class="ghost-button" @click="emit('calculation')">가지관 출력</button>
       </div>
       <button type="button" class="primary-button quality-create-button" @click="emit('create')">등록</button>
+      <button type="button" class="ghost-button quality-notice-button" @click="emit('noticeUpload')">통보서</button>
       <div class="quality-search-row">
         <input
           :value="searchQuery"
@@ -183,8 +185,8 @@ function openCalendar() {
 }
 
 .search-input {
-  min-width: 200px;
-  width: 200px;
+  min-width: 100px;
+  width: 100px;
 }
 
 .quality-print-actions {
@@ -201,6 +203,10 @@ function openCalendar() {
   }
 
   .quality-create-button {
+    display: none;
+  }
+
+  .quality-notice-button {
     display: none;
   }
 

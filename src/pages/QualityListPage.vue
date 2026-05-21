@@ -12,6 +12,7 @@ const { confirm, alert } = useDialog()
 import {
   copyQualityItem,
   deleteQualityItem,
+  downloadNoticePdf,
   fetchQualityList,
   moveQualityItemDate,
   removeSubscription,
@@ -20,6 +21,7 @@ import {
   updateCancelCount,
   updateLotRange,
   updateReturnFlag,
+  uploadNoticePdf,
 } from '@/features/quality-list/services/quality.service'
 import { formatIsoDate, formatQualityDate, getNextTuesday, moveByWeeks, parseQualityDate } from '@/features/quality-list/utils/date'
 import { exportQualityListToExcel, exportQualityStampToExcel } from '@/features/quality-list/utils/print'
@@ -38,6 +40,7 @@ const loading = ref(false)
 const items = ref<QualityListRow[]>([])
 const isPrinting = ref(false)
 const isPrintSettingsOpen = ref(false)
+const noticeFileInput = ref<HTMLInputElement | null>(null)
 
 const currentDateLabel = computed(() =>
   showAllRecords.value ? '검수리스트 전체 검색결과' : formatQualityDate(currentTuesday.value),
@@ -179,6 +182,54 @@ function goCreate() {
   })
 }
 
+function openNoticeUpload() {
+  noticeFileInput.value?.click()
+}
+
+async function handleNoticeUpload(event: Event) {
+  const input = event.target as HTMLInputElement
+  const files = Array.from(input.files ?? [])
+  input.value = ''
+  if (files.length === 0) return
+
+  const pdfFiles = files.filter((file) => file.name.toLowerCase().endsWith('.pdf'))
+  if (pdfFiles.length !== files.length) {
+    await alert('PDF 파일만 업로드할 수 있습니다.')
+    return
+  }
+
+  try {
+    const uploaded = []
+    for (const file of pdfFiles) {
+      uploaded.push(await uploadNoticePdf(file))
+    }
+    await alert(`${uploaded.length}개 통보서를 업로드했습니다.`)
+  } catch (error) {
+    await alert(error instanceof Error ? error.message : '통보서 업로드에 실패했습니다.')
+  }
+}
+
+function noticeFileNameOf(item: QualityListRow) {
+  const certification = String(item.lotCertification ?? '').replace(/^분기\s*/, '').trim()
+  const number = String(item.lotKsdNum ?? '').trim()
+  if (!certification || !number) return ''
+  return `${certification} ${number}.pdf`
+}
+
+async function onNoticeDownload(item: QualityListRow) {
+  const fileName = noticeFileNameOf(item)
+  if (!fileName) {
+    await alert('통보서 파일명을 만들 수 없습니다.')
+    return
+  }
+
+  try {
+    await downloadNoticePdf(fileName)
+  } catch {
+    await alert(`${fileName} 통보서를 찾지 못했습니다.`)
+  }
+}
+
 function goCalculation() {
   void router.push({ name: 'quality-calculation' })
 }
@@ -286,6 +337,7 @@ onBeforeUnmount(() => {
         @this-week="thisWeek"
         @refresh="load"
         @create="goCreate"
+        @notice-upload="openNoticeUpload"
         @export="onExport"
         @print="onPrint"
         @calculation="goCalculation"
@@ -297,9 +349,19 @@ onBeforeUnmount(() => {
         :show-all-records="showAllRecords"
         @edit="goEdit"
         @delete="onDelete"
+        @notification="onNoticeDownload"
         @stamp="onStamp"
         @update-range="onUpdateRange"
         @update-cancel="onUpdateCancel"
+      />
+
+      <input
+        ref="noticeFileInput"
+        type="file"
+        class="hidden"
+        accept="application/pdf,.pdf"
+        multiple
+        @change="handleNoticeUpload"
       />
     </div>
 

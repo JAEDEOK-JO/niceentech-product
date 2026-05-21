@@ -560,11 +560,7 @@ const deleteRepairEntry = async (rowId) => {
 }
 
 const openPrintSettings = () => {
-  if (typeof window !== 'undefined' && window.electronAPI?.printReport) {
-    isPrintSettingsOpen.value = true
-    return
-  }
-  printReport()
+  isPrintSettingsOpen.value = true
 }
 
 const printReport = async (options = {}) => {

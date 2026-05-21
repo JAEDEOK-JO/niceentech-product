@@ -30,6 +30,17 @@ const applyPrintPageStyle = ({ margin = '8mm' } = {}) => {
 }`
 }
 
+const isCanceledPrint = (result) => (
+  result?.errorType === 'Print job canceled' ||
+  result?.errorType === 'cancelled' ||
+  result?.errorType === 'canceled'
+)
+
+const showPrintFailure = (message) => {
+  if (typeof window === 'undefined') return
+  window.alert(message || '인쇄에 실패했습니다. 프린터 상태와 기본 프린터 설정을 확인해주세요.')
+}
+
 export const printCurrentPage = async (isPrinting, options = {}, pageOptions = {}) => {
   if (typeof window === 'undefined') return
 
@@ -46,9 +57,23 @@ export const printCurrentPage = async (isPrinting, options = {}, pageOptions = {
 
   try {
     if (window.electronAPI?.printReport) {
-      const result = await window.electronAPI.printReport(printOptions)
-      if (result && result.success === false && result.errorType !== 'Print job canceled') {
-        console.warn('[PagePrint] Electron print failed:', result.errorType)
+      const result = await window.electronAPI.printReport({
+        ...printOptions,
+        silent: true,
+      })
+      if (!result || result.success) return
+
+      console.warn('[PagePrint] Electron silent print failed:', result.errorType)
+
+      const fallbackResult = await window.electronAPI.printReport({
+        printBackground: true,
+        landscape: printOptions.landscape,
+        silent: false,
+      })
+      if (fallbackResult?.success || isCanceledPrint(fallbackResult)) return
+
+      if (!isCanceledPrint(result)) {
+        showPrintFailure(`인쇄에 실패했습니다.\n사유: ${fallbackResult?.errorType || result.errorType || '알 수 없음'}`)
       }
       return
     }

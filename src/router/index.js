@@ -13,6 +13,7 @@ import QualityUpdatePage from '@/pages/QualityUpdatePage.vue'
 import QualityCountCheckPage from '@/pages/QualityCountCheckPage.vue'
 import QualityCalculationPage from '@/pages/QualityCalculationPage.vue'
 import ShipmentSchedulePage from '@/pages/ShipmentSchedulePage.vue'
+import InventoryPage from '@/pages/InventoryPage.vue'
 import MyPage from '@/pages/MyPage.vue'
 import SettingsPage from '@/pages/SettingsPage.vue'
 import NotificationsPage from '@/pages/NotificationsPage.vue'
@@ -113,6 +114,12 @@ const routes = [
     path: '/shipment-schedule',
     name: 'shipment-schedule',
     component: ShipmentSchedulePage,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/inventory',
+    name: 'inventory',
+    component: InventoryPage,
     meta: { requiresAuth: true },
   },
   {

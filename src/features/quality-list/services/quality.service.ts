@@ -492,6 +492,21 @@ export async function downloadNoticePdf(fileName: string) {
   URL.revokeObjectURL(url)
 }
 
+export async function uploadNoticePdf(file: File) {
+  const fileName = file.name.trim()
+  if (!fileName.toLowerCase().endsWith('.pdf')) throw new Error('PDF 파일만 업로드할 수 있습니다.')
+
+  const response = await supabase.storage
+    .from('notice-pdf')
+    .upload(fileName, file, {
+      contentType: file.type || 'application/pdf',
+      upsert: true,
+    })
+
+  if (response.error) throw response.error
+  return fileName
+}
+
 export async function fetchCalculationBundle(companyId: number): Promise<CalculationBundle> {
   const [companies, pipeTypes, fittingTypes, pipeTransactions, fittingTransactions] =
     await Promise.all([

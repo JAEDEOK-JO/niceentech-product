@@ -706,6 +706,7 @@ watch(
       <AttendanceDetailModal
         v-if="detailItem"
         :item="detailItem"
+        :employees="employees"
         :signatures="detailSignatures"
         @close="emit('closeDetail')"
       />

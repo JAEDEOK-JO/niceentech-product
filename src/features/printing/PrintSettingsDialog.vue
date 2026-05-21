@@ -31,6 +31,9 @@ const resetSettings = () => {
 const selectedPrinter = computed(() =>
   printers.value.find((printer) => printer.name === selectedPrinterName.value) ?? null,
 )
+const defaultPrinter = computed(() =>
+  printers.value.find((printer) => printer.isDefault) ?? null,
+)
 
 const loadPrinters = async () => {
   if (!window.electronAPI?.getPrinters) return
@@ -39,8 +42,7 @@ const loadPrinters = async () => {
   try {
     const list = await window.electronAPI.getPrinters()
     printers.value = Array.isArray(list) ? list : []
-    const defaultPrinter = printers.value.find((printer) => printer.isDefault) ?? printers.value[0]
-    selectedPrinterName.value = defaultPrinter?.name ?? ''
+    selectedPrinterName.value = ''
   } catch {
     printers.value = []
     selectedPrinterName.value = ''
@@ -106,7 +108,7 @@ watch(
 </script>
 
 <template>
-  <div v-if="open" class="fixed inset-0 z-50 flex items-center justify-center bg-black/35 px-4" @click.self="emit('close')">
+  <div v-if="open" class="fixed inset-0 z-50 flex items-center justify-center bg-black/35 px-4">
     <div class="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
       <div class="flex items-start justify-between gap-4">
         <h2 class="text-base font-extrabold text-slate-900">인쇄 설정</h2>
@@ -141,6 +143,9 @@ watch(
           </select>
           <p v-if="selectedPrinter" class="mt-1 text-[12px] font-semibold text-slate-500">
             {{ selectedPrinter.name }}
+          </p>
+          <p v-else-if="defaultPrinter" class="mt-1 text-[12px] font-semibold text-slate-500">
+            시스템 기본 프린터: {{ defaultPrinter.displayName || defaultPrinter.name }}
           </p>
           <p v-if="printerError" class="mt-1 text-[12px] font-bold text-red-500">{{ printerError }}</p>
         </div>
