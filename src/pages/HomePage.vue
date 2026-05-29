@@ -30,6 +30,7 @@ const {
   realtimeConnected,
   pageTitle,
   selectedTuesday,
+  selectedTuesdayIso,
   moveWeek,
   resetWeek,
   groupedRows,
@@ -44,7 +45,7 @@ const goNotifications = () => {
   router.push('/notifications')
 }
 const goStats = () => {
-  router.push('/stats')
+  router.push({ name: 'stats', query: { testDate: selectedTuesdayIso.value } })
 }
 
 const handleToggleWorkStatus = async ({ rowId, stageKey, longPressMs, overrideWorkMan, onResult }) => {

@@ -1,9 +1,11 @@
 <script setup>
 import { computed, onUnmounted, ref, watch } from 'vue'
-import { Search } from 'lucide-vue-next'
+import { Printer, Search } from 'lucide-vue-next'
 import Button from '@/components/ui/button/Button.vue'
 import Input from '@/components/ui/input/Input.vue'
 import MainProductionPlanGroupTable from '@/features/main/MainProductionPlanGroupTable.vue'
+import PrintSettingsDialog from '@/features/printing/PrintSettingsDialog.vue'
+import { printCurrentPage } from '@/features/printing/pagePrint'
 import { useDialog } from '@/composables/useDialog'
 import { isAdminRole, isProductionAdmin } from '@/utils/adminAccess'
 import { WELDING_INSPECTORS, getWeldingInspectorClass } from '@/utils/productionStatus'
@@ -64,6 +66,8 @@ const localCalendarValue = ref('')
 const localSearchText = ref('')
 const localSearchAllDates = ref(false)
 const localCalendarMonth = ref(new Date())
+const isPrinting = ref(false)
+const isPrintSettingsOpen = ref(false)
 const calendarWeekLabels = ['일', '월', '화', '수', '목', '금', '토']
 const isRowDialogOpen = ref(false)
 const isDeleteConfirmOpen = ref(false)
@@ -607,6 +611,15 @@ const handleDrawingItemPressEnd = () => {
   clearDrawingLongPressTimer()
 }
 
+const openPrintSettings = () => {
+  isPrintSettingsOpen.value = true
+}
+
+const printProductionPlan = async (options = {}) => {
+  isPrintSettingsOpen.value = false
+  await printCurrentPage(isPrinting, options, { margin: '6mm' })
+}
+
 const selectDrawingFile = (file) => {
   if (!file?.viewUrl) return
   if (suppressDrawingClickId.value === file.id) {
@@ -647,6 +660,10 @@ const selectDrawingFile = (file) => {
               <Button class="h-8 px-3 text-xs md:text-sm" variant="outline" @click="emit('move-week', 1)">다음주</Button>
               <Button class="h-8 bg-slate-900 px-3 text-xs font-bold text-white hover:bg-slate-800 md:text-sm" @click="emit('go-register')">
                 등록
+              </Button>
+              <Button class="h-8 px-3 text-xs md:text-sm" variant="outline" :disabled="isPrinting" @click="openPrintSettings">
+                <Printer class="mr-1 h-4 w-4" />
+                인쇄
               </Button>
               <button
                 type="button"
@@ -1075,6 +1092,12 @@ const selectDrawingFile = (file) => {
         {{ snackbarMessage }}
       </div>
     </transition>
+
+    <PrintSettingsDialog
+      :open="isPrintSettingsOpen"
+      @close="isPrintSettingsOpen = false"
+      @print="printProductionPlan"
+    />
   </section>
 </template>
 

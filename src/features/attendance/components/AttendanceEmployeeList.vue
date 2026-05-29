@@ -171,7 +171,6 @@ async function handleDelete(emp: Employee) {
 }
 
 const fmt = (d: string | null) => (d ? d.slice(0, 10) : null)
-const fmtCurrency = (value: number) => `${value.toLocaleString('ko-KR')}원`
 
 const homeLeaveLabel = (emp: Employee) => {
   const s = fmt(emp.homeLeaveStart)
@@ -287,10 +286,6 @@ onMounted(loadEmployeeOptions)
                 <p class="font-bold text-slate-400">연차</p>
                 <p class="mt-0.5 font-extrabold text-slate-800">{{ emp.remainingAnnualLeaveCount }}회</p>
               </div>
-              <div class="rounded-lg bg-slate-50 px-2.5 py-2">
-                <p class="font-bold text-slate-400">시급</p>
-                <p class="mt-0.5 font-extrabold text-slate-800">{{ fmtCurrency(emp.hourlyWage) }}</p>
-              </div>
             </div>
 
             <div v-if="homeLeaveLabel(emp)" class="mt-2 rounded-lg bg-blue-50 px-2.5 py-2 text-xs font-extrabold text-blue-700">
@@ -310,7 +305,6 @@ onMounted(loadEmployeeOptions)
             <th class="border-r border-slate-200 px-4 py-3 text-center font-bold text-slate-600">부서</th>
             <th class="border-r border-slate-200 px-4 py-3 text-center font-bold text-slate-600">담당부서</th>
             <th class="border-r border-slate-200 px-4 py-3 text-center font-bold text-slate-600">남은연차</th>
-            <th class="border-r border-slate-200 px-4 py-3 text-center font-bold text-slate-600">시급</th>
             <th class="border-r border-slate-200 px-4 py-3 text-center font-bold text-slate-600">역할</th>
             <th class="border-r border-slate-200 px-4 py-3 text-center font-bold text-slate-600">구분</th>
             <th class="border-r border-slate-200 px-4 py-3 text-center font-bold text-slate-600">국적</th>
@@ -321,7 +315,7 @@ onMounted(loadEmployeeOptions)
         </thead>
         <tbody>
           <tr v-if="filtered.length === 0">
-            <td colspan="12" class="py-12 text-center text-sm text-slate-400">등록된 직원이 없습니다.</td>
+            <td colspan="11" class="py-12 text-center text-sm text-slate-400">등록된 직원이 없습니다.</td>
           </tr>
           <tr
             v-for="emp in filtered"
@@ -333,7 +327,6 @@ onMounted(loadEmployeeOptions)
             <td class="border-r border-slate-200 px-4 py-3 text-center text-slate-700">{{ emp.department || '-' }}</td>
             <td class="border-r border-slate-200 px-4 py-3 text-center text-slate-700">{{ emp.assignedDepartment || '-' }}</td>
             <td class="border-r border-slate-200 px-4 py-3 text-center text-slate-700">{{ emp.remainingAnnualLeaveCount }}회</td>
-            <td class="border-r border-slate-200 px-4 py-3 text-center text-slate-700">{{ fmtCurrency(emp.hourlyWage) }}</td>
             <td class="border-r border-slate-200 px-4 py-3 text-center text-slate-700">{{ emp.role || '-' }}</td>
             <td class="border-r border-slate-200 px-4 py-3 text-center">
               <span

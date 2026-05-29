@@ -20,6 +20,10 @@ const extractSpec = (value) => {
   return match ? String(Number(match[1])) : ''
 }
 
+const normalizeSpecKey = (value) => normalizeText(value).replace(/\s/g, '').toUpperCase()
+
+const isSingleNumberSpec = (value) => /^\d+(?:\.\d+)?A?$/i.test(normalizeSpecKey(value))
+
 const inferTransactionType = (value) => {
   const text = compactText(value)
   if (text.includes('입고')) return 'incoming'
@@ -64,7 +68,7 @@ const findColumn = (row, matcher) => row.findIndex((cell) => matcher(compactText
 const findHeaderIndex = (rows) =>
   rows.findIndex((row) => {
     const cells = row.map(compactText)
-    return cells.some((cell) => cell.includes('순번')) &&
+    return cells.some((cell) => cell.includes('순번') || cell === 'no') &&
       cells.some((cell) => cell.includes('일자')) &&
       cells.some((cell) => cell.includes('내역'))
   })
@@ -90,14 +94,63 @@ const createMaterialMap = (materialItems) => {
   const materialMap = new Map()
   for (const item of materialItems ?? []) {
     const group = compactText(item.material_group || item.name)
-    const spec = extractSpec(item.spec)
-    if (group && spec) materialMap.set(`${group}:${spec}`, item)
+    const specKey = normalizeSpecKey(item.spec)
+    if (!group || !specKey) continue
+
+    materialMap.set(`${group}:${specKey}`, item)
+    if (isSingleNumberSpec(item.spec)) materialMap.set(`${group}:${extractSpec(item.spec)}`, item)
   }
   return materialMap
 }
 
+const createMaterialGroupMap = (materialItems) => {
+  const groupMap = new Map()
+  for (const item of materialItems ?? []) {
+    const groupName = normalizeText(item.material_group || item.name)
+    const groupKey = compactText(groupName)
+    if (groupKey && !groupMap.has(groupKey)) groupMap.set(groupKey, groupName)
+  }
+  return groupMap
+}
+
+const rawMaterialGroupAliases = [
+  { includes: 'sus파이프5s', group: '수파이프' },
+  { includes: 'sts파이프10s', group: '써스' },
+  { includes: '#40', group: '스케쥴' },
+]
+
+const resolveRawMaterialGroupAlias = (text) => {
+  const textKey = compactText(text)
+  return rawMaterialGroupAliases.find((alias) => textKey.includes(alias.includes))?.group ?? ''
+}
+
+const findMaterialGroup = (text, groupMap) => {
+  const textKey = compactText(text)
+  if (!textKey) return ''
+  if (groupMap.has(textKey)) return groupMap.get(textKey)
+  for (const [groupKey, groupName] of groupMap) {
+    if (textKey.includes(groupKey)) return groupName
+  }
+  return ''
+}
+
+const findMaterialItem = (materialMap, groupName, spec) => {
+  const groupKey = compactText(groupName)
+  const specKey = normalizeSpecKey(spec)
+  if (!groupKey || !specKey) return null
+
+  const exactItem = materialMap.get(`${groupKey}:${specKey}`)
+  if (exactItem) return exactItem
+
+  if (isSingleNumberSpec(spec)) {
+    return materialMap.get(`${groupKey}:${extractSpec(spec)}`) ?? null
+  }
+  return null
+}
+
 const resolveMaterialColumns = ({ headerRow, subHeaderRow, supplierColumn, noteColumn, materialItems }) => {
   const materialMap = createMaterialMap(materialItems)
+  const groupMap = createMaterialGroupMap(materialItems)
   const materialColumns = []
   const unmatched = new Set()
   const endColumn = noteColumn >= 0 ? noteColumn : headerRow.length
@@ -108,19 +161,22 @@ const resolveMaterialColumns = ({ headerRow, subHeaderRow, supplierColumn, noteC
     const sub = normalizeText(subHeaderRow[column])
     const topKey = compactText(top)
     const subKey = compactText(sub)
+    const aliasGroup = resolveRawMaterialGroupAlias(top)
+    const matchedGroup = aliasGroup || findMaterialGroup(top, groupMap)
 
-    if (topKey.includes('sus') || topKey.includes('sts')) {
-      activeGroup = 'ignore'
-      continue
-    }
-    if (topKey.includes('#40') || topKey.includes('스케')) {
+    if (matchedGroup) {
+      activeGroup = matchedGroup
+    } else if (topKey.includes('#40') || topKey.includes('스케')) {
       activeGroup = '스케쥴'
     }
 
     let groupName = activeGroup
     let spec = ''
 
-    if (topKey.includes('일반강관')) {
+    if (matchedGroup) {
+      groupName = matchedGroup
+      spec = normalizeText(sub || top)
+    } else if (topKey.includes('일반강관')) {
       groupName = '일반강관'
       spec = extractSpec(sub)
     } else if (topKey.includes('스케')) {
@@ -128,6 +184,8 @@ const resolveMaterialColumns = ({ headerRow, subHeaderRow, supplierColumn, noteC
       spec = extractSpec(sub || top)
     } else if (groupName === '스케쥴') {
       spec = extractSpec(sub || top)
+    } else if (groupMap.has(compactText(groupName))) {
+      spec = normalizeText(sub || top)
     } else if (topKey.includes('a') || /^\d+(?:\.\d+)?$/.test(topKey)) {
       groupName = '일반강관'
       spec = extractSpec(top)
@@ -137,7 +195,7 @@ const resolveMaterialColumns = ({ headerRow, subHeaderRow, supplierColumn, noteC
 
     if (!groupName || groupName === 'ignore' || !spec) continue
 
-    const item = materialMap.get(`${compactText(groupName)}:${spec}`)
+    const item = findMaterialItem(materialMap, groupName, spec)
     if (item) {
       materialColumns.push({ column, item })
       continue
@@ -242,12 +300,20 @@ export function parseInventoryExcelRows(rows, materialItems, sheetName = '') {
   return { sheetName, rows: parsedRows, warnings }
 }
 
-export async function parseInventoryExcelFile(file, materialItems) {
+const resolveSheetName = (workbook, materialType = 'raw') => {
+  const names = workbook.SheetNames
+  const preferredKeyword = materialType === 'subsidiary' ? '부자재' : '원자재'
+  return (
+    names.find((name) => name.includes(preferredKeyword) && !name.includes('5%')) ??
+    names.find((name) => !name.includes('5%')) ??
+    names[0]
+  )
+}
+
+export async function parseInventoryExcelFile(file, materialItems, materialType = 'raw') {
   const buffer = await file.arrayBuffer()
   const workbook = XLSX.read(buffer, { cellDates: true })
-  const sheetName =
-    workbook.SheetNames.find((name) => name.includes('원자재') && !name.includes('5%')) ??
-    workbook.SheetNames[0]
+  const sheetName = resolveSheetName(workbook, materialType)
   const worksheet = workbook.Sheets[sheetName]
   const rows = XLSX.utils.sheet_to_json(worksheet, {
     header: 1,

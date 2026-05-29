@@ -7,6 +7,7 @@ import { fetchEmployees } from '@/features/attendance/services/attendance.servic
 import AttendanceEmployeeMappingPanel from '@/features/attendance/components/AttendanceEmployeeMappingPanel.vue'
 import EmployeeAccountRegisterPanel from '@/features/settings/components/EmployeeAccountRegisterPanel.vue'
 import EmployeeOptionSettingsPanel from '@/features/settings/components/EmployeeOptionSettingsPanel.vue'
+import InventoryMaterialSettingsPanel from '@/features/settings/components/InventoryMaterialSettingsPanel.vue'
 import packageJson from '../../package.json'
 
 const appVersion = packageJson.version
@@ -31,7 +32,7 @@ watch(
       loadEmployees()
       return
     }
-    if (activePanel.value === 'employee-register' || activePanel.value === 'employee-options') activePanel.value = 'app-info'
+    if (activePanel.value === 'employee-register' || activePanel.value === 'employee-options' || activePanel.value === 'inventory-materials') activePanel.value = 'app-info'
   },
   { immediate: true },
 )
@@ -162,6 +163,15 @@ watch(
           >
             직원 선택값
           </button>
+          <button
+            v-if="isRootAdmin"
+            type="button"
+            class="rounded-xl px-4 py-3 text-left text-sm font-extrabold transition-colors"
+            :class="activePanel === 'inventory-materials' ? 'bg-slate-900 text-white' : 'bg-slate-50 text-slate-700 hover:bg-slate-100'"
+            @click="activePanel = 'inventory-materials'"
+          >
+            자재 품목
+          </button>
         </nav>
       </aside>
 
@@ -240,6 +250,10 @@ watch(
 
         <EmployeeOptionSettingsPanel
           v-else-if="isRootAdmin && activePanel === 'employee-options'"
+        />
+
+        <InventoryMaterialSettingsPanel
+          v-else-if="isRootAdmin && activePanel === 'inventory-materials'"
         />
       </section>
     </div>

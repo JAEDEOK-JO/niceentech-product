@@ -321,7 +321,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="page-shell">
+  <div class="page-shell quality-page-shell">
     <div class="quality-screen">
       <QualityFilters
         v-model:search-query="searchQuery"
@@ -435,6 +435,21 @@ onBeforeUnmount(() => {
 <style scoped>
 .quality-print-page {
   display: none;
+}
+
+@media (min-width: 768px) {
+  .quality-page-shell {
+    height: calc(100vh - 82px);
+    overflow: hidden;
+    padding: 10px 20px 10px;
+  }
+
+  .quality-screen {
+    display: flex;
+    min-height: 0;
+    height: 100%;
+    flex-direction: column;
+  }
 }
 
 @media print {

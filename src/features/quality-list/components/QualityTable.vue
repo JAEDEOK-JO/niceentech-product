@@ -272,7 +272,13 @@ const mobileCountRows: CountCol[][] = [
 
 <style scoped>
 /* ── 레이아웃 ── */
-.qt-wrap { display: flex; flex-direction: column; gap: 10px; }
+.qt-wrap {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+}
 
 .qt-summary {
   display: flex;
@@ -292,6 +298,8 @@ const mobileCountRows: CountCol[][] = [
 
 .qt-list {
   min-width: 0;
+  min-height: 0;
+  flex: 1;
 }
 
 .qt-mobile-cards {
@@ -300,7 +308,7 @@ const mobileCountRows: CountCol[][] = [
 
 .qt-scroll {
   overflow: auto;
-  max-height: calc(100vh - 200px);
+  height: 100%;
 }
 
 /* ── 테이블 ── */
@@ -347,8 +355,8 @@ const mobileCountRows: CountCol[][] = [
   padding: 0 4px;
   white-space: nowrap;
   border-top: 1px solid #94a3b8;
-  border-right: 1px solid #64748b;
-  border-bottom: 2px solid #475569;
+  border-right: 1px solid #94a3b8;
+  border-bottom: 1px solid #94a3b8;
 }
 
 /* N·도번·현장명·확관·합계·메뉴 — 두 단계 연하게 */

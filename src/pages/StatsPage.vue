@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import Button from '@/components/ui/button/Button.vue'
 import { useAuth } from '@/composables/useAuth'
 import { supabase } from '@/lib/supabase'
@@ -14,6 +14,7 @@ const MAX_WEEKDAY_OVERTIME_SEC = 3.5 * 3600
 const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토']
 
 const router = useRouter()
+const route = useRoute()
 const { session } = useAuth()
 
 const loading = ref(false)
@@ -21,7 +22,7 @@ const error = ref('')
 const saveMessage = ref('')
 const rows = ref([])
 const overtimeLogs = ref([])
-const selectedWeekStart = ref(getWorkWeekStartFromTestTuesday(new Date()))
+const selectedWeekStart = ref(getInitialWeekStart())
 const selectedInputWorkDate = ref('')
 const lineFormState = ref({
   branch_head: { actualMin: '', delayReason: '' },
@@ -60,6 +61,26 @@ function getBaseTuesday(date) {
 
 function getWorkWeekStartFromTestTuesday(date) {
   return addDays(getBaseTuesday(date), -7)
+}
+
+function getWorkWeekStartFromSelectedTestDate(date) {
+  return addDays(startOfDay(date), -7)
+}
+
+function parseIsoDateParam(value) {
+  const raw = String(Array.isArray(value) ? value[0] : value ?? '').trim()
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!match) return null
+  const [, year, month, day] = match
+  const parsed = new Date(Number(year), Number(month) - 1, Number(day))
+  if (Number.isNaN(parsed.getTime())) return null
+  return startOfDay(parsed)
+}
+
+function getInitialWeekStart() {
+  const routedTestDate = parseIsoDateParam(route.query.testDate)
+  if (routedTestDate) return getWorkWeekStartFromSelectedTestDate(routedTestDate)
+  return getWorkWeekStartFromTestTuesday(new Date())
 }
 
 function getMonday(date) {
@@ -179,13 +200,8 @@ function isStageCompletedByStatus(row, lineType) {
   return raw === '작업완료' || raw === '출하완료'
 }
 
-function hasStageCompleted(row, lineType) {
-  return Boolean(getStageCompletedDate(row, lineType))
-}
-
-function isCompletedOnDate(row, lineType, targetDate) {
-  const completedDate = getStageCompletedDate(row, lineType)
-  return completedDate ? isSameDay(completedDate, targetDate) : false
+function isStageCompletedForStats(row, lineType) {
+  return isStageCompletedByStatus(row, lineType) && Boolean(getStageCompletedDate(row, lineType))
 }
 
 const branchHeadStartFields = [
@@ -195,6 +211,7 @@ const branchHeadStartFields = [
   'beveling_started_on',
   'nasa_started_on',
 ]
+const mainHoleStartFields = ['marking_laser_2_started_on', 'main_started_on']
 
 function getEarliestDate(dates) {
   return dates.reduce((earliest, date) => {
@@ -208,6 +225,10 @@ function getBranchHeadStartDate(row) {
   return getEarliestDate(branchHeadStartFields.map((field) => parseIsoDate(row?.[field])))
 }
 
+function getMainHoleStartDate(row) {
+  return getEarliestDate(mainHoleStartFields.map((field) => parseIsoDate(row?.[field])))
+}
+
 function getInclusiveDayCount(startDate, endDate) {
   return Math.floor((startOfDay(endDate).getTime() - startOfDay(startDate).getTime()) / 86400000) + 1
 }
@@ -218,6 +239,8 @@ function getBranchHeadDisplayDate(workDate) {
 }
 
 function getDistributedBranchHeadQty(row, targetDate) {
+  if (!isStageCompletedForStats(row, 'branch_head')) return 0
+
   const completedDate = getStageCompletedDate(row, 'branch_head')
   if (!completedDate) return 0
 
@@ -245,6 +268,98 @@ function getDistributedBranchHeadQty(row, targetDate) {
   return targetQty
 }
 
+function getDistributedMainHoleQty(row, targetDate) {
+  if (!isStageCompletedForStats(row, 'main_hole')) return 0
+
+  const completedDate = getStageCompletedDate(row, 'main_hole')
+  if (!completedDate) return 0
+
+  const holeQty = Math.max(0, Math.floor(toNumber(row?.hole)))
+  if (holeQty <= 0) return 0
+
+  const startedDate = getMainHoleStartDate(row)
+  if (!startedDate || startedDate.getTime() > completedDate.getTime()) {
+    return isSameDay(completedDate, targetDate) ? holeQty : 0
+  }
+
+  const dayCount = getInclusiveDayCount(startedDate, completedDate)
+  if (dayCount <= 1) {
+    return isSameDay(startedDate, targetDate) ? holeQty : 0
+  }
+
+  const baseQty = Math.floor(holeQty / dayCount)
+  const remainder = holeQty % dayCount
+  let targetQty = 0
+  for (let dayOffset = 0; dayOffset < dayCount; dayOffset += 1) {
+    const workDate = addDays(startedDate, dayOffset)
+    if (!isSameDay(workDate, targetDate)) continue
+    targetQty += baseQty + (dayOffset < remainder ? 1 : 0)
+  }
+  return targetQty
+}
+
+function getDistributedBranchHeadQtyBefore(row, beforeDate) {
+  if (!isStageCompletedForStats(row, 'branch_head')) return 0
+
+  const completedDate = getStageCompletedDate(row, 'branch_head')
+  if (!completedDate) return 0
+
+  const headQty = Math.max(0, Math.floor(toNumber(row?.head)))
+  if (headQty <= 0) return 0
+
+  const boundary = startOfDay(beforeDate)
+  const startedDate = getBranchHeadStartDate(row)
+  if (!startedDate || startedDate.getTime() > completedDate.getTime()) {
+    return getBranchHeadDisplayDate(completedDate).getTime() < boundary.getTime() ? headQty : 0
+  }
+
+  const dayCount = getInclusiveDayCount(startedDate, completedDate)
+  if (dayCount <= 1) {
+    return getBranchHeadDisplayDate(startedDate).getTime() < boundary.getTime() ? headQty : 0
+  }
+
+  const baseQty = Math.floor(headQty / dayCount)
+  const remainder = headQty % dayCount
+  let targetQty = 0
+  for (let dayOffset = 0; dayOffset < dayCount; dayOffset += 1) {
+    const workDate = addDays(startedDate, dayOffset)
+    if (getBranchHeadDisplayDate(workDate).getTime() >= boundary.getTime()) continue
+    targetQty += baseQty + (dayOffset < remainder ? 1 : 0)
+  }
+  return targetQty
+}
+
+function getDistributedMainHoleQtyBefore(row, beforeDate) {
+  if (!isStageCompletedForStats(row, 'main_hole')) return 0
+
+  const completedDate = getStageCompletedDate(row, 'main_hole')
+  if (!completedDate) return 0
+
+  const holeQty = Math.max(0, Math.floor(toNumber(row?.hole)))
+  if (holeQty <= 0) return 0
+
+  const boundary = startOfDay(beforeDate)
+  const startedDate = getMainHoleStartDate(row)
+  if (!startedDate || startedDate.getTime() > completedDate.getTime()) {
+    return completedDate.getTime() < boundary.getTime() ? holeQty : 0
+  }
+
+  const dayCount = getInclusiveDayCount(startedDate, completedDate)
+  if (dayCount <= 1) {
+    return startedDate.getTime() < boundary.getTime() ? holeQty : 0
+  }
+
+  const baseQty = Math.floor(holeQty / dayCount)
+  const remainder = holeQty % dayCount
+  let targetQty = 0
+  for (let dayOffset = 0; dayOffset < dayCount; dayOffset += 1) {
+    const workDate = addDays(startedDate, dayOffset)
+    if (workDate.getTime() >= boundary.getTime()) continue
+    targetQty += baseQty + (dayOffset < remainder ? 1 : 0)
+  }
+  return targetQty
+}
+
 function sumHead(targetRows) {
   return targetRows.reduce((sum, row) => sum + Math.max(0, toNumber(row?.head)), 0)
 }
@@ -253,8 +368,20 @@ function sumDistributedBranchHead(targetRows, targetDate) {
   return targetRows.reduce((sum, row) => sum + getDistributedBranchHeadQty(row, targetDate), 0)
 }
 
+function sumDistributedBranchHeadBefore(targetRows, beforeDate) {
+  return targetRows.reduce((sum, row) => sum + getDistributedBranchHeadQtyBefore(row, beforeDate), 0)
+}
+
 function sumHole(targetRows) {
   return targetRows.reduce((sum, row) => sum + Math.max(0, toNumber(row?.hole)), 0)
+}
+
+function sumDistributedMainHole(targetRows, targetDate) {
+  return targetRows.reduce((sum, row) => sum + getDistributedMainHoleQty(row, targetDate), 0)
+}
+
+function sumDistributedMainHoleBefore(targetRows, beforeDate) {
+  return targetRows.reduce((sum, row) => sum + getDistributedMainHoleQtyBefore(row, beforeDate), 0)
 }
 
 function isWeekdayWorkDate(date) {
@@ -329,7 +456,7 @@ async function fetchRows() {
     return
   }
 
-  const columns = 'id,work_type,head,hole,worker_t,worker_t_time,worker_main,worker_main_time,marking_weld_a_started_on,marking_weld_b_started_on,marking_laser_1_started_on,beveling_started_on,nasa_started_on'
+  const columns = 'id,work_type,head,hole,worker_t,worker_t_time,worker_main,worker_main_time,marking_weld_a_started_on,marking_weld_b_started_on,marking_laser_1_started_on,beveling_started_on,nasa_started_on,marking_laser_2_started_on,main_started_on'
   const { data, error: queryError } = await supabase
     .from(PRODUCT_LIST_TABLE)
     .select(columns)
@@ -391,16 +518,16 @@ const dailyMainRows = computed(() =>
   weekDates.value.map((date) => ({
     key: formatKoreanDate(date),
     dateLabel: formatDayLabel(date),
-    completedQty: sumHole(rows.value.filter((row) => isCompletedOnDate(row, 'main_hole', date))),
+    completedQty: sumDistributedMainHole(rows.value, date),
     isToday: isSameDay(date, new Date()),
   })),
 )
 
 const lineCards = computed(() => {
   const branchTotalQty = sumHead(rows.value)
-  const branchCompletedQty = sumHead(rows.value.filter((row) => isStageCompletedByStatus(row, 'branch_head')))
+  const branchCompletedQty = sumHead(rows.value.filter((row) => isStageCompletedForStats(row, 'branch_head')))
   const mainTotalQty = sumHole(rows.value)
-  const mainCompletedQty = sumHole(rows.value.filter((row) => isStageCompletedByStatus(row, 'main_hole')))
+  const mainCompletedQty = sumHole(rows.value.filter((row) => isStageCompletedForStats(row, 'main_hole')))
 
   return [
     {
@@ -475,8 +602,9 @@ function formatActualText(actualMin) {
 const weekRows = computed(() => {
   const branchTotalQty = lineCards.value.find((card) => card.key === 'branch_head')?.totalQty ?? 0
   const mainTotalQty = lineCards.value.find((card) => card.key === 'main_hole')?.totalQty ?? 0
-  let branchCompletedBefore = 0
-  let mainCompletedBefore = 0
+  const firstWeekDate = weekDates.value[0] ?? selectedWeekStart.value
+  let branchCompletedBefore = sumDistributedBranchHeadBefore(rows.value, firstWeekDate)
+  let mainCompletedBefore = sumDistributedMainHoleBefore(rows.value, firstWeekDate)
 
   return weekDates.value.map((date, index) => {
     const key = formatKoreanDate(date)

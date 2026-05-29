@@ -54,6 +54,12 @@ const isGroupStart = (index) => index === 0
     </div>
     <div v-else class="stock-totals-scroll">
       <table class="stock-totals-table">
+        <colgroup>
+          <col class="summary-label-col" />
+          <template v-for="group in groupedRows" :key="`col-${group.name}`">
+            <col v-for="row in group.rows" :key="row.id" class="material-col" />
+          </template>
+        </colgroup>
         <thead>
           <tr>
             <th class="summary-label-header" rowspan="2">구분</th>
@@ -105,14 +111,24 @@ const isGroupStart = (index) => index === 0
 <style scoped>
 .stock-totals-scroll {
   overflow-x: auto;
+  max-width: 100%;
+  overscroll-behavior-x: contain;
 }
 
 .stock-totals-table {
-  min-width: 760px;
-  width: 100%;
+  min-width: 100%;
+  width: max-content;
   border-collapse: separate;
   border-spacing: 0;
   table-layout: fixed;
+}
+
+.summary-label-col {
+  width: 86px;
+}
+
+.material-col {
+  width: 70px;
 }
 
 .stock-totals-table th,
@@ -134,15 +150,24 @@ const isGroupStart = (index) => index === 0
 
 .summary-label-header,
 .summary-label {
+  position: sticky;
+  left: 0;
+  z-index: 5;
   width: 86px;
   min-width: 86px;
   background: rgb(248 250 252);
+}
+
+.summary-label-header {
+  z-index: 8;
+  box-shadow: 1px 0 0 rgb(226 232 240);
 }
 
 .summary-label {
   color: rgb(15 23 42);
   font-size: 12px;
   font-weight: 900;
+  box-shadow: 1px 0 0 rgb(226 232 240);
 }
 
 .group-header {

@@ -1,16 +1,23 @@
 <script setup>
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { ArrowLeft, ClipboardList, Loader2, Plus, Save, Search, Trash2, Upload } from 'lucide-vue-next'
 import InventoryCompanySearchDialog from './components/InventoryCompanySearchDialog.vue'
+import InventoryMaterialAddDialog from './components/InventoryMaterialAddDialog.vue'
 import InventoryQuickLookupDialog from './components/InventoryQuickLookupDialog.vue'
 import InventoryStockSummary from './components/InventoryStockSummary.vue'
 import InventoryStockTotalsTable from './components/InventoryStockTotalsTable.vue'
 import {
   INVENTORY_AUTH_REQUIRED,
+  RAW_MATERIAL_TYPE,
+  SUBSIDIARY_MATERIAL_TYPE,
+  addCompanyInventoryMaterialItem,
+  fetchAvailableCompanyMaterialItems,
+  fetchInventoryCompanyMaterialItems,
   fetchInventoryEntryData,
   fetchInventoryStockSummary,
   fetchInventoryStockTotals,
   fetchRecentInventoryTransactions,
+  removeCompanyInventoryMaterialItem,
   saveInventorySheetRows,
   updateInventoryTransactionHeader,
   updateInventoryTransactionItemQuantity,
@@ -19,7 +26,7 @@ import { parseInventoryExcelFile } from '@/features/inventory/services/inventory
 import { useDialog } from '@/composables/useDialog'
 import { useRouter } from 'vue-router'
 
-const { alert } = useDialog()
+const { alert, confirm } = useDialog()
 const router = useRouter()
 
 const companies = ref([])
@@ -28,6 +35,7 @@ const sheetRows = ref([])
 const totalStockRows = ref([])
 const companyStockTotals = ref([])
 const selectedCompany = ref(null)
+const activeMaterialLedgerTab = ref('raw')
 const excelFileInput = ref(null)
 const sheetScroll = ref(null)
 const loading = ref(false)
@@ -38,6 +46,10 @@ const savingCell = ref('')
 const excelParsing = ref(false)
 const registerDialogOpen = ref(false)
 const quickLookupOpen = ref(false)
+const materialAddDialogOpen = ref(false)
+const materialAddLoading = ref(false)
+const materialActionItemId = ref('')
+const availableMaterialItems = ref([])
 const editingCell = ref(null)
 const editingValue = ref('')
 const setupWarning = ref('')
@@ -53,6 +65,17 @@ const selectedCompanyName = computed(() =>
 const inventoryPageTitle = computed(() =>
   selectedCompany.value ? `${selectedCompanyName.value} 입출고내역` : '입출고내역',
 )
+
+const materialLedgerTabs = [
+  { key: 'raw', label: '원자재' },
+  { key: 'subsidiary', label: '부자재' },
+]
+
+const isRawMaterialLedgerTab = computed(() => activeMaterialLedgerTab.value === 'raw')
+const currentMaterialType = computed(() =>
+  activeMaterialLedgerTab.value === 'subsidiary' ? SUBSIDIARY_MATERIAL_TYPE : RAW_MATERIAL_TYPE,
+)
+const currentMaterialLabel = computed(() => (isRawMaterialLedgerTab.value ? '원자재' : '부자재'))
 
 const hasUnsavedRows = computed(() => sheetRows.value.some((row) => !row.saved))
 
@@ -277,6 +300,57 @@ const applyCompanyStockQuantityChange = (materialId, previousQuantity, nextQuant
   })
 }
 
+const compareMaterialItems = (left, right) => {
+  const sortCompare = Number(left?.sort_order ?? 0) - Number(right?.sort_order ?? 0)
+  if (sortCompare !== 0) return sortCompare
+  const groupCompare = String(left?.material_group ?? '').localeCompare(String(right?.material_group ?? ''), 'ko')
+  if (groupCompare !== 0) return groupCompare
+  return String(left?.spec ?? '').localeCompare(String(right?.spec ?? ''), 'ko', { numeric: true })
+}
+
+const createEmptyStockTotalRow = (item) => ({
+  id: item.id,
+  material: item,
+  label: [item.name, item.spec].filter(Boolean).join(' '),
+  incomingQuantity: 0,
+  outgoingQuantity: 0,
+  quantity: 0,
+  unit: item.unit || '',
+})
+
+const setAvailableMaterialLinked = (materialId, isLinkedToCompany) => {
+  availableMaterialItems.value = availableMaterialItems.value.map((target) =>
+    String(target.id) === String(materialId)
+      ? { ...target, isLinkedToCompany }
+      : target,
+  )
+}
+
+const addMaterialToCurrentLedger = (item) => {
+  if (!materialItems.value.some((target) => String(target.id) === String(item.id))) {
+    materialItems.value = [...materialItems.value, item].sort(compareMaterialItems)
+  }
+  if (!companyStockTotals.value.some((target) => String(target.id) === String(item.id))) {
+    companyStockTotals.value = [...companyStockTotals.value, createEmptyStockTotalRow(item)].sort((left, right) =>
+      compareMaterialItems(left.material, right.material),
+    )
+  }
+  syncRowQuantityKeys()
+}
+
+const removeMaterialFromCurrentLedger = (materialId) => {
+  const targetId = String(materialId)
+  materialItems.value = materialItems.value.filter((item) => String(item.id) !== targetId)
+  companyStockTotals.value = companyStockTotals.value.filter((row) => String(row.id) !== targetId)
+  sheetRows.value = sheetRows.value.map((row) => {
+    const { [targetId]: _removedQuantity, ...nextQuantities } = row.quantities ?? {}
+    return {
+      ...row,
+      quantities: nextQuantities,
+    }
+  })
+}
+
 const commitCellEdit = async (row, field, materialId = '') => {
   if (!row.saved || !isEditing(row, field, materialId)) return
   const nextValue = String(editingValue.value ?? '').trim()
@@ -328,7 +402,7 @@ const commitCellEdit = async (row, field, materialId = '') => {
 const loadMainOverview = async () => {
   stockLoading.value = true
   try {
-    totalStockRows.value = await fetchInventoryStockSummary(materialItems.value)
+    totalStockRows.value = await fetchInventoryStockSummary(materialItems.value, null, RAW_MATERIAL_TYPE)
   } finally {
     stockLoading.value = false
   }
@@ -340,9 +414,12 @@ const loadCompanyLedger = async (company, resetRows = true) => {
   stockLoading.value = true
   savedMessage.value = ''
   try {
+    const companyMaterialItems = await fetchInventoryCompanyMaterialItems(company.id, currentMaterialType.value)
+    materialItems.value = companyMaterialItems
+    syncRowQuantityKeys()
     const [stockTotals, savedTransactions] = await Promise.all([
-      fetchInventoryStockTotals(materialItems.value, company.id),
-      fetchRecentInventoryTransactions(300, company.id),
+      fetchInventoryStockTotals(materialItems.value, company.id, currentMaterialType.value),
+      fetchRecentInventoryTransactions(300, company.id, currentMaterialType.value),
     ])
     companyStockTotals.value = stockTotals
     if (resetRows) sheetRows.value = createSavedSheetRows(savedTransactions)
@@ -357,7 +434,7 @@ const load = async () => {
   errorMessage.value = ''
   savedMessage.value = ''
   try {
-    const entryData = await fetchInventoryEntryData()
+    const entryData = await fetchInventoryEntryData(RAW_MATERIAL_TYPE)
     companies.value = entryData.companies
     materialItems.value = entryData.materialItems
     setupWarning.value = entryData.setupWarning
@@ -392,9 +469,13 @@ const selectCompanyForEntry = async (company) => {
 const goBackToOverview = async () => {
   selectedCompany.value = null
   companyStockTotals.value = []
+  activeMaterialLedgerTab.value = 'raw'
   resetSheetRows()
   savedMessage.value = ''
   errorMessage.value = ''
+  const entryData = await fetchInventoryEntryData(RAW_MATERIAL_TYPE)
+  materialItems.value = entryData.materialItems
+  setupWarning.value = entryData.setupWarning
   await loadMainOverview()
 }
 
@@ -409,13 +490,78 @@ const saveRows = async () => {
   savedMessage.value = ''
   try {
     const targetRows = sheetRows.value.filter((row) => !row.saved)
-    const savedIds = await saveInventorySheetRows(targetRows, materialItems.value, selectedCompany.value)
+    const savedIds = await saveInventorySheetRows(targetRows, materialItems.value, selectedCompany.value, currentMaterialType.value)
     await loadCompanyLedger(selectedCompany.value, true)
     savedMessage.value = `${savedIds.length}건 저장했습니다.`
   } catch (error) {
     await handleSaveError(error, '입출고 저장에 실패했습니다.')
   } finally {
     saving.value = false
+  }
+}
+
+const openMaterialAddDialog = async () => {
+  if (!selectedCompany.value) {
+    await alert('현장을 먼저 선택해주세요.')
+    return
+  }
+
+  materialAddDialogOpen.value = true
+  materialAddLoading.value = true
+  availableMaterialItems.value = []
+  try {
+    availableMaterialItems.value = await fetchAvailableCompanyMaterialItems(selectedCompany.value.id, currentMaterialType.value)
+  } catch (error) {
+    await alert(error instanceof Error ? error.message : `${currentMaterialLabel.value} 목록을 불러오지 못했습니다.`)
+    materialAddDialogOpen.value = false
+  } finally {
+    materialAddLoading.value = false
+  }
+}
+
+const selectMaterialToAdd = async (item) => {
+  if (!selectedCompany.value || !item?.id) return
+  if (materialActionItemId.value) return
+
+  const confirmed = await confirm(
+    `${currentMaterialLabel.value} ${item.material_group} ${item.spec} 항목을 이 현장에 추가할까요?`,
+    { confirmText: '추가', cancelText: '취소' },
+  )
+  if (!confirmed) return
+
+  materialActionItemId.value = String(item.id)
+  try {
+    await addCompanyInventoryMaterialItem(selectedCompany.value.id, item.id, currentMaterialType.value)
+    setAvailableMaterialLinked(item.id, true)
+    addMaterialToCurrentLedger({ ...item, isLinkedToCompany: true })
+    savedMessage.value = `${currentMaterialLabel.value} ${item.material_group} ${item.spec} 항목을 추가했습니다.`
+  } catch (error) {
+    await alert(error instanceof Error ? error.message : `${currentMaterialLabel.value} 항목 추가에 실패했습니다.`)
+  } finally {
+    materialActionItemId.value = ''
+  }
+}
+
+const selectMaterialToRemove = async (item) => {
+  if (!selectedCompany.value || !item?.id) return
+  if (materialActionItemId.value) return
+
+  const confirmed = await confirm(
+    `${currentMaterialLabel.value} ${item.material_group} ${item.spec} 항목을 이 현장에서 제외할까요?`,
+    { confirmText: '제외', cancelText: '취소' },
+  )
+  if (!confirmed) return
+
+  materialActionItemId.value = String(item.id)
+  try {
+    await removeCompanyInventoryMaterialItem(selectedCompany.value.id, item.id, currentMaterialType.value)
+    setAvailableMaterialLinked(item.id, false)
+    removeMaterialFromCurrentLedger(item.id)
+    savedMessage.value = `${currentMaterialLabel.value} ${item.material_group} ${item.spec} 항목을 제외했습니다.`
+  } catch (error) {
+    await alert(error instanceof Error ? error.message : `${currentMaterialLabel.value} 항목 제외에 실패했습니다.`)
+  } finally {
+    materialActionItemId.value = ''
   }
 }
 
@@ -444,7 +590,7 @@ const handleExcelFileChange = async (event) => {
   errorMessage.value = ''
   savedMessage.value = ''
   try {
-    const result = await parseInventoryExcelFile(file, materialItems.value)
+    const result = await parseInventoryExcelFile(file, materialItems.value, currentMaterialType.value)
     if (result.rows.length === 0) {
       await alert('엑셀에서 가져올 입출고 내역이 없습니다.')
       return
@@ -462,6 +608,19 @@ const handleExcelFileChange = async (event) => {
 onMounted(() => {
   void load()
 })
+
+watch(activeMaterialLedgerTab, async () => {
+  if (!selectedCompany.value) return
+  materialAddDialogOpen.value = false
+  availableMaterialItems.value = []
+  errorMessage.value = ''
+  savedMessage.value = ''
+  try {
+    await loadCompanyLedger(selectedCompany.value, true)
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : '현장 입출고 내역을 불러오지 못했습니다.'
+  }
+})
 </script>
 
 <template>
@@ -474,10 +633,26 @@ onMounted(() => {
         class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between"
         :class="selectedCompany ? 'mb-2' : 'mb-4'"
       >
-        <div class="min-w-0">
+        <div class="flex min-w-0 flex-wrap items-center gap-3">
           <h1 class="mt-1 truncate text-2xl font-extrabold text-slate-900">
             {{ inventoryPageTitle }}
           </h1>
+          <div v-if="selectedCompany" class="mt-1 flex flex-wrap gap-1.5">
+            <button
+              v-for="tab in materialLedgerTabs"
+              :key="tab.key"
+              type="button"
+              class="inline-flex h-8 items-center justify-center rounded-lg border px-3 text-xs font-extrabold transition-colors"
+              :class="
+                activeMaterialLedgerTab === tab.key
+                  ? 'border-slate-900 bg-slate-900 text-white'
+                  : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+              "
+              @click="activeMaterialLedgerTab = tab.key"
+            >
+              {{ tab.label }}
+            </button>
+          </div>
         </div>
 
         <div v-if="selectedCompany" class="flex flex-wrap gap-2">
@@ -538,7 +713,9 @@ onMounted(() => {
 
         <section class="mt-2 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-3 py-2">
-            <h2 class="text-sm font-extrabold text-slate-900">입출고 내역</h2>
+            <div class="flex flex-wrap items-center gap-2">
+              <h2 class="text-sm font-extrabold text-slate-900">입출고 내역</h2>
+            </div>
             <div class="flex flex-wrap items-center justify-end gap-2">
               <input
                 ref="excelFileInput"
@@ -547,6 +724,14 @@ onMounted(() => {
                 accept=".xls,.xlsx"
                 @change="handleExcelFileChange"
               />
+              <button
+                type="button"
+                class="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                @click="openMaterialAddDialog"
+              >
+                <Plus class="h-3.5 w-3.5" />
+                {{ currentMaterialLabel }}추가
+              </button>
               <button
                 type="button"
                 class="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
@@ -770,6 +955,17 @@ onMounted(() => {
       :companies="companies"
       :material-items="materialItems"
       @close="quickLookupOpen = false"
+    />
+
+    <InventoryMaterialAddDialog
+      :open="materialAddDialogOpen"
+      :title="`${currentMaterialLabel} 항목 추가`"
+      :items="availableMaterialItems"
+      :loading="materialAddLoading"
+      :saving-item-id="materialActionItemId"
+      @close="materialAddDialogOpen = false"
+      @select="selectMaterialToAdd"
+      @remove="selectMaterialToRemove"
     />
   </main>
 </template>

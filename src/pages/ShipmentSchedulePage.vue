@@ -833,7 +833,6 @@ onMounted(async () => {
     <div
       v-if="isDialogOpen"
       class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 px-4"
-      @click.self="closeDialog"
     >
       <section class="w-full max-w-2xl rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl">
         <div class="flex items-start justify-between gap-3">
