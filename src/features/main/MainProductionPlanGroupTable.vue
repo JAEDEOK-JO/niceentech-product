@@ -29,7 +29,7 @@ const emit = defineEmits(['open-row-menu', 'cell-click', 'cell-long-press'])
 const LONG_PRESS_MS = 700
 let longPressTimer = null
 let longPressTriggered = false
-const longPressColumns = ['worker_welding', 'worker_nasa']
+const longPressColumns = ['worker_t', 'worker_nasa', 'worker_main', 'worker_welding']
 const isLongPressColumn = (columnKey) => longPressColumns.includes(columnKey)
 
 const onCellPointerDown = (row, columnKey) => {
@@ -99,15 +99,23 @@ const tableWidthStyle = {
           </div>
         </div>
         <div class="mt-3 grid grid-cols-4 gap-1.5">
-          <div
+          <button
             v-for="column in tableColumns.filter((column) => ['worker_t', 'worker_nasa', 'worker_main', 'worker_welding'].includes(column.key))"
             :key="`${row.id}-${column.key}`"
+            type="button"
             class="min-w-0 rounded-lg border border-slate-200 px-1.5 py-2 text-center text-[10px] font-bold leading-tight sm:px-2 sm:py-3 sm:text-[11px]"
             :class="getWorkerStatusClass(row, column.key)"
+            @click="onCellClick(row, column.key)"
+            @mousedown="onCellPointerDown(row, column.key)"
+            @mouseup="onCellPointerUp"
+            @mouseleave="onCellPointerUp"
+            @touchstart="onCellPointerDown(row, column.key)"
+            @touchend="onCellPointerUp"
+            @touchcancel="onCellPointerUp"
           >
             <p class="whitespace-nowrap">{{ column.label }}</p>
             <p class="mt-1 whitespace-nowrap">{{ displayCellText(row, column.key) }}</p>
-          </div>
+          </button>
         </div>
         <div class="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-slate-700">
           <p class="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 font-semibold whitespace-nowrap">

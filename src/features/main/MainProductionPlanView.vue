@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onUnmounted, ref, watch } from 'vue'
-import { Printer, Search } from 'lucide-vue-next'
+import { CalendarDays, ClipboardList, Printer, Search } from 'lucide-vue-next'
 import Button from '@/components/ui/button/Button.vue'
 import Input from '@/components/ui/input/Input.vue'
 import MainProductionPlanGroupTable from '@/features/main/MainProductionPlanGroupTable.vue'
@@ -29,6 +29,7 @@ const emit = defineEmits([
   'move-week',
   'reset-week',
   'go-register',
+  'go-stats',
   'search-change',
   'select-tuesday',
   'edit-row',
@@ -101,10 +102,26 @@ const selectWeldingInspector = (inspector) => {
   emit('welding-start', { row: weldingInspectorDialogRow.value, inspector })
   closeWeldingInspectorDialog()
 }
-const isNasaWorkRow = (row) => String(row?.work_type ?? '').trim() === '나사'
+const getNasaStatus = (row) => String(row?.nasa_status ?? '').trim() || String(row?.worker_nasa ?? '').trim()
+const canToggleNasaStatus = (row) => {
+  const status = getNasaStatus(row)
+  return !status || status === '없음' || status === '작업전' || status === '작업중'
+}
 const canControlNasaWork = () => {
   const workMan = String(props.currentWorkMan ?? '').trim()
-  return workMan === '무용접' || workMan === '나사' || isAdminRole(props.currentRole)
+  return workMan === '무용접' || workMan === '나사' || isProductionAdmin(props.currentRole)
+}
+const canControlProductionWork = () => {
+  const workMan = String(props.currentWorkMan ?? '').trim()
+  return ['생산', '마킹1', '마킹2', '레이저1', '티&면치'].includes(workMan) || isProductionAdmin(props.currentRole)
+}
+const canControlMainWork = () => {
+  const workMan = String(props.currentWorkMan ?? '').trim()
+  return workMan === '메인' || workMan === '레이저2' || isProductionAdmin(props.currentRole)
+}
+const canToggleWorkerStatus = (value) => {
+  const status = String(value ?? '').trim()
+  return !status || status === '없음' || status === '작업전' || status === '작업중'
 }
 const canOpenShipmentConfirm = (row) =>
   Boolean(row?.complete) ||
@@ -421,11 +438,19 @@ const handleCellClick = ({ row, columnKey }) => {
     emit('cell-action', { row, columnKey })
     return
   }
-  if (columnKey === 'worker_nasa' && isNasaWorkRow(row)) {
+  if (columnKey === 'worker_nasa') {
     if (row?.shipment) {
       activeShipmentRow.value = row
       shipmentMode.value = 'cancel'
       isShipmentConfirmOpen.value = true
+      return
+    }
+    if (canToggleNasaStatus(row)) {
+      if (!canControlNasaWork()) {
+        showSnackbar('무용접만 작업할 수 있습니다.')
+        return
+      }
+      emit('cell-action', { row, columnKey })
       return
     }
     if (canOpenShipmentConfirm(row)) {
@@ -434,37 +459,82 @@ const handleCellClick = ({ row, columnKey }) => {
       isShipmentConfirmOpen.value = true
       return
     }
-    if (!canControlNasaWork()) {
-      showSnackbar('무용접만 작업할 수 있습니다.')
-      return
-    }
-    emit('cell-action', { row, columnKey })
+    showSnackbar('출하완료가 불가능합니다.')
     return
   }
-  const workerColumns = ['worker_t', 'worker_nasa', 'worker_main']
-  if (workerColumns.includes(columnKey)) {
+  if (columnKey === 'worker_t') {
     if (row?.shipment) {
       activeShipmentRow.value = row
       shipmentMode.value = 'cancel'
       isShipmentConfirmOpen.value = true
-    } else if (canOpenShipmentConfirm(row)) {
+      return
+    }
+    if (canToggleWorkerStatus(row?.worker_t)) {
+      if (!canControlProductionWork()) {
+        showSnackbar('생산 작업자만 작업할 수 있습니다.')
+        return
+      }
+      emit('cell-action', { row, columnKey })
+      return
+    }
+    if (canOpenShipmentConfirm(row)) {
       activeShipmentRow.value = row
       shipmentMode.value = 'ship'
       isShipmentConfirmOpen.value = true
-    } else {
-      showSnackbar('출하완료가 불가능합니다.')
+      return
     }
+    showSnackbar('출하완료가 불가능합니다.')
+    return
+  }
+  if (columnKey === 'worker_main') {
+    if (row?.shipment) {
+      activeShipmentRow.value = row
+      shipmentMode.value = 'cancel'
+      isShipmentConfirmOpen.value = true
+      return
+    }
+    if (canToggleWorkerStatus(row?.worker_main)) {
+      if (!canControlMainWork()) {
+        showSnackbar('메인 작업자만 작업할 수 있습니다.')
+        return
+      }
+      emit('cell-action', { row, columnKey })
+      return
+    }
+    if (canOpenShipmentConfirm(row)) {
+      activeShipmentRow.value = row
+      shipmentMode.value = 'ship'
+      isShipmentConfirmOpen.value = true
+      return
+    }
+    showSnackbar('출하완료가 불가능합니다.')
     return
   }
 
   emit('cell-action', { row, columnKey })
 }
 const handleCellLongPress = ({ row, columnKey }) => {
+  if (columnKey === 'worker_t') {
+    if (!canControlProductionWork()) {
+      showSnackbar('생산 작업자만 작업할 수 있습니다.')
+      return
+    }
+    emit('cell-action', { row, columnKey, reset: true })
+    return
+  }
+  if (columnKey === 'worker_main') {
+    if (!canControlMainWork()) {
+      showSnackbar('메인 작업자만 작업할 수 있습니다.')
+      return
+    }
+    emit('cell-action', { row, columnKey, reset: true })
+    return
+  }
   if (columnKey === 'worker_welding') {
     emit('welding-long-press', row)
     return
   }
-  if (columnKey === 'worker_nasa' && isNasaWorkRow(row)) {
+  if (columnKey === 'worker_nasa') {
     if (!canControlNasaWork()) {
       showSnackbar('무용접만 작업할 수 있습니다.')
       return
@@ -668,14 +738,18 @@ const selectDrawingFile = (file) => {
               <button
                 type="button"
                 class="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                aria-label="검수일자 선택"
                 @click="openCalendarDialog"
               >
-                <svg viewBox="0 0 24 24" class="h-4 w-4 fill-none stroke-current" stroke-width="2">
-                  <path d="M8 2v4" />
-                  <path d="M16 2v4" />
-                  <rect x="3" y="4" width="18" height="17" rx="2" />
-                  <path d="M3 10h18" />
-                </svg>
+                <CalendarDays class="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                class="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                aria-label="주간 작업일지"
+                @click="emit('go-stats')"
+              >
+                <ClipboardList class="h-4 w-4" />
               </button>
               <button
                 type="button"

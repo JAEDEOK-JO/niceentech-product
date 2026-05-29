@@ -204,14 +204,8 @@ function isStageCompletedForStats(row, lineType) {
   return isStageCompletedByStatus(row, lineType) && Boolean(getStageCompletedDate(row, lineType))
 }
 
-const branchHeadStartFields = [
-  'marking_weld_a_started_on',
-  'marking_weld_b_started_on',
-  'marking_laser_1_started_on',
-  'beveling_started_on',
-  'nasa_started_on',
-]
-const mainHoleStartFields = ['marking_laser_2_started_on', 'main_started_on']
+const branchHeadStartFields = ['marking_weld_a_started_on']
+const mainHoleStartFields = ['main_started_on']
 
 function getEarliestDate(dates) {
   return dates.reduce((earliest, date) => {
@@ -456,7 +450,7 @@ async function fetchRows() {
     return
   }
 
-  const columns = 'id,work_type,head,hole,worker_t,worker_t_time,worker_main,worker_main_time,marking_weld_a_started_on,marking_weld_b_started_on,marking_laser_1_started_on,beveling_started_on,nasa_started_on,marking_laser_2_started_on,main_started_on'
+  const columns = 'id,work_type,head,hole,worker_t,worker_t_time,worker_main,worker_main_time,marking_weld_a_started_on,main_started_on'
   const { data, error: queryError } = await supabase
     .from(PRODUCT_LIST_TABLE)
     .select(columns)

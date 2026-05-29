@@ -41,7 +41,6 @@ const profileSummary = computed(() => {
 const navItems = computed(() => {
   const items = [
     { key: 'main', label: '생산계획표', to: { name: 'main' } },
-    { key: 'home', label: '생산진행표', to: { name: 'home' } },
     { key: 'quality-list', label: '검수리스트', to: { name: 'quality-list' } },
     { key: 'shipment-schedule', label: '출하일정', to: { name: 'shipment-schedule' } },
     { key: 'inventory', label: '입출고내역', to: { name: 'inventory' } },

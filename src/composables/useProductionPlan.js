@@ -34,7 +34,6 @@ const workerTStageFields = [
   'marking_weld_b_status',
   'marking_laser_1_status',
   'beveling_status',
-  'nasa_status',
 ]
 const workerMainStageFields = ['marking_laser_2_status', 'main_status']
 const homeWorkerTShortcutFields = [
@@ -42,7 +41,6 @@ const homeWorkerTShortcutFields = [
   'marking_weld_b_status',
   'marking_laser_1_status',
   'beveling_status',
-  'nasa_status',
 ]
 const homeWorkerMainShortcutFields = ['marking_laser_2_status', 'main_status']
 const workManRoleToStages = {

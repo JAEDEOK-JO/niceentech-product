@@ -49,6 +49,14 @@ const goRegister = () => {
     },
   })
 }
+const goStats = () => {
+  router.push({
+    name: 'stats',
+    query: {
+      testDate: selectedTuesdayIso.value,
+    },
+  })
+}
 
 const handleSearchChange = (value) => {
   if (typeof value === 'string') {
@@ -162,13 +170,93 @@ const formatIsoDate = (date = new Date()) => {
   return `${y}-${m}-${d}`
 }
 
+const formatMonthDay = (date = new Date()) => {
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${month}.${day}`
+}
+
 const formatWorkerDate = (date = new Date()) => {
   const year = String(date.getFullYear()).slice(2)
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
   return `${year}.${month}.${day}`
 }
-const isNasaWorkRow = (row) => String(row?.work_type ?? '').trim() === '나사'
+const getNasaStatus = (row) => String(row?.nasa_status ?? '').trim() || String(row?.worker_nasa ?? '').trim()
+const isDoneStatus = (value) => ['작업완료', '출하완료'].includes(String(value ?? '').trim())
+const toNumber = (value) => {
+  const num = Number(value)
+  return Number.isFinite(num) ? num : 0
+}
+const isCompletionSatisfied = (row, workerTDone, workerMainDone) => {
+  const requiresWorkerT = toNumber(row?.head) > 0
+  const requiresWorkerMain = toNumber(row?.hole) > 0
+  if (!requiresWorkerT && !requiresWorkerMain) return workerTDone && workerMainDone
+  return (!requiresWorkerT || workerTDone) && (!requiresWorkerMain || workerMainDone)
+}
+const withCompleteUpdates = (row, updates) => {
+  const workerTDone = isDoneStatus(updates.worker_t ?? row?.worker_t)
+  const workerMainDone = isDoneStatus(updates.worker_main ?? row?.worker_main)
+  const complete = isCompletionSatisfied(row, workerTDone, workerMainDone)
+  return {
+    ...updates,
+    complete,
+    complete_date: complete ? formatMonthDay() : '',
+  }
+}
+const processConfigs = {
+  worker_t: {
+    statusField: 'worker_t',
+    timeField: 'worker_t_time',
+    finalTimeField: 'worker_t_time_final',
+    stageStatusField: 'marking_weld_a_status',
+    startedField: 'marking_weld_a_started_on',
+    completedField: 'marking_weld_a_completed_on',
+  },
+  worker_main: {
+    statusField: 'worker_main',
+    timeField: 'worker_main_time',
+    finalTimeField: 'worker_main_time_final',
+    stageStatusField: 'main_status',
+    startedField: 'main_started_on',
+    completedField: 'main_completed_on',
+  },
+}
+
+const buildProcessUpdates = (row, config, { reset = false } = {}) => {
+  if (reset) {
+    return withCompleteUpdates(row, {
+      [config.statusField]: '없음',
+      [config.timeField]: '',
+      [config.finalTimeField]: '',
+      [config.stageStatusField]: '없음',
+      [config.startedField]: null,
+      [config.completedField]: null,
+    })
+  }
+
+  const current = String(row?.[config.statusField] ?? '').trim()
+  if (!current || current === '없음' || current === '작업전') {
+    return withCompleteUpdates(row, {
+      [config.statusField]: '작업중',
+      [config.timeField]: '',
+      [config.finalTimeField]: '',
+      [config.stageStatusField]: '작업중',
+      [config.startedField]: formatIsoDate(),
+      [config.completedField]: null,
+    })
+  }
+  if (current === '작업중') {
+    return withCompleteUpdates(row, {
+      [config.statusField]: '작업완료',
+      [config.timeField]: formatWorkerDate(),
+      [config.stageStatusField]: '작업완료',
+      [config.startedField]: row?.[config.startedField] || formatIsoDate(),
+      [config.completedField]: formatIsoDate(),
+    })
+  }
+  return null
+}
 
 const handleWeldingStart = async ({ row, inspector }) => {
   if (!row?.id) return
@@ -214,7 +302,7 @@ const handleWeldingLongPress = async (row) => {
   await supabase.from('welding_inspections').delete().eq('product_list_id', row.id)
 }
 const handleNasaLongPress = async (row) => {
-  if (!row?.id || !isNasaWorkRow(row)) return
+  if (!row?.id) return
   await updatePlanRowFields({
     rowId: row.id,
     updates: {
@@ -228,11 +316,18 @@ const handleNasaLongPress = async (row) => {
   })
 }
 
-const handleCellAction = async ({ row, columnKey }) => {
+const handleCellAction = async ({ row, columnKey, reset = false }) => {
   if (!row?.id || !columnKey) return
 
-  if (columnKey === 'worker_nasa' && isNasaWorkRow(row)) {
-    const current = String(row.nasa_status ?? '').trim()
+  if (processConfigs[columnKey]) {
+    const updates = buildProcessUpdates(row, processConfigs[columnKey], { reset })
+    if (!updates) return
+    await updatePlanRowFields({ rowId: row.id, updates })
+    return
+  }
+
+  if (columnKey === 'worker_nasa') {
+    const current = getNasaStatus(row)
     let next = ''
     const updates = {}
     if (!current || current === '없음' || current === '작업전') {
@@ -404,6 +499,7 @@ watch(
     @move-week="moveWeek"
     @reset-week="resetWeek"
     @go-register="goRegister"
+    @go-stats="goStats"
     @search-change="handleSearchChange"
     @select-tuesday="handleSelectTuesday"
     @edit-row="handleEditRow"
