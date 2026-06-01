@@ -659,7 +659,7 @@ function resetWeek() {
 }
 
 function goHome() {
-  router.push('/home')
+  router.push('/main')
 }
 
 function goMain() {

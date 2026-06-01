@@ -164,7 +164,7 @@ const handleEnablePush = async () => {
 
 const handleDesktopGateUnlocked = () => {
   desktopInstallGateVisible.value = false
-  router.push({ name: 'home' })
+  router.push({ name: 'main' })
 }
 
 // 뒤로가기/닫기 시도 차단

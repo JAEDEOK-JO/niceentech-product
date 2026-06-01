@@ -43,6 +43,9 @@ const isPrintSettingsOpen = ref(false)
 const activeSalesTab = ref('head')
 const isAsDialogOpen = ref(false)
 const selectedSalesMonth = ref(new Date())
+const selectedSalesWeekIndex = ref(null)
+const selectedSalesWeekRows = ref([])
+const loadingSalesReportWeek = ref(false)
 const isPrinting = ref(false)
 const editingAsId = ref(null)
 
@@ -72,6 +75,7 @@ const reportMonth = now.getMonth()
 const reportMonthLabel = `${reportMonth + 1}월`
 const reportMonthValue = `${reportYear}-${String(reportMonth + 1).padStart(2, '0')}-01`
 const reportYearStartValue = `${reportYear}-01-01`
+const selectedSalesReportMonth = ref(new Date(reportYear, reportMonth, 1))
 
 const toNumber = (value) => {
   const number = Number(value)
@@ -273,6 +277,9 @@ const saveWeeklySales = async () => {
   if (salesDialogMonthValue.value === reportMonthValue) {
     weeklySalesRows.value = payload
   }
+  if (salesDialogMonthValue.value === selectedSalesReportMonthValue.value && salesDialogMonthValue.value !== reportMonthValue) {
+    selectedSalesWeekRows.value = payload
+  }
 
   if (selectedSalesMonth.value.getFullYear() === reportYear) {
     yearlySalesRows.value = [
@@ -302,6 +309,9 @@ const deleteWeeklySales = async () => {
 
   if (monthValue === reportMonthValue) {
     weeklySalesRows.value = []
+  }
+  if (monthValue === selectedSalesReportMonthValue.value && monthValue !== reportMonthValue) {
+    selectedSalesWeekRows.value = []
   }
 
   if (selectedSalesMonth.value.getFullYear() === reportYear) {
@@ -394,17 +404,27 @@ const currentMonthRows = computed(() => companyRows.value.filter((row) => isCurr
 const salesBaselineRows = computed(() => companyRows.value.filter((row) => isSalesBaselineRow(row)))
 const confirmedRows = computed(() => currentMonthRows.value.filter((row) => Boolean(row?.order_confirmed)))
 const expectedRows = computed(() => salesBaselineRows.value.filter((row) => !Boolean(row?.order_confirmed)))
-const weeklySalesTotal = computed(() => weeklySalesRows.value.reduce((sum, row) => sum + toNumber(row.sales_amount), 0))
+const selectedSalesCumulativeRows = computed(() =>
+  currentSalesWeekRows.value.filter((row) => toNumber(row?.week_index) <= currentSalesWeekIndex.value),
+)
+const weeklySalesTotal = computed(() => selectedSalesCumulativeRows.value.reduce((sum, row) => sum + toNumber(row.sales_amount), 0))
 const salesProgress = computed(() => (!MONTHLY_TARGET ? 0 : Math.round((weeklySalesTotal.value / MONTHLY_TARGET) * 100)))
 const salesProgressWidth = computed(() => Math.min(100, Math.max(0, salesProgress.value)))
-const currentSalesWeekRow = computed(() =>
+const defaultSalesWeekIndex = computed(() =>
   [...weeklySalesRows.value]
     .sort((a, b) => toNumber(b?.week_index) - toNumber(a?.week_index))
-    .find((row) => toNumber(row?.sales_amount) > 0) ?? null,
+    .find((row) => toNumber(row?.sales_amount) > 0)?.week_index ?? Math.min(WEEK_COUNT, Math.ceil(now.getDate() / 7)),
 )
-const currentSalesWeekIndex = computed(() => toNumber(currentSalesWeekRow.value?.week_index) || 1)
-const currentSalesWeekLabel = computed(() => `${reportMonthLabel} ${currentSalesWeekIndex.value}주차`)
-const currentSalesWeekAmount = computed(() => toNumber(currentSalesWeekRow.value?.sales_amount))
+const selectedSalesReportMonthValue = computed(() => formatMonthValue(selectedSalesReportMonth.value))
+const selectedSalesReportMonthLabel = computed(() => `${selectedSalesReportMonth.value.getMonth() + 1}월`)
+const currentSalesWeekRows = computed(() =>
+  selectedSalesReportMonthValue.value === reportMonthValue ? weeklySalesRows.value : selectedSalesWeekRows.value,
+)
+const currentSalesWeekIndex = computed(() => toNumber(selectedSalesWeekIndex.value) || toNumber(defaultSalesWeekIndex.value) || 1)
+const currentSalesWeekRow = computed(() =>
+  currentSalesWeekRows.value.find((row) => toNumber(row?.week_index) === currentSalesWeekIndex.value) ?? null,
+)
+const currentSalesWeekLabel = computed(() => `${selectedSalesReportMonthLabel.value} ${currentSalesWeekIndex.value}주차`)
 const confirmedHeadTotal = computed(() => confirmedRows.value.reduce((sum, row) => sum + toNumber(row?.total_head_count), 0))
 const expectedHeadTotal = computed(() => expectedRows.value.reduce((sum, row) => sum + toNumber(row?.total_head_count), 0))
 const confirmedScrewTotal = computed(() => confirmedRows.value.reduce((sum, row) => sum + toNumber(row?.total_screw_count), 0))
@@ -489,9 +509,9 @@ const hasSalesDialogData = computed(() =>
   ),
 )
 const weeklySalesBreakdown = computed(() => {
-  const head = weeklySalesRows.value.reduce((sum, row) => sum + toNumber(row?.sales_amount_head), 0)
-  const screw = weeklySalesRows.value.reduce((sum, row) => sum + toNumber(row?.sales_amount_screw), 0)
-  const supipe = weeklySalesRows.value.reduce((sum, row) => sum + toNumber(row?.sales_amount_supipe), 0)
+  const head = selectedSalesCumulativeRows.value.reduce((sum, row) => sum + toNumber(row?.sales_amount_head), 0)
+  const screw = selectedSalesCumulativeRows.value.reduce((sum, row) => sum + toNumber(row?.sales_amount_screw), 0)
+  const supipe = selectedSalesCumulativeRows.value.reduce((sum, row) => sum + toNumber(row?.sales_amount_supipe), 0)
   return { head, screw, supipe, total: head + screw + supipe }
 })
 const currentSalesWeekBreakdown = computed(() => {
@@ -501,6 +521,35 @@ const currentSalesWeekBreakdown = computed(() => {
   const supipe = toNumber(row?.sales_amount_supipe)
   return { head, screw, supipe, total: head + screw + supipe }
 })
+const moveSalesReportWeek = async (delta) => {
+  const nextMonth = new Date(selectedSalesReportMonth.value)
+  let nextWeekIndex = currentSalesWeekIndex.value + delta
+
+  if (nextWeekIndex < 1) {
+    nextMonth.setMonth(nextMonth.getMonth() - 1)
+    nextWeekIndex = WEEK_COUNT
+  } else if (nextWeekIndex > WEEK_COUNT) {
+    nextMonth.setMonth(nextMonth.getMonth() + 1)
+    nextWeekIndex = 1
+  }
+
+  const nextMonthValue = formatMonthValue(nextMonth)
+  if (nextMonthValue !== reportMonthValue && nextMonthValue !== selectedSalesReportMonthValue.value) {
+    loadingSalesReportWeek.value = true
+    const { data, error } = await fetchWeeklySalesByMonth(nextMonthValue)
+    loadingSalesReportWeek.value = false
+
+    if (error) {
+      await alert(error.message ?? '매출 데이터를 불러오지 못했습니다.')
+      return
+    }
+
+    selectedSalesWeekRows.value = data
+  }
+
+  selectedSalesReportMonth.value = nextMonth
+  selectedSalesWeekIndex.value = nextWeekIndex
+}
 
 const openSalesDialog = () => {
   weeklySalesError.value = ''
@@ -603,7 +652,10 @@ onBeforeUnmount(revokeAsPreviewUrls)
           <h1 class="mt-1 text-lg font-extrabold text-slate-900 md:text-xl">영업부 대표 보고</h1>
           <p class="mt-2 text-[13px] text-slate-600">매출, 수주, AS 현황을 정리한 화면입니다.</p>
         </div>
-        <div class="flex shrink-0 gap-2">
+        <div class="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          <Button class="h-9 shrink-0 px-3 text-xs" variant="outline" :disabled="loadingSalesReportWeek" @click="moveSalesReportWeek(-1)">지난주</Button>
+          <span class="min-w-[64px] text-center text-xs font-bold text-slate-600">{{ currentSalesWeekLabel }}</span>
+          <Button class="h-9 shrink-0 px-3 text-xs" variant="outline" :disabled="loadingSalesReportWeek" @click="moveSalesReportWeek(1)">다음주</Button>
           <Button class="shrink-0" variant="outline" @click="openPrintSettings">인쇄</Button>
           <Button v-if="props.showBackButton" class="shrink-0" variant="outline" @click="emit('go-back')">가이드로 돌아가기</Button>
         </div>

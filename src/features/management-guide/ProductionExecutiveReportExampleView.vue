@@ -13,6 +13,7 @@ const PRODUCTION_REPAIR_HISTORY_TABLE = 'production_repair_history'
 const QUALITY_LIST_TABLE = 'quality_list'
 const QUALITY_AGGREGATION_START = new Date(2023, 0, 1)
 const QUALITY_THRESHOLD = 3000
+const WEEKLY_AVERAGE_START = new Date(2022, 8, 1)
 
 const emit = defineEmits(['go-back'])
 const props = defineProps({
@@ -111,6 +112,8 @@ const currentMonthWeekCutoff = new Date(
   Math.min(currentWeekTuesday.getDate(), new Date(reportYear, reportMonth + 1, 0).getDate()),
 )
 const currentMonthProgressLabel = `${reportMonthLabel} 현재까지`
+const weeklyAveragePeriodLabel = `2022년 9월 ~ ${reportYear}년 ${reportMonth + 1}월 현재까지`
+const weeklyAverageEnd = new Date(reportYear, reportMonth + 1, 0)
 
 const createDefaultRepairForm = (row = null) =>
   row
@@ -184,8 +187,6 @@ const isTwoYearsAgoRow = (row) => {
 }
 
 const fetchRows = async () => {
-  const fetchStart = new Date(twoYearsAgoYear, 0, 1)
-  const endOfYear = new Date(reportYear, 11, 31)
   const batchSize = 1000
   let from = 0
   let hasMore = true
@@ -196,10 +197,8 @@ const fetchRows = async () => {
     const { data, error } = await supabase
       .from(PRODUCT_LIST_TABLE)
       .select(
-        'id,work_type,head,hole,groove,test_date,complete,shipment,worker_t,worker_main,worker_nasa,worker_welding',
+        'id,work_type,head,hole,groove,test_date,complete,shipment,hold,worker_t,worker_main,worker_nasa,worker_welding',
       )
-      .gte('test_date', formatTestDate(fetchStart))
-      .lte('test_date', formatTestDate(endOfYear))
       .order('id', { ascending: false })
       .range(from, to)
 
@@ -234,6 +233,18 @@ const fetchRepairHistory = async () => {
 
 const buildQualityQtySum = (row) =>
   toNumber(row?.a25) +
+  toNumber(row?.a32) +
+  toNumber(row?.a40) +
+  toNumber(row?.a50) +
+  toNumber(row?.a65) +
+  toNumber(row?.m65) +
+  toNumber(row?.m80) +
+  toNumber(row?.m100) +
+  toNumber(row?.m125) +
+  toNumber(row?.m150) +
+  toNumber(row?.m200)
+
+const buildQualityListQtySum = (row) =>
   toNumber(row?.a32) +
   toNumber(row?.a40) +
   toNumber(row?.a50) +
@@ -364,7 +375,7 @@ const currentWeekSummaryRows = computed(() =>
     ...item,
     completedValue: currentWeekCounts.value[item.key],
     pendingValue: currentWeekPendingCounts.value[item.key],
-    notWeldedValue: item.key === 'nasa' ? null : currentWeekNotWeldedCounts.value[item.key],
+    notWeldedValue: ['groove', 'nasa'].includes(item.key) ? null : currentWeekNotWeldedCounts.value[item.key],
   })),
 )
 const currentYearSummaryRows = computed(() =>
@@ -402,18 +413,6 @@ const qualityAggregatedRows = computed(() => {
 
   return Object.values(grouped)
 })
-const buildQualityReturnMetric = (targetRows, label) => {
-  const qualifiedRows = targetRows.filter((row) => toNumber(row?.totalQty) > QUALITY_THRESHOLD)
-  const totalQty = qualifiedRows.reduce((sum, row) => sum + toNumber(row?.totalQty), 0)
-  const cancelQty = qualifiedRows.reduce((sum, row) => sum + toNumber(row?.cancelQty), 0)
-  return {
-    label,
-    qualifiedCount: qualifiedRows.length,
-    totalQty,
-    cancelQty,
-    ratio: totalQty > 0 ? (cancelQty * 100) / totalQty : 0,
-  }
-}
 const qualityReturnOverallSummary = computed(() => {
   const qualifiedRows = qualityAggregatedRows.value.filter((row) => toNumber(row?.totalQty) > QUALITY_THRESHOLD)
   const totalQty = qualifiedRows.reduce((sum, row) => sum + toNumber(row?.totalQty), 0)
@@ -424,19 +423,58 @@ const qualityReturnOverallSummary = computed(() => {
     ratio,
   }
 })
-const qualityReturnSummaryRows = computed(() => {
-  const weekRows = qualityAggregatedRows.value.filter(
-    (row) => startOfDay(row._date).getTime() === currentWeekTuesday.getTime(),
-  )
-  const monthRows = qualityAggregatedRows.value.filter(
-    (row) => row._date.getFullYear() === reportYear && row._date.getMonth() === reportMonth,
-  )
-  const yearRows = qualityAggregatedRows.value.filter((row) => row._date.getFullYear() === reportYear)
+const buildWeeklyAverage = (targetRows, buildValue) => {
+  const weeklyTotals = new Map()
+  for (const row of targetRows) {
+    const testDate = normalizeText(row?.test_date)
+    const date = parseFlexibleDate(testDate)
+    if (
+      !date ||
+      startOfDay(date).getTime() < startOfDay(WEEKLY_AVERAGE_START).getTime() ||
+      startOfDay(date).getTime() > startOfDay(weeklyAverageEnd).getTime()
+    ) {
+      continue
+    }
+    weeklyTotals.set(testDate, toNumber(weeklyTotals.get(testDate)) + toNumber(buildValue(row)))
+  }
+
+  const total = Array.from(weeklyTotals.values()).reduce((sum, value) => sum + toNumber(value), 0)
+  return {
+    average: weeklyTotals.size > 0 ? Math.round(total / weeklyTotals.size) : 0,
+  }
+}
+const weeklyAverageSummaryRows = computed(() => {
+  const productionRows = rows.value.filter((row) => !Boolean(row?.hold))
+  const qualityAverage = buildWeeklyAverage(qualityRows.value, buildQualityListQtySum)
+  const headAverage = buildWeeklyAverage(productionRows, (row) => row?.head)
+  const holeAverage = buildWeeklyAverage(productionRows, (row) => row?.hole)
+  const grooveAverage = buildWeeklyAverage(productionRows, (row) => row?.groove)
 
   return [
-    buildQualityReturnMetric(weekRows, `${formatTestDate(currentWeekTuesday)} 검수`),
-    buildQualityReturnMetric(monthRows, `${reportMonthLabel} 검수`),
-    buildQualityReturnMetric(yearRows, `${reportYear}년 검수`),
+    {
+      label: '검수리스트 증지 수량',
+      cardClass: 'border-rose-200 bg-rose-50',
+      valueClass: 'text-rose-700',
+      ...qualityAverage,
+    },
+    {
+      label: '생산계획 헤드',
+      cardClass: 'border-emerald-200 bg-emerald-50',
+      valueClass: 'text-emerald-700',
+      ...headAverage,
+    },
+    {
+      label: '생산계획 홀',
+      cardClass: 'border-cyan-200 bg-cyan-50',
+      valueClass: 'text-cyan-700',
+      ...holeAverage,
+    },
+    {
+      label: '생산계획 그루브',
+      cardClass: 'border-violet-200 bg-violet-50',
+      valueClass: 'text-violet-700',
+      ...grooveAverage,
+    },
   ]
 })
 
@@ -744,20 +782,16 @@ onMounted(async () => {
                     </p>
                   </div>
                 </div>
-                <div class="mt-4 grid gap-3 md:grid-cols-3">
+                <p class="mt-4 text-[15px] font-extrabold text-indigo-700">주간 평균 · {{ weeklyAveragePeriodLabel }}</p>
+                <div class="production-average-grid mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
                   <div
-                    v-for="item in qualityReturnSummaryRows"
+                    v-for="item in weeklyAverageSummaryRows"
                     :key="item.label"
-                    class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4"
+                    class="production-average-card min-w-0 rounded-xl border px-3 py-3"
+                    :class="item.cardClass"
                   >
-                    <p class="text-[12px] font-bold text-slate-600">{{ item.label }}</p>
-                    <p class="mt-2 text-2xl font-extrabold text-rose-600">{{ formatRatio(item.ratio) }}</p>
-                    <p class="mt-2 text-[12px] font-semibold text-slate-600">
-                      미생산 <span class="font-extrabold text-rose-600">{{ formatCount(item.cancelQty) }}</span>
-                    </p>
-                    <p class="mt-2 text-[11px] text-slate-500">
-                      {{ QUALITY_THRESHOLD.toLocaleString('ko-KR') }}개 초과 <span class="font-extrabold text-rose-600">{{ item.qualifiedCount }}건</span>
-                    </p>
+                    <p class="whitespace-nowrap text-[11px] font-bold text-slate-600">{{ item.label }}</p>
+                    <p class="mt-1 whitespace-nowrap text-xl font-extrabold" :class="item.valueClass">{{ formatCount(item.average) }}</p>
                   </div>
                 </div>
               </article>
@@ -1023,6 +1057,15 @@ onMounted(async () => {
 
   .production-print-grid-main {
     grid-template-columns: 1.05fr 0.95fr !important;
+  }
+
+  .production-average-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 6px !important;
+  }
+
+  .production-average-card {
+    padding: 8px !important;
   }
 }
 </style>

@@ -6,7 +6,6 @@ import MainRegisterPage from '@/pages/MainRegisterPage.vue'
 import MainEditPage from '@/pages/MainEditPage.vue'
 import CompanyRegisterPage from '@/pages/CompanyRegisterPage.vue'
 import CompanyListPage from '@/pages/CompanyListPage.vue'
-import HomePage from '@/pages/HomePage.vue'
 import QualityListPage from '@/pages/QualityListPage.vue'
 import QualityCreatePage from '@/pages/QualityCreatePage.vue'
 import QualityUpdatePage from '@/pages/QualityUpdatePage.vue'
@@ -36,7 +35,7 @@ import { isAdminRole, isDesignDepartment, isRootAdmin } from '@/utils/adminAcces
 const routes = [
   {
     path: '/',
-    redirect: '/home',
+    redirect: '/main',
   },
   {
     path: '/main',
@@ -76,9 +75,7 @@ const routes = [
   },
   {
     path: '/home',
-    name: 'home',
-    component: HomePage,
-    meta: { requiresAuth: true },
+    redirect: '/main',
   },
   {
     path: '/quality',
@@ -247,7 +244,7 @@ const routes = [
   },
   {
     path: '/:pathMatch(.*)*',
-    redirect: '/home',
+    redirect: '/main',
   },
 ]
 
@@ -268,7 +265,7 @@ router.beforeEach(async (to) => {
   }
 
   if (to.meta.guestOnly && isLoggedIn) {
-    return { name: 'home' }
+    return { name: 'main' }
   }
 
   if (to.meta.requiresRootAdmin || to.meta.requiresAdmin || to.meta.requiresDesignDepartment) {
@@ -276,13 +273,13 @@ router.beforeEach(async (to) => {
     if (!userId) return { name: 'login' }
     const { data: profile } = await supabase.from('profiles').select('role,department').eq('id', userId).maybeSingle()
     if (to.meta.requiresRootAdmin && !isRootAdmin(profile?.role)) {
-      return { name: 'home' }
+      return { name: 'main' }
     }
     if (to.meta.requiresAdmin && !isAdminRole(profile?.role)) {
-      return { name: 'home' }
+      return { name: 'main' }
     }
     if (to.meta.requiresDesignDepartment && !isAdminRole(profile?.role) && !isDesignDepartment(profile?.department)) {
-      return { name: 'home' }
+      return { name: 'main' }
     }
   }
 

@@ -70,7 +70,6 @@ const activeSection = computed(() => {
   if (route.path.startsWith('/shipment-schedule')) return 'shipment-schedule'
   if (route.path.startsWith('/inventory')) return 'inventory'
   if (route.path.startsWith('/main')) return 'main'
-  if (route.path.startsWith('/home')) return 'home'
   return ''
 })
 
