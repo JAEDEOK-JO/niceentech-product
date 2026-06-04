@@ -8,6 +8,7 @@ import AttendanceEmployeeMappingPanel from '@/features/attendance/components/Att
 import EmployeeAccountRegisterPanel from '@/features/settings/components/EmployeeAccountRegisterPanel.vue'
 import EmployeeOptionSettingsPanel from '@/features/settings/components/EmployeeOptionSettingsPanel.vue'
 import InventoryMaterialSettingsPanel from '@/features/settings/components/InventoryMaterialSettingsPanel.vue'
+import { clearCacheAndReload } from '@/features/settings/services/cacheRefresh.service'
 import packageJson from '../../package.json'
 
 const appVersion = packageJson.version
@@ -120,6 +121,19 @@ const handleDisableNotification = async () => {
   showSnack(result.ok ? '알림이 꺼졌습니다.' : '알림 끄기에 실패했습니다.')
 }
 
+const isRefreshingCache = ref(false)
+const handleCacheRefresh = async () => {
+  if (isRefreshingCache.value) return
+
+  isRefreshingCache.value = true
+  try {
+    await clearCacheAndReload()
+  } catch (error) {
+    isRefreshingCache.value = false
+    showSnack(error?.message || '캐시 새로고침에 실패했습니다.')
+  }
+}
+
 // 세션이 로드된 후 구독 상태 확인 (새로고침 시 타이밍 대응)
 watch(
   () => session.value?.user?.id ?? '',
@@ -229,6 +243,22 @@ watch(
           <article class="rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4">
             <p class="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">업데이트</p>
             <p class="mt-2 text-sm text-slate-600">새 버전이 배포되면 화면 하단에 알림이 표시됩니다.</p>
+          </article>
+          <article class="rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4">
+            <div class="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <p class="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">캐시 새로고침</p>
+                <p class="mt-2 text-sm text-slate-600">로그인은 유지하고 앱 캐시를 삭제한 뒤 완전히 새로고침합니다.</p>
+              </div>
+              <button
+                type="button"
+                class="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white disabled:opacity-40"
+                :disabled="isRefreshingCache"
+                @click="handleCacheRefresh"
+              >
+                {{ isRefreshingCache ? '새로고침 중...' : '캐시 새로고침' }}
+              </button>
+            </div>
           </article>
 
           <article v-if="isRootAdmin" class="rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4">

@@ -223,6 +223,13 @@ ipcMain.handle('get-printers', async () => {
   }))
 })
 
+ipcMain.handle('clear-cache-and-reload', async (event) => {
+  await event.sender.session.clearCache()
+  setImmediate(() => {
+    if (!event.sender.isDestroyed()) event.sender.reloadIgnoringCache()
+  })
+})
+
 ipcMain.handle('print-report', async (_, requestedOptions = {}) => {
   const window = getPrimaryWindow()
   if (!window || window.isDestroyed()) {
