@@ -50,6 +50,7 @@
 | test_date | text | N |  | 검수날짜, 주간 조회 기준 |
 | updated_at | timestamp with time zone | N | `now()` | 수정일시 |
 | groove | bigint | N | `'0'::bigint` | 그루브 수량 |
+| inch | double precision | N |  | 인치 숫자 |
 | work_type | text | N |  | 용접/무용접, 전실/입상, 나사, 기타 |
 | uid | uuid | N |  | 담당 사용자 ID |
 | name | text | N |  | 담당자명 |

@@ -18,7 +18,7 @@ const props = defineProps({
   showFullDates: { type: Boolean, default: false },
 })
 
-const clickableColumns = ['initial', 'design_distributed', 'name', 'company', 'place', 'area', 'drawing', 'worker_t', 'worker_nasa', 'worker_main', 'worker_welding']
+const clickableColumns = ['initial', 'design_distributed', 'name', 'company', 'place', 'area', 'drawing', 'worker_t', 'worker_nasa', 'worker_main', 'worker_welding', 'inch']
 const tableBorderStyle = {
   borderColor: 'rgba(0, 0, 0, 0.28)',
   borderWidth: '0.1px',
@@ -127,6 +127,13 @@ const tableWidthStyle = {
           <p class="inline-flex items-center rounded-full bg-violet-50 px-2.5 py-1 font-semibold text-violet-700 whitespace-nowrap">
             그루브 {{ displayCellText(row, 'groove') || '' }}
           </p>
+          <button
+            type="button"
+            class="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-1 font-semibold text-amber-700 whitespace-nowrap"
+            @click="onCellClick(row, 'inch')"
+          >
+            인치 {{ displayCellText(row, 'inch') || '' }}
+          </button>
           <p class="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 font-semibold text-emerald-700 whitespace-nowrap">
             중량 {{ displayCellText(row, 'weight') || '' }}
           </p>
@@ -166,6 +173,9 @@ const tableWidthStyle = {
           </span>
           <span class="rounded-full border border-violet-200 bg-violet-50 px-4 py-2 text-sm font-extrabold text-violet-800 shadow-sm">
             그루브 <span class="ml-1 text-[15px] text-violet-950">{{ overallTotals.groove }}</span>
+          </span>
+          <span class="rounded-full border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-extrabold text-amber-800 shadow-sm">
+            ?몄튂 <span class="ml-1 text-[15px] text-amber-950">{{ overallTotals.inch.toFixed(1) }}</span>
           </span>
           <span class="rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-extrabold text-emerald-800 shadow-sm">
             중량 <span class="ml-1 text-[15px] text-emerald-950">{{ overallTotals.weight.toFixed(1) }}</span>
@@ -237,6 +247,7 @@ const tableWidthStyle = {
             <td class="h-[50px] border border-slate-200 px-2 py-px align-middle text-center text-[13px]" :style="tableBorderStyle">{{ groupData.totals.head }}</td>
             <td class="h-[50px] border border-slate-200 px-2 py-px align-middle text-center text-[13px]" :style="tableBorderStyle">{{ groupData.totals.hole }}</td>
             <td class="h-[50px] border border-slate-200 px-2 py-px align-middle text-center text-[13px]" :style="tableBorderStyle">{{ groupData.totals.groove }}</td>
+            <td class="h-[50px] border border-slate-200 px-2 py-px align-middle text-center text-[13px]" :style="tableBorderStyle">{{ groupData.totals.inch.toFixed(1) }}</td>
             <td class="h-[50px] border border-slate-200 px-2 py-px align-middle text-center text-[13px]" :style="tableBorderStyle">{{ groupData.totals.weight.toFixed(1) }}</td>
             <td class="h-[50px] border border-slate-200 px-2 py-px align-middle text-center text-[13px]" :style="tableBorderStyle"></td>
             <td class="h-[50px] border border-slate-200 px-2 py-px align-middle text-center text-[13px]" :style="tableBorderStyle"></td>

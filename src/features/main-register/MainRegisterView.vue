@@ -207,7 +207,7 @@ const selectCalendarDate = (day) => {
           </div>
 
           <div class="md:col-span-2">
-            <div class="grid gap-5 md:grid-cols-4">
+            <div class="grid gap-5 md:grid-cols-5">
               <div>
                 <p class="mb-2 text-sm font-bold text-slate-700">헤드</p>
                 <Input
@@ -241,6 +241,17 @@ const selectCalendarDate = (day) => {
                   placeholder="숫자만 입력"
                   @keydown="emit('numeric-keydown', $event)"
                   @update:model-value="emit('update-form', 'groove', $event)"
+                />
+              </div>
+
+              <div>
+                <p class="mb-2 text-sm font-bold text-slate-700">인치</p>
+                <Input
+                  :model-value="form.inch"
+                  inputmode="decimal"
+                  placeholder="숫자 입력"
+                  @keydown="emit('weight-keydown', $event)"
+                  @update:model-value="emit('update-form', 'inch', $event)"
                 />
               </div>
 

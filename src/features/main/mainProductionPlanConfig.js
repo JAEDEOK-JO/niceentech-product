@@ -1,4 +1,5 @@
 import { getWeldingInspectorClass } from '@/utils/productionStatus'
+import { formatPositiveDecimal } from '@/features/main/productionPlanNumbers'
 
 export const qtyColumnWidth = 60
 export const statusColumnWidth = 55
@@ -49,6 +50,7 @@ export const tableColumns = [
   { label: '헤드', key: 'head', align: 'center', width: qtyColumnWidth },
   { label: '홀', key: 'hole', align: 'center', width: qtyColumnWidth },
   { label: '그루브', key: 'groove', align: 'center', width: qtyColumnWidth },
+  { label: '인치', key: 'inch', align: 'center', width: qtyColumnWidth },
   { label: '중량', key: 'weight', align: 'center', width: qtyColumnWidth },
   { label: '비고', key: 'memo', align: 'center', width: 310 },
   { label: '도면', key: 'drawing', align: 'center', width: 40 },
@@ -135,9 +137,9 @@ export const getCellText = (row, key, options = {}) => {
     return '없음'
   }
   if ((key === 'head' || key === 'hole' || key === 'groove') && Number(row?.[key] ?? 0) === 0) return ''
+  if (key === 'inch') return formatPositiveDecimal(row?.inch)
   if (key === 'weight') {
-    const value = Number(row?.weight ?? 0)
-    return Number.isFinite(value) && value > 0 ? value.toFixed(1) : ''
+    return formatPositiveDecimal(row?.weight, { fixed: true })
   }
   return row?.[key] ?? ''
 }

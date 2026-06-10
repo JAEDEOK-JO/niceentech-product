@@ -110,6 +110,17 @@ const handleDeleteRow = async (row) => {
   await deletePlanRow({ rowId: row.id })
 }
 
+const handleUpdateInch = async ({ row, value }) => {
+  if (!row?.id) return
+  const safeValue = String(value ?? '').trim()
+  await updatePlanRowFields({
+    rowId: row.id,
+    updates: {
+      inch: safeValue === '' ? null : Number(safeValue),
+    },
+  })
+}
+
 const handleCancelShipRow = async (row) => {
   if (!row?.id) return
   const updates = { shipment: false }
@@ -512,6 +523,7 @@ watch(
     @welding-start="handleWeldingStart"
     @welding-long-press="handleWeldingLongPress"
     @nasa-long-press="handleNasaLongPress"
+    @update-inch="handleUpdateInch"
     @move-test-date="handleMoveTestDate"
     @load-drawing-files="handleLoadDrawingFiles"
     @upload-drawing-files="handleUploadDrawingFiles"

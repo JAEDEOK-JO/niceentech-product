@@ -144,10 +144,11 @@ const getRowsTotals = (rows) =>
       acc.hole += toNumber(row.hole)
       acc.head += toNumber(row.head)
       acc.groove += toNumber(row.groove)
+      acc.inch += toNumber(row.inch)
       acc.weight += toNumber(row.weight)
       return acc
     },
-    { hole: 0, head: 0, groove: 0, weight: 0 },
+    { hole: 0, head: 0, groove: 0, inch: 0, weight: 0 },
   )
 
 const normalizeWorkType = (value) => {
@@ -333,9 +334,11 @@ export function useProductionPlan(session) {
     if (!silent) planLoading.value = true
     planError.value = ''
 
-    const baseColumns =
+    const legacyBaseColumns =
       'id,no,company_info,uid,initial,company,place,area,memo,full_text,work_type,hole,head,groove,weight,name,test_date,drawing,is_drawing,drawing_date,delivery_due_date,delay_time,delay_text,complete,complete_date,shipment,not_test,hold,outsourcing,paper,calculation,ahn,stamp,worker_t,worker_t_time,worker_t_time_final,worker_main,worker_main_time,worker_main_time_final,worker_nasa,worker_nasa_time,worker_nasa_time_final,worker_welding,worker_welding_time,worker_welding_time_final,marking_weld_a_status,marking_weld_a_started_on,marking_weld_a_completed_on,marking_weld_b_status,marking_weld_b_started_on,marking_weld_b_completed_on,marking_laser_1_status,marking_laser_1_started_on,marking_laser_1_completed_on,marking_laser_2_status,marking_laser_2_started_on,marking_laser_2_completed_on,cutting_status,beveling_status,beveling_started_on,beveling_completed_on,main_status,main_started_on,main_completed_on,nasa_status,nasa_started_on,nasa_completed_on,welding_status,welding_started_on,welding_completed_on,welding_inspector'
+    const baseColumns = legacyBaseColumns.replace('groove,weight', 'groove,inch,weight')
     const withVirtualColumns = `${baseColumns},virtual_drawing_distributed`
+    const legacyWithVirtualColumns = `${legacyBaseColumns},virtual_drawing_distributed`
     const runQuery = (columns) => {
       let query = supabase.from(PRODUCT_LIST_TABLE).select(columns)
       if (!searchAllDates.value) {
@@ -351,8 +354,13 @@ export function useProductionPlan(session) {
     }
 
     let { data, error } = await runQuery(withVirtualColumns)
+    let usedLegacyInchFallback = false
+    if (error && String(error.message ?? '').includes('inch')) {
+      usedLegacyInchFallback = true
+      ;({ data, error } = await runQuery(legacyWithVirtualColumns))
+    }
     if (error && String(error.message ?? '').includes('virtual_drawing_distributed')) {
-      ;({ data, error } = await runQuery(baseColumns))
+      ;({ data, error } = await runQuery(usedLegacyInchFallback ? legacyBaseColumns : baseColumns))
     }
 
     if (!silent) planLoading.value = false
@@ -363,7 +371,9 @@ export function useProductionPlan(session) {
       return
     }
 
-    planRows.value = data ?? []
+    planRows.value = usedLegacyInchFallback
+      ? (data ?? []).map((row) => ({ ...row, inch: null }))
+      : data ?? []
   }
 
   const groupedRows = computed(() => {
@@ -891,7 +901,9 @@ export function useProductionPlan(session) {
       .eq('id', rowId)
 
     if (error) {
-      planError.value = `행 수정 실패: ${error.message}`
+      planError.value = String(error.message ?? '').includes('inch')
+        ? '인치 DB 컬럼이 아직 적용되지 않았습니다. product_list.inch 컬럼 추가 후 다시 저장해주세요.'
+        : `행 수정 실패: ${error.message}`
       return { ok: false, reason: 'db_error' }
     }
 
@@ -907,6 +919,16 @@ export function useProductionPlan(session) {
 
   const deletePlanRow = async ({ rowId }) => {
     if (!rowId) return { ok: false, reason: 'invalid_row' }
+
+    const { error: weldingDeleteError } = await supabase
+      .from('welding_inspections')
+      .delete()
+      .eq('product_list_id', rowId)
+
+    if (weldingDeleteError) {
+      planError.value = `용접 검수 기록 삭제 실패: ${weldingDeleteError.message}`
+      return { ok: false, reason: 'db_error' }
+    }
 
     const { error } = await supabase
       .from(PRODUCT_LIST_TABLE)

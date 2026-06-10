@@ -6,6 +6,7 @@ import { useAuth } from '@/composables/useAuth'
 import { useProfile } from '@/composables/useProfile'
 import { supabase } from '@/lib/supabase'
 import { isAdminRole, isDesignDepartment } from '@/utils/adminAccess'
+import { sanitizeDecimalOne, sanitizeInteger } from '@/features/main/productionPlanNumbers'
 
 const route = useRoute()
 const router = useRouter()
@@ -36,6 +37,7 @@ const form = reactive({
   head: '',
   hole: '',
   groove: '',
+  inch: '',
   weight: '',
   memo: '',
   isTest: true,
@@ -95,21 +97,17 @@ const goCompanyRegister = () => {
   })
 }
 
-const sanitizeInteger = (value) => String(value ?? '').replace(/\D/g, '')
-
-const sanitizeWeight = (value) => {
-  const raw = String(value ?? '').replace(/[^\d.]/g, '')
-  const [integerPart = '', decimalPart = ''] = raw.split('.')
-  return decimalPart ? `${integerPart}.${decimalPart.slice(0, 1)}` : integerPart
-}
-
 const updateForm = (field, value) => {
   if (field === 'head' || field === 'hole' || field === 'groove') {
     form[field] = sanitizeInteger(value)
     return
   }
+  if (field === 'inch') {
+    form.inch = sanitizeDecimalOne(value)
+    return
+  }
   if (field === 'weight') {
-    form.weight = sanitizeWeight(value)
+    form.weight = sanitizeDecimalOne(value)
     return
   }
   if (field === 'isTest') {
@@ -264,6 +262,7 @@ const performSubmit = async () => {
     head: form.head === '' ? null : Number(form.head),
     hole: form.hole === '' ? null : Number(form.hole),
     groove: form.groove === '' ? null : Number(form.groove),
+    inch: form.inch === '' ? null : Number(form.inch),
     weight: form.weight === '' ? null : Number(form.weight),
     delivery_due_date: form.deliveryDueDate || null,
     memo: String(form.memo).trim() || '',
@@ -276,7 +275,9 @@ const performSubmit = async () => {
   saving.value = false
 
   if (error) {
-    saveError.value = `등록 실패: ${error.message}`
+    saveError.value = String(error.message ?? '').includes('inch')
+      ? '등록 실패: 인치 DB 컬럼이 아직 적용되지 않았습니다. product_list.inch 컬럼 추가 후 다시 등록해주세요.'
+      : `등록 실패: ${error.message}`
     return
   }
 

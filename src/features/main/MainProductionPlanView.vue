@@ -9,6 +9,7 @@ import { printCurrentPage } from '@/features/printing/pagePrint'
 import { useDialog } from '@/composables/useDialog'
 import { isAdminRole, isProductionAdmin } from '@/utils/adminAccess'
 import { WELDING_INSPECTORS, getWeldingInspectorClass } from '@/utils/productionStatus'
+import { sanitizeDecimalOne } from '@/features/main/productionPlanNumbers'
 
 const { confirm, alert } = useDialog()
 
@@ -46,6 +47,7 @@ const emit = defineEmits([
   'welding-long-press',
   'nasa-long-press',
   'welding-start',
+  'update-inch',
 ])
 
 const overallTotals = computed(() =>
@@ -54,10 +56,11 @@ const overallTotals = computed(() =>
       acc.head += Number(group?.totals?.head ?? 0)
       acc.hole += Number(group?.totals?.hole ?? 0)
       acc.groove += Number(group?.totals?.groove ?? 0)
+      acc.inch += Number(group?.totals?.inch ?? 0)
       acc.weight += Number(group?.totals?.weight ?? 0)
       return acc
     },
-    { head: 0, hole: 0, groove: 0, weight: 0 },
+    { head: 0, hole: 0, groove: 0, inch: 0, weight: 0 },
   ),
 )
 
@@ -76,6 +79,9 @@ const selectedRowId = ref(null)
 const isTestDateDialogOpen = ref(false)
 const pendingTestDateIso = ref('')
 const activeTestDateRow = ref(null)
+const isInchDialogOpen = ref(false)
+const activeInchRow = ref(null)
+const inchInput = ref('')
 
 const isShipmentConfirmOpen = ref(false)
 const activeShipmentRow = ref(null)
@@ -377,10 +383,52 @@ const handleDeleteRow = () => {
   closeRowDialog()
 }
 
+const openInchDialog = (row) => {
+  activeInchRow.value = row
+  inchInput.value = sanitizeDecimalOne(row?.inch ?? '')
+  isInchDialogOpen.value = true
+}
+
+const closeInchDialog = () => {
+  isInchDialogOpen.value = false
+  activeInchRow.value = null
+  inchInput.value = ''
+}
+
+const handleInchInput = (value) => {
+  inchInput.value = sanitizeDecimalOne(value)
+}
+
+const inchSubmitLabel = computed(() => {
+  const currentValue = String(activeInchRow.value?.inch ?? '').trim()
+  return currentValue ? '수정' : '저장'
+})
+
+const handleInchKeydown = (event) => {
+  if (event.ctrlKey || event.metaKey) return
+  if (['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Tab', 'Home', 'End', 'Enter'].includes(event.key)) return
+  if (/^\d$/.test(event.key)) return
+  if (event.key === '.' && !String(event.target?.value ?? '').includes('.')) return
+  event.preventDefault()
+}
+
+const confirmInch = () => {
+  if (!activeInchRow.value) return
+  emit('update-inch', {
+    row: activeInchRow.value,
+    value: inchInput.value,
+  })
+  closeInchDialog()
+}
+
 const handleCellClick = ({ row, columnKey }) => {
   if (!row?.id || !columnKey) return
   if (columnKey === 'memo') {
     openRowMenu(row)
+    return
+  }
+  if (columnKey === 'inch') {
+    openInchDialog(row)
     return
   }
   if (columnKey === 'area') {
@@ -914,6 +962,42 @@ const selectDrawingFile = (file) => {
       </div>
     </main>
 
+
+    <div
+      v-if="isInchDialogOpen && activeInchRow"
+      class="print-hide fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 px-4"
+    >
+      <div class="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+        <div class="flex items-start justify-between gap-4">
+          <div class="min-w-0">
+            <h3 class="text-base font-extrabold text-slate-900">인치 입력</h3>
+            <p class="mt-2 truncate text-sm font-semibold text-slate-700">
+              {{ activeInchRow.company || '-' }} / {{ activeInchRow.place || '-' }}
+            </p>
+            <p class="truncate text-sm text-slate-500">{{ activeInchRow.area || '-' }}</p>
+          </div>
+          <button type="button" class="text-sm text-slate-500 hover:text-slate-700" @click="closeInchDialog">닫기</button>
+        </div>
+
+        <div class="mt-5">
+          <p class="mb-2 text-sm font-bold text-slate-700">인치</p>
+          <Input
+            class="h-11"
+            :model-value="inchInput"
+            inputmode="decimal"
+            placeholder="숫자 입력"
+            autofocus
+            @keydown="handleInchKeydown"
+            @update:model-value="handleInchInput"
+          />
+        </div>
+
+        <div class="mt-6 flex justify-end gap-2">
+          <Button class="h-10 px-4 text-sm" variant="outline" @click="closeInchDialog">닫기</Button>
+          <Button class="h-10 px-4 text-sm" @click="confirmInch">{{ inchSubmitLabel }}</Button>
+        </div>
+      </div>
+    </div>
 
     <div
       v-if="isTestDateDialogOpen && activeTestDateRow"

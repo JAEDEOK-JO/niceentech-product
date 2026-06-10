@@ -74,12 +74,13 @@ const createWeldingMetricState = (managers, detail = false) =>
       ? {
           inProgressHead: 0,
           completedHead: 0,
+          completedInch: 0,
           misproductionCount: 0,
           shortageCount: 0,
           inspectionRows: [],
           issueRows: [],
         }
-      : { completedHead: 0, misproductionCount: 0, shortageCount: 0 }
+      : { completedHead: 0, completedInch: 0, misproductionCount: 0, shortageCount: 0 }
     return acc
   }, {})
 
@@ -93,6 +94,10 @@ const normalizeText = (value) => String(value ?? '').trim()
 const formatTon = (value) => `${Number(value || 0).toLocaleString('ko-KR', { minimumFractionDigits: 0, maximumFractionDigits: 1 })}톤`
 const formatCount = (value) => Number(value || 0).toLocaleString('ko-KR')
 const formatHeadCount = (value) => `${formatCount(value)}개`
+const formatInch = (value) =>
+  Number(value || 0).toLocaleString('ko-KR', { minimumFractionDigits: 0, maximumFractionDigits: 1 })
+const formatIssuePair = (misproductionCount, shortageCount) =>
+  `${formatCount(misproductionCount)}건/${formatCount(shortageCount)}건`
 const sanitizeDecimalInput = (value) => {
   const sanitized = String(value ?? '').replace(/[^\d.]/g, '')
   const [integerPart = '', ...decimalParts] = sanitized.split('.')
@@ -231,12 +236,45 @@ const fetchLegacyInventoryEntriesByMonth = async (monthValue) => {
 const fetchWeldingInspections = async () => {
   const { data, error } = await supabase
     .from('welding_inspections')
-    .select('id,inspector,welding_status,head_count,drawing_no,company,place,area,test_date,created_at')
+    .select('id,product_list_id,inspector,welding_status,head_count,drawing_no,company,place,area,test_date,created_at')
     .gte('created_at', weldingFetchStart)
     .lte('created_at', weldingFetchEnd)
     .order('created_at', { ascending: false })
   if (error) throw new Error(error.message ?? '용접 검수 데이터를 불러오지 못했습니다.')
-  return data ?? []
+
+  const rows = data ?? []
+  const productIds = [...new Set(rows.map((row) => row.product_list_id).filter(Boolean))]
+  if (productIds.length === 0) return []
+
+  let { data: productRows, error: productError } = await supabase
+    .from('product_list')
+    .select('id,head,inch')
+    .in('id', productIds)
+
+  if (productError) {
+    if (String(productError.message ?? '').includes('inch')) {
+      const fallbackResult = await supabase
+        .from('product_list')
+        .select('id,head')
+        .in('id', productIds)
+      if (fallbackResult.error) throw new Error(fallbackResult.error.message ?? '생산계획 데이터를 불러오지 못했습니다.')
+      productRows = (fallbackResult.data ?? []).map((row) => ({ ...row, inch: 0 }))
+    } else {
+      throw new Error(productError.message ?? '생산계획 데이터를 불러오지 못했습니다.')
+    }
+  }
+
+  const productMap = new Map((productRows ?? []).map((row) => [row.id, row]))
+  return rows
+    .filter((row) => row.product_list_id && productMap.has(row.product_list_id))
+    .map((row) => {
+      const productRow = productMap.get(row.product_list_id)
+      return {
+        ...row,
+        head_count: productRow ? toNumber(productRow.head) : toNumber(row.head_count),
+        inch: productRow ? toNumber(productRow.inch) : 0,
+      }
+    })
 }
 
 const fetchWeldingIssues = async () => {
@@ -466,7 +504,10 @@ const weldingMetrics = computed(() => {
     const inspector = weldingComparisonManagers.value.includes(inspectorName) ? inspectorName : null
     if (!inspector) continue
     if (row.welding_status === '작업중') state[inspector].inProgressHead += toNumber(row.head_count)
-    if (row.welding_status === '작업완료') state[inspector].completedHead += toNumber(row.head_count)
+    if (row.welding_status === '작업완료') {
+      state[inspector].completedHead += toNumber(row.head_count)
+      state[inspector].completedInch += toNumber(row.inch)
+    }
     state[inspector].inspectionRows.push(row)
   }
 
@@ -493,7 +534,10 @@ const monthlyWeldingMetrics = computed(() =>
       const inspectorName = normalizeText(row.inspector)
       const inspector = weldingComparisonManagers.value.includes(inspectorName) ? inspectorName : null
       if (!inspector) continue
-      if (row.welding_status === '작업완료') state[inspector].completedHead += toNumber(row.head_count)
+      if (row.welding_status === '작업완료') {
+        state[inspector].completedHead += toNumber(row.head_count)
+        state[inspector].completedInch += toNumber(row.inch)
+      }
     }
 
     for (const row of weldingIssues.value) {
@@ -741,7 +785,7 @@ onMounted(fetchReportData)
                 <template v-for="(manager, mIdx) in weldingComparisonManagers" :key="manager">
                   <tr :class="mIdx > 0 ? 'border-t-2 border-slate-300' : ''">
                     <td class="border border-slate-200 px-3 text-center text-xs font-extrabold text-slate-800" rowspan="3">{{ manager }}</td>
-                    <td class="border border-slate-200 px-3 py-0 text-center text-xs font-semibold text-slate-600" style="height:48px">완료 헤드</td>
+                    <td class="border border-slate-200 px-3 py-0 text-center text-xs font-semibold text-slate-600" style="height:48px">완료헤드</td>
                     <td v-for="month in monthlyWeldingMetrics" :key="month.key" class="border border-slate-200 px-4 py-0 text-center" style="height:48px">
                       <template v-if="month.metrics[manager].completedHead > 0">
                         <span class="text-lg font-extrabold text-slate-900">{{ formatCount(month.metrics[manager].completedHead) }}</span>
@@ -750,20 +794,20 @@ onMounted(fetchReportData)
                     </td>
                   </tr>
                   <tr>
-                    <td class="border border-slate-200 px-3 py-0 text-center text-xs font-semibold text-slate-600" style="height:48px">오제작</td>
+                    <td class="border border-slate-200 px-3 py-0 text-center text-xs font-semibold text-slate-600" style="height:48px">인치</td>
                     <td v-for="month in monthlyWeldingMetrics" :key="month.key" class="border border-slate-200 px-4 py-0 text-center" style="height:48px">
-                      <template v-if="month.metrics[manager].misproductionCount > 0">
-                        <span class="text-lg font-extrabold text-amber-600">{{ month.metrics[manager].misproductionCount }}</span>
-                        <span class="ml-1 text-[11px] text-slate-400">건</span>
+                      <template v-if="month.metrics[manager].completedInch > 0">
+                        <span class="text-lg font-extrabold text-indigo-700">{{ formatInch(month.metrics[manager].completedInch) }}</span>
                       </template>
                     </td>
                   </tr>
                   <tr>
-                    <td class="border border-slate-200 px-3 py-0 text-center text-xs font-semibold text-slate-600" style="height:48px">누락분</td>
+                    <td class="border border-slate-200 px-3 py-0 text-center text-xs font-semibold text-slate-600" style="height:48px">오제작/누락분</td>
                     <td v-for="month in monthlyWeldingMetrics" :key="month.key" class="border border-slate-200 px-4 py-0 text-center" style="height:48px">
-                      <template v-if="month.metrics[manager].shortageCount > 0">
-                        <span class="text-lg font-extrabold text-rose-600">{{ month.metrics[manager].shortageCount }}</span>
-                        <span class="ml-1 text-[11px] text-slate-400">건</span>
+                      <template v-if="month.metrics[manager].misproductionCount > 0 || month.metrics[manager].shortageCount > 0">
+                        <span class="text-lg font-extrabold text-amber-700">
+                          {{ formatIssuePair(month.metrics[manager].misproductionCount, month.metrics[manager].shortageCount) }}
+                        </span>
                       </template>
                     </td>
                   </tr>
