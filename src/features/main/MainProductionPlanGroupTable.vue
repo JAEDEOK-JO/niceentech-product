@@ -55,6 +55,7 @@ const onCellClick = (row, columnKey) => {
 }
 const displayCellText = (row, key) => getCellText(row, key, { includeYear: props.showFullDates })
 const displayWorkType = (row) => String(row?.work_type ?? '').trim() || '기타'
+const formatIntegerTotal = (value) => Math.round(Number(value || 0)).toLocaleString('ko-KR')
 const tableWidthStyle = {
   '--production-plan-table-width': `${totalTableWidth}px`,
 }
@@ -175,7 +176,7 @@ const tableWidthStyle = {
             그루브 <span class="ml-1 text-[15px] text-violet-950">{{ overallTotals.groove }}</span>
           </span>
           <span class="rounded-full border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-extrabold text-amber-800 shadow-sm">
-            인치 총합 <span class="ml-1 text-[15px] text-amber-950">{{ overallTotals.inch.toFixed(1) }}</span>
+            인치 <span class="ml-1 text-[15px] text-amber-950">{{ formatIntegerTotal(overallTotals.inch) }}</span>
           </span>
           <span class="rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-extrabold text-emerald-800 shadow-sm">
             중량 <span class="ml-1 text-[15px] text-emerald-950">{{ overallTotals.weight.toFixed(1) }}</span>
@@ -247,7 +248,7 @@ const tableWidthStyle = {
             <td class="h-[50px] border border-slate-200 px-2 py-px align-middle text-center text-[13px]" :style="tableBorderStyle">{{ groupData.totals.head }}</td>
             <td class="h-[50px] border border-slate-200 px-2 py-px align-middle text-center text-[13px]" :style="tableBorderStyle">{{ groupData.totals.hole }}</td>
             <td class="h-[50px] border border-slate-200 px-2 py-px align-middle text-center text-[13px]" :style="tableBorderStyle">{{ groupData.totals.groove }}</td>
-            <td class="h-[50px] border border-slate-200 px-2 py-px align-middle text-center text-[13px]" :style="tableBorderStyle">{{ groupData.totals.inch.toFixed(1) }}</td>
+            <td class="h-[50px] border border-slate-200 px-2 py-px align-middle text-center text-[13px]" :style="tableBorderStyle">{{ formatIntegerTotal(groupData.totals.inch) }}</td>
             <td class="h-[50px] border border-slate-200 px-2 py-px align-middle text-center text-[13px]" :style="tableBorderStyle">{{ groupData.totals.weight.toFixed(1) }}</td>
             <td class="h-[50px] border border-slate-200 px-2 py-px align-middle text-center text-[13px]" :style="tableBorderStyle"></td>
             <td class="h-[50px] border border-slate-200 px-2 py-px align-middle text-center text-[13px]" :style="tableBorderStyle"></td>
