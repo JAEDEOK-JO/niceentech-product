@@ -175,7 +175,7 @@ const tableWidthStyle = {
             그루브 <span class="ml-1 text-[15px] text-violet-950">{{ overallTotals.groove }}</span>
           </span>
           <span class="rounded-full border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-extrabold text-amber-800 shadow-sm">
-            ?몄튂 <span class="ml-1 text-[15px] text-amber-950">{{ overallTotals.inch.toFixed(1) }}</span>
+            인치 총합 <span class="ml-1 text-[15px] text-amber-950">{{ overallTotals.inch.toFixed(1) }}</span>
           </span>
           <span class="rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-extrabold text-emerald-800 shadow-sm">
             중량 <span class="ml-1 text-[15px] text-emerald-950">{{ overallTotals.weight.toFixed(1) }}</span>
