@@ -55,7 +55,7 @@ const onCellClick = (row, columnKey) => {
 }
 const displayCellText = (row, key) => getCellText(row, key, { includeYear: props.showFullDates })
 const displayWorkType = (row) => String(row?.work_type ?? '').trim() || '기타'
-const formatIntegerTotal = (value) => Math.round(Number(value || 0)).toLocaleString('ko-KR')
+const formatIntegerTotal = (value) => String(Math.round(Number(value || 0)))
 const tableWidthStyle = {
   '--production-plan-table-width': `${totalTableWidth}px`,
 }
