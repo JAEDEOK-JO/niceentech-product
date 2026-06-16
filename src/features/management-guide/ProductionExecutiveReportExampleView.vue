@@ -85,15 +85,11 @@ const toNumber = (value) => {
   return Number.isFinite(num) ? num : 0
 }
 const normalizeText = (value) => String(value ?? '').trim()
-const isDoneStatus = (value) => {
-  const text = normalizeText(value)
-  return text === '작업완료' || text === '출하완료'
-}
 const isCompletedOrShipped = (row) => Boolean(row?.complete) || Boolean(row?.shipment)
-const isNotWelded = (row) => {
-  if (normalizeText(row?.work_type) === '나사') return false
-  return !isDoneStatus(row?.worker_welding)
-}
+const isInProgressStatus = (value) => normalizeText(value).includes('작업중')
+const isProductionInProgress = (row) =>
+  !isCompletedOrShipped(row) &&
+  (isInProgressStatus(row?.worker_t) || isInProgressStatus(row?.worker_nasa) || isInProgressStatus(row?.worker_main))
 const formatCount = (value, unit = '개') => `${Number(value || 0).toLocaleString('ko-KR')}${unit}`
 const formatCurrency = (value) => `${Number(value || 0).toLocaleString('ko-KR')}원`
 const formatRatio = (value) => `${Number(value || 0).toFixed(2)}%`
@@ -106,12 +102,9 @@ const formatShortMonthDay = (value) => {
   return `${String(parsed.getMonth() + 1).padStart(2, '0')}월 ${String(parsed.getDate()).padStart(2, '0')}일`
 }
 const currentWeekTuesday = getUpcomingTuesday(now)
-const currentMonthWeekCutoff = new Date(
-  reportYear,
-  reportMonth,
-  Math.min(currentWeekTuesday.getDate(), new Date(reportYear, reportMonth + 1, 0).getDate()),
-)
+const currentMonthProgressCutoff = startOfDay(now)
 const currentMonthProgressLabel = `${reportMonthLabel} 현재까지`
+const currentMonthProgressRangeLabel = `${reportMonth + 1}월 1일~오늘까지`
 const weeklyAveragePeriodLabel = `2022년 9월 ~ ${reportYear}년 ${reportMonth + 1}월 현재까지`
 const weeklyAverageEnd = new Date(reportYear, reportMonth + 1, 0)
 
@@ -197,7 +190,7 @@ const fetchRows = async () => {
     const { data, error } = await supabase
       .from(PRODUCT_LIST_TABLE)
       .select(
-        'id,work_type,head,hole,groove,test_date,complete,shipment,hold,worker_t,worker_main,worker_nasa,worker_welding',
+        'id,work_type,head,hole,groove,test_date,complete,shipment,hold,worker_t,worker_main,worker_nasa',
       )
       .order('id', { ascending: false })
       .range(from, to)
@@ -323,7 +316,7 @@ const previousMonthRows = computed(() =>
 const currentMonthProgressRows = computed(() =>
   currentMonthRows.value.filter((row) => {
     const date = getMonthlyReferenceDate(row)
-    return date ? startOfDay(date).getTime() <= startOfDay(currentMonthWeekCutoff).getTime() : false
+    return date ? startOfDay(date).getTime() <= currentMonthProgressCutoff.getTime() : false
   }),
 )
 const currentYearRows = computed(() => rows.value.filter((row) => isCompletedOrShipped(row) && isYearRow(row)))
@@ -342,8 +335,7 @@ const currentWeekTargetRows = computed(() =>
   }),
 )
 const currentWeekRows = computed(() => currentWeekTargetRows.value.filter((row) => isCompletedOrShipped(row)))
-const currentWeekPendingRows = computed(() => currentWeekTargetRows.value.filter((row) => !isCompletedOrShipped(row)))
-const currentWeekNotWeldedRows = computed(() => currentWeekTargetRows.value.filter((row) => isNotWelded(row)))
+const currentWeekInProgressRows = computed(() => currentWeekTargetRows.value.filter((row) => isProductionInProgress(row)))
 
 const buildCategoryCounts = (targetRows) => {
   const head = targetRows.reduce((sum, row) => sum + toNumber(row?.head), 0)
@@ -366,16 +358,16 @@ const currentYearCounts = computed(() => buildCategoryCounts(currentYearRows.val
 const currentYearProgressCounts = computed(() => buildCategoryCounts(currentYearProgressRows.value))
 const previousYearCounts = computed(() => buildCategoryCounts(previousYearRows.value))
 const twoYearsAgoYearCounts = computed(() => buildCategoryCounts(twoYearsAgoYearRows.value))
+const currentWeekTotalCounts = computed(() => buildCategoryCounts(currentWeekTargetRows.value))
 const currentWeekCounts = computed(() => buildCategoryCounts(currentWeekRows.value))
-const currentWeekPendingCounts = computed(() => buildCategoryCounts(currentWeekPendingRows.value))
-const currentWeekNotWeldedCounts = computed(() => buildCategoryCounts(currentWeekNotWeldedRows.value))
+const currentWeekInProgressCounts = computed(() => buildCategoryCounts(currentWeekInProgressRows.value))
 const currentMonthTotal = computed(() => Object.values(currentCounts.value).reduce((sum, value) => sum + toNumber(value), 0))
 const currentWeekSummaryRows = computed(() =>
   categoryMeta.map((item) => ({
     ...item,
+    totalValue: currentWeekTotalCounts.value[item.key],
+    inProgressValue: currentWeekInProgressCounts.value[item.key],
     completedValue: currentWeekCounts.value[item.key],
-    pendingValue: currentWeekPendingCounts.value[item.key],
-    notWeldedValue: ['groove', 'nasa'].includes(item.key) ? null : currentWeekNotWeldedCounts.value[item.key],
   })),
 )
 const currentYearSummaryRows = computed(() =>
@@ -684,12 +676,14 @@ onMounted(async () => {
             <div class="production-print-grid-top grid items-stretch gap-4 xl:grid-cols-2">
               <article class="h-full rounded-2xl border border-rose-200 bg-rose-50 p-4">
                 <p class="text-[15px] font-extrabold text-rose-900">이번주 생산량</p>
-                <p class="mt-1 text-[13px] font-semibold text-rose-700">{{ formatTestDate(currentWeekTuesday) }} 검수 기준</p>
+                <p class="mt-1 text-[13px] font-semibold text-rose-700">
+                  {{ formatTestDate(currentWeekTuesday) }} 검수 기준 (완료는 무용접까지 완료했을때 카운트)
+                </p>
                 <div class="mt-4 space-y-2">
                   <div
                     v-for="item in currentWeekSummaryRows"
                     :key="`${item.key}-week`"
-                    class="grid min-h-[64px] grid-cols-[88px_1fr_1.4fr] items-center gap-3 rounded-xl bg-white/80 px-3 py-2"
+                    class="grid min-h-[64px] grid-cols-[88px_1fr_1fr_1fr] items-center gap-3 rounded-xl bg-white/80 px-3 py-2"
                   >
                     <div class="flex items-center gap-2 text-sm font-bold text-slate-900">
                       <span class="h-2.5 w-2.5 rounded-full" :style="{ backgroundColor: item.color }" />
@@ -701,20 +695,16 @@ onMounted(async () => {
                       </div>
                     </div>
                     <div class="border-r border-slate-200 pr-3 text-center">
+                      <p class="text-[10px] font-bold text-slate-500">총수량</p>
+                      <p class="text-lg font-extrabold leading-tight text-slate-900">{{ formatCount(item.totalValue) }}</p>
+                    </div>
+                    <div class="border-r border-slate-200 pr-3 text-center">
+                      <p class="text-[10px] font-bold text-amber-600">작업중</p>
+                      <p class="text-lg font-extrabold leading-tight text-amber-700">{{ formatCount(item.inProgressValue) }}</p>
+                    </div>
+                    <div class="text-center">
                       <p class="text-[10px] font-bold text-emerald-600">완료/출하</p>
                       <p class="text-lg font-extrabold leading-tight text-emerald-700">{{ formatCount(item.completedValue) }}</p>
-                    </div>
-                    <div class="grid grid-cols-2 gap-2 pl-1">
-                      <div class="text-center">
-                        <p class="text-[10px] font-bold text-slate-500">미완료</p>
-                        <p class="text-sm font-bold text-slate-700">{{ formatCount(item.pendingValue) }}</p>
-                      </div>
-                      <div class="text-center">
-                        <p class="text-[10px] font-bold text-amber-600">미용접</p>
-                        <p class="text-sm font-bold text-amber-700">
-                          {{ item.notWeldedValue == null ? '-' : formatCount(item.notWeldedValue) }}
-                        </p>
-                      </div>
                     </div>
                   </div>
                 </div>
@@ -800,7 +790,7 @@ onMounted(async () => {
                 <p class="text-[15px] font-extrabold text-slate-900">
                   {{ twoMonthsAgoLabel }} / {{ previousMonthLabel }} / {{ currentMonthProgressLabel }} 비교
                 </p>
-                <p class="mt-1 text-[14px] text-slate-500">이번달은 이번 주 화요일 기준 누적만 반영합니다.</p>
+                <p class="mt-1 text-[14px] text-slate-500">이번달은 {{ currentMonthProgressRangeLabel }} 반영합니다.</p>
                 <div class="mt-4">
                   <table class="min-w-full table-fixed border-collapse text-sm">
                     <thead class="border-b border-slate-200 text-[12px] font-bold text-slate-600">
