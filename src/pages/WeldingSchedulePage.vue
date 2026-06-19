@@ -1,12 +1,15 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import Button from '@/components/ui/button/Button.vue'
+import { useDragAutoScroll } from '@/features/welding-schedule/composables/useDragAutoScroll'
 import WeldingScheduleDayQtyBadges from '@/features/welding-schedule/components/WeldingScheduleDayQtyBadges.vue'
+import WeldingScheduleSearchInput from '@/features/welding-schedule/components/WeldingScheduleSearchInput.vue'
 import WeldingScheduleStatusLegend from '@/features/welding-schedule/components/WeldingScheduleStatusLegend.vue'
 import {
   getWeldingAreaClass,
   getWeldingAreaLabel,
 } from '@/features/welding-schedule/utils/weldingScheduleAreaDisplay'
+import { matchesWeldingScheduleSearch } from '@/features/welding-schedule/utils/weldingScheduleSearch'
 import {
   addDays,
   clearWeldingScheduleRow,
@@ -27,7 +30,9 @@ const draggingRowId = ref(null)
 const dragOverKey = ref('')
 const activeRow = ref(null)
 const isRowDialogOpen = ref(false)
+const searchText = ref('')
 const weldingInspectors = ['민뚜라', '진민택']
+const { start: startDragAutoScroll, stop: stopDragAutoScroll } = useDragAutoScroll()
 
 const weekStartDate = computed(() => getWeekStartMonday(new Date(`${weekStartIso.value}T00:00:00`)))
 const weekDays = computed(() =>
@@ -47,14 +52,23 @@ const weekRangeLabel = computed(() => {
   const end = weekDays.value[6]
   return `${start?.fullLabel ?? ''} ~ ${end?.fullLabel ?? ''}`
 })
+const hasActiveSearch = computed(() => String(searchText.value ?? '').trim().length > 0)
+const filteredRows = computed(() => {
+  if (!hasActiveSearch.value) return rows.value
+  return rows.value.filter((row) => matchesWeldingScheduleSearch(row, searchText.value))
+})
 const rowsByDate = computed(() => {
   const grouped = new Map(weekDays.value.map((day) => [day.key, []]))
-  for (const row of rows.value) {
+  for (const row of filteredRows.value) {
     const key = String(row?.welding_schedule_date ?? '')
     if (!grouped.has(key)) grouped.set(key, [])
     grouped.get(key).push(row)
   }
   return grouped
+})
+const visibleWeekDays = computed(() => {
+  if (!hasActiveSearch.value) return weekDays.value
+  return weekDays.value.filter((day) => (rowsByDate.value.get(day.key) ?? []).length > 0)
 })
 const getInspectorRows = (dateKey, inspector) =>
   (rowsByDate.value.get(dateKey) ?? []).filter((row) => String(row?.welding_schedule_inspector || row?.welding_inspector || '').trim() === inspector)
@@ -71,7 +85,7 @@ const getRowsTotals = (targetRows) =>
     { head: 0, hole: 0, inch: 0 },
   )
 const getDayTotals = (dateKey) => getRowsTotals(rowsByDate.value.get(dateKey) ?? [])
-const totalCount = computed(() => rows.value.length)
+const displayCount = computed(() => filteredRows.value.length)
 
 const loadRows = async () => {
   loading.value = true
@@ -133,10 +147,12 @@ const handleDragStart = (event, row) => {
   draggingRowId.value = row?.id ?? null
   event.dataTransfer.effectAllowed = 'move'
   event.dataTransfer.setData('text/plain', String(row?.id ?? ''))
+  startDragAutoScroll()
 }
 const handleDragEnd = () => {
   draggingRowId.value = null
   dragOverKey.value = ''
+  stopDragAutoScroll()
 }
 const handleDragOver = (event, dateKey, inspector) => {
   event.preventDefault()
@@ -188,17 +204,17 @@ watch(weekStartIso, loadRows)
                 <p class="text-sm font-semibold text-slate-600">{{ weekRangeLabel }}</p>
                 <WeldingScheduleStatusLegend />
                 <span class="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-bold text-slate-600">
-                  총 {{ totalCount }}건
+                  총 {{ displayCount }}건
                 </span>
                 <span v-if="savingMessage" class="text-xs font-bold text-slate-500">{{ savingMessage }}</span>
               </div>
             </div>
 
-            <div class="flex flex-wrap gap-2">
+            <div class="flex flex-wrap items-center gap-2">
               <Button class="h-9 px-3 text-sm" variant="outline" @click="moveWeek(-1)">지난주</Button>
               <Button class="h-9 px-3 text-sm" variant="outline" @click="resetWeek">이번주</Button>
               <Button class="h-9 px-3 text-sm" variant="outline" @click="moveWeek(1)">다음주</Button>
-              <Button class="h-9 px-3 text-sm" variant="outline" @click="loadRows">새로고침</Button>
+              <WeldingScheduleSearchInput v-model="searchText" />
               <Button class="h-9 bg-slate-900 px-3 text-sm text-white hover:bg-slate-800" @click="printPage">출력</Button>
             </div>
           </div>
@@ -214,9 +230,12 @@ watch(weekStartIso, loadRows)
         <div v-else-if="errorMessage" class="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-5 text-sm font-semibold text-rose-700">
           {{ errorMessage }}
         </div>
+        <div v-else-if="hasActiveSearch && filteredRows.length === 0" class="py-10 text-center text-sm font-semibold text-slate-500">
+          검색 결과가 없습니다.
+        </div>
         <div v-else class="space-y-3">
           <section
-            v-for="day in weekDays"
+            v-for="day in visibleWeekDays"
             :key="day.key"
             class="border border-slate-400 bg-white"
           >
