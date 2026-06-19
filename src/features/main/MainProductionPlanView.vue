@@ -10,6 +10,7 @@ import { useDialog } from '@/composables/useDialog'
 import { isAdminRole, isProductionAdmin } from '@/utils/adminAccess'
 import { WELDING_INSPECTORS, getWeldingInspectorClass } from '@/utils/productionStatus'
 import { sanitizeDecimalOne } from '@/features/main/productionPlanNumbers'
+import { WELDING_SCHEDULE_PERMISSION_ERROR } from '@/features/welding-schedule/utils/weldingSchedulePermission'
 
 const { confirm, alert } = useDialog()
 
@@ -24,6 +25,7 @@ const props = defineProps({
   groupedRows: { type: Array, default: () => [] },
   currentWorkMan: { type: String, default: '' },
   currentRole: { type: String, default: '' },
+  canManageWeldingSchedule: { type: Boolean, default: false },
 })
 
 const emit = defineEmits([
@@ -669,6 +671,10 @@ const openWeldingScheduleDateDialog = () => {
 }
 
 const openWeldingScheduleInspectorDialog = () => {
+  if (!props.canManageWeldingSchedule) {
+    showSnackbar(WELDING_SCHEDULE_PERMISSION_ERROR)
+    return
+  }
   if (!activeTestDateRow.value) return
   activeWeldingScheduleRow.value = activeTestDateRow.value
   selectedWeldingScheduleInspector.value = String(activeTestDateRow.value?.welding_schedule_inspector ?? '').trim()
@@ -727,6 +733,10 @@ const selectWeldingScheduleDate = (day) => {
 }
 
 const removeWeldingSchedule = () => {
+  if (!props.canManageWeldingSchedule) {
+    showSnackbar(WELDING_SCHEDULE_PERMISSION_ERROR)
+    return
+  }
   if (!activeTestDateRow.value) return
   emit('remove-welding-schedule', {
     row: activeTestDateRow.value,
@@ -1158,6 +1168,7 @@ const selectDrawingFile = (file) => {
             이동
           </button>
           <button
+            v-if="canManageWeldingSchedule"
             type="button"
             class="rounded-md px-5 py-2 text-sm font-bold shadow-sm transition"
             :class="

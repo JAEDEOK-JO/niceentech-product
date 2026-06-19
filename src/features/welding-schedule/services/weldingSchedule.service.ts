@@ -1,4 +1,9 @@
 import { supabase } from '@/lib/supabase'
+import {
+  WELDING_SCHEDULE_PERMISSION_ERROR,
+  canManageWeldingSchedule,
+  type WeldingSchedulePermissionProfile,
+} from '@/features/welding-schedule/utils/weldingSchedulePermission'
 
 const PRODUCT_LIST_TABLE = 'product_list'
 
@@ -31,6 +36,27 @@ const toNumber = (value: unknown) => {
 }
 
 const normalizeText = (value: unknown) => String(value ?? '').trim()
+
+const getCurrentProfile = async (): Promise<WeldingSchedulePermissionProfile | null> => {
+  const { data: authData, error: authError } = await supabase.auth.getUser()
+  if (authError || !authData.user?.id) return null
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id,name,role')
+    .eq('id', authData.user.id)
+    .maybeSingle()
+
+  if (error || !data) return null
+  return data as WeldingSchedulePermissionProfile
+}
+
+const assertWeldingSchedulePermission = async () => {
+  const profile = await getCurrentProfile()
+  if (!canManageWeldingSchedule(profile)) {
+    throw new Error(WELDING_SCHEDULE_PERMISSION_ERROR)
+  }
+}
 
 export const parseIsoDate = (value: string) => {
   const raw = normalizeText(value)
@@ -125,6 +151,8 @@ export const fetchWeldingScheduleRows = async (weekStartIso: string) => {
 }
 
 export const updateWeldingScheduleRow = async (rowId: number, scheduleDateIso: string, inspector: string) => {
+  await assertWeldingSchedulePermission()
+
   const { error } = await supabase
     .from(PRODUCT_LIST_TABLE)
     .update({
@@ -139,6 +167,8 @@ export const updateWeldingScheduleRow = async (rowId: number, scheduleDateIso: s
 }
 
 export const clearWeldingScheduleRow = async (rowId: number) => {
+  await assertWeldingSchedulePermission()
+
   const { error } = await supabase
     .from(PRODUCT_LIST_TABLE)
     .update({

@@ -1,10 +1,11 @@
 <script setup>
-import { watch } from 'vue'
+import { watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import MainProductionPlanView from '@/features/main/MainProductionPlanView.vue'
 import { useAuth } from '@/composables/useAuth'
 import { useProfile } from '@/composables/useProfile'
 import { useProductionPlan } from '@/composables/useProductionPlan'
+import { canManageWeldingSchedule } from '@/features/welding-schedule/utils/weldingSchedulePermission'
 import { isAdminRole, isDesignDepartment, normalizeDepartment } from '@/utils/adminAccess'
 import { supabase } from '@/lib/supabase'
 
@@ -30,6 +31,8 @@ const {
   uploadDrawingFiles,
   deleteDrawingFile,
 } = useProductionPlan(session)
+
+const canManageWeldingSchedulePermission = computed(() => canManageWeldingSchedule(profile.value))
 
 const isOperationsDepartment = (value) => normalizeDepartment(value).includes(normalizeDepartment('공무'))
 const formatKoreanDate = (value) => {
@@ -537,6 +540,7 @@ watch(
     :grouped-rows="groupedRows"
     :current-work-man="profile?.work_man || ''"
     :current-role="profile?.role || ''"
+    :can-manage-welding-schedule="canManageWeldingSchedulePermission"
     @move-week="moveWeek"
     @reset-week="resetWeek"
     @go-register="goRegister"

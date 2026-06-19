@@ -1,7 +1,9 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import Button from '@/components/ui/button/Button.vue'
+import { useAuth } from '@/composables/useAuth'
 import { useDragAutoScroll } from '@/features/welding-schedule/composables/useDragAutoScroll'
+import { useWeldingSchedulePermission } from '@/features/welding-schedule/composables/useWeldingSchedulePermission'
 import WeldingScheduleDayQtyBadges from '@/features/welding-schedule/components/WeldingScheduleDayQtyBadges.vue'
 import WeldingScheduleSearchInput from '@/features/welding-schedule/components/WeldingScheduleSearchInput.vue'
 import WeldingScheduleStatusLegend from '@/features/welding-schedule/components/WeldingScheduleStatusLegend.vue'
@@ -20,7 +22,10 @@ import {
   getWeekStartMonday,
   updateWeldingScheduleRow,
 } from '@/features/welding-schedule/services/weldingSchedule.service'
+import { WELDING_SCHEDULE_PERMISSION_ERROR } from '@/features/welding-schedule/utils/weldingSchedulePermission'
 
+const { session } = useAuth()
+const { canManageWeldingSchedule } = useWeldingSchedulePermission(session)
 const weekStartIso = ref(formatIsoDate(getWeekStartMonday()))
 const rows = ref([])
 const loading = ref(false)
@@ -125,6 +130,13 @@ const closeRowDialog = () => {
   activeRow.value = null
 }
 const cancelWeldingSchedule = async () => {
+  if (!canManageWeldingSchedule.value) {
+    savingMessage.value = WELDING_SCHEDULE_PERMISSION_ERROR
+    window.setTimeout(() => {
+      savingMessage.value = ''
+    }, 2500)
+    return
+  }
   if (!activeRow.value?.id) return
 
   savingMessage.value = '용접일정 취소 중...'
@@ -144,6 +156,14 @@ const cancelWeldingSchedule = async () => {
 const getDropKey = (dateKey, inspector) => `${dateKey}-${inspector}`
 const isDropActive = (dateKey, inspector) => dragOverKey.value === getDropKey(dateKey, inspector)
 const handleDragStart = (event, row) => {
+  if (!canManageWeldingSchedule.value) {
+    event.preventDefault()
+    savingMessage.value = WELDING_SCHEDULE_PERMISSION_ERROR
+    window.setTimeout(() => {
+      savingMessage.value = ''
+    }, 2500)
+    return
+  }
   draggingRowId.value = row?.id ?? null
   event.dataTransfer.effectAllowed = 'move'
   event.dataTransfer.setData('text/plain', String(row?.id ?? ''))
@@ -155,12 +175,21 @@ const handleDragEnd = () => {
   stopDragAutoScroll()
 }
 const handleDragOver = (event, dateKey, inspector) => {
+  if (!canManageWeldingSchedule.value) return
   event.preventDefault()
   event.dataTransfer.dropEffect = 'move'
   dragOverKey.value = getDropKey(dateKey, inspector)
 }
 const handleDrop = async (event, dateKey, inspector) => {
   event.preventDefault()
+  if (!canManageWeldingSchedule.value) {
+    savingMessage.value = WELDING_SCHEDULE_PERMISSION_ERROR
+    window.setTimeout(() => {
+      savingMessage.value = ''
+    }, 2500)
+    handleDragEnd()
+    return
+  }
   const rowId = Number(event.dataTransfer.getData('text/plain') || draggingRowId.value)
   const target = rows.value.find((row) => row.id === rowId)
   handleDragEnd()
@@ -271,9 +300,12 @@ watch(weekStartIso, loadRows)
                       <tr
                         v-for="row in getInspectorRows(day.key, inspector)"
                         :key="row.id"
-                        draggable="true"
-                        class="cursor-move odd:bg-white even:bg-slate-50 hover:bg-blue-50"
-                        :class="draggingRowId === row.id ? 'opacity-50' : ''"
+                        :draggable="canManageWeldingSchedule"
+                        class="odd:bg-white even:bg-slate-50 hover:bg-blue-50"
+                        :class="[
+                          canManageWeldingSchedule ? 'cursor-move' : '',
+                          draggingRowId === row.id ? 'opacity-50' : '',
+                        ]"
                         @dragstart="handleDragStart($event, row)"
                         @dragend="handleDragEnd"
                       >
@@ -360,6 +392,7 @@ watch(weekStartIso, loadRows)
         <p class="text-sm text-slate-600">{{ getWeldingAreaLabel(activeRow) }}</p>
         <div class="mt-6 flex flex-wrap items-center gap-3">
           <button
+            v-if="canManageWeldingSchedule"
             type="button"
             class="rounded-md bg-rose-100 px-5 py-2 text-sm font-bold text-rose-700 shadow-sm transition hover:bg-rose-200"
             @click="cancelWeldingSchedule"

@@ -2,6 +2,11 @@ import { computed, onUnmounted, ref, watch } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { isProductionAdmin, normalizeWorkMan } from '@/utils/adminAccess'
 import {
+  WELDING_SCHEDULE_PERMISSION_ERROR,
+  canManageWeldingSchedule,
+  isWeldingScheduleUpdate,
+} from '@/features/welding-schedule/utils/weldingSchedulePermission'
+import {
   isWorkerDoneStatus,
   normalizeProductionWorkType,
   preserveWorkerDoneStatus,
@@ -894,6 +899,25 @@ export function useProductionPlan(session) {
 
   const updatePlanRowFields = async ({ rowId, updates }) => {
     if (!rowId || !updates || Object.keys(updates).length === 0) return { ok: false, reason: 'invalid_payload' }
+
+    if (isWeldingScheduleUpdate(updates)) {
+      const userId = session.value?.user?.id
+      if (!userId) {
+        planError.value = WELDING_SCHEDULE_PERMISSION_ERROR
+        return { ok: false, reason: 'forbidden' }
+      }
+
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('id,name,role')
+        .eq('id', userId)
+        .maybeSingle()
+
+      if (profileError || !canManageWeldingSchedule(profile)) {
+        planError.value = WELDING_SCHEDULE_PERMISSION_ERROR
+        return { ok: false, reason: 'forbidden' }
+      }
+    }
 
     const { error } = await supabase
       .from(PRODUCT_LIST_TABLE)
