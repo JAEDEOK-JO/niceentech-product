@@ -41,6 +41,8 @@ const emit = defineEmits([
   'ship-row',
   'cancel-ship-row',
   'move-test-date',
+  'add-welding-schedule',
+  'remove-welding-schedule',
   'load-drawing-files',
   'upload-drawing-files',
   'delete-drawing-file',
@@ -79,6 +81,12 @@ const selectedRowId = ref(null)
 const isTestDateDialogOpen = ref(false)
 const pendingTestDateIso = ref('')
 const activeTestDateRow = ref(null)
+const isWeldingScheduleInspectorDialogOpen = ref(false)
+const isWeldingScheduleDateDialogOpen = ref(false)
+const activeWeldingScheduleRow = ref(null)
+const weldingScheduleDateIso = ref('')
+const weldingScheduleCalendarMonth = ref(new Date())
+const selectedWeldingScheduleInspector = ref('')
 const isInchDialogOpen = ref(false)
 const activeInchRow = ref(null)
 const inchInput = ref('')
@@ -241,6 +249,7 @@ const activeDialogRow = computed(() => {
 const inspectionActionLabel = computed(() => (activeDialogRow.value?.not_test ? '검수' : '비검수'))
 const holdActionLabel = computed(() => (activeDialogRow.value?.hold ? '보류 해제' : '보류'))
 const pendingTestDateLabel = computed(() => formatKoreanDateLabel(pendingTestDateIso.value))
+const weldingScheduleDateLabel = computed(() => formatKoreanDateLabel(weldingScheduleDateIso.value))
 const searchPlaceholder = computed(() =>
   localSearchAllDates.value ? '회사명, 현장명, 구역명, 도번 검색 가능' : '검색어를 입력해주세요',
 )
@@ -268,6 +277,31 @@ const calendarWeeks = computed(() => {
         isCurrentMonth: date.getMonth() === localCalendarMonth.value.getMonth(),
         isTuesday: date.getDay() === 2,
         isSelected: formatIsoDate(date) === String(localCalendarValue.value ?? ''),
+      }
+    }),
+  )
+})
+
+const weldingScheduleCalendarMonthLabel = computed(() => {
+  const base = weldingScheduleCalendarMonth.value
+  return `${base.getFullYear()}년 ${String(base.getMonth() + 1).padStart(2, '0')}월`
+})
+
+const weldingScheduleCalendarWeeks = computed(() => {
+  const monthStart = new Date(weldingScheduleCalendarMonth.value.getFullYear(), weldingScheduleCalendarMonth.value.getMonth(), 1)
+  const gridStart = new Date(monthStart)
+  gridStart.setDate(monthStart.getDate() - monthStart.getDay())
+
+  return Array.from({ length: 6 }, (_, weekIndex) =>
+    Array.from({ length: 7 }, (_, dayIndex) => {
+      const date = new Date(gridStart)
+      date.setDate(gridStart.getDate() + weekIndex * 7 + dayIndex)
+      date.setHours(0, 0, 0, 0)
+      return {
+        key: formatIsoDate(date),
+        label: date.getDate(),
+        isCurrentMonth: date.getMonth() === weldingScheduleCalendarMonth.value.getMonth(),
+        isSelected: formatIsoDate(date) === String(weldingScheduleDateIso.value ?? ''),
       }
     }),
   )
@@ -623,6 +657,95 @@ const closeTestDateDialog = () => {
   isTestDateDialogOpen.value = false
   activeTestDateRow.value = null
   pendingTestDateIso.value = ''
+}
+
+const openWeldingScheduleDateDialog = () => {
+  if (!activeWeldingScheduleRow.value) return
+  const baseIso = String(activeWeldingScheduleRow.value?.welding_schedule_date ?? '').trim() || formatIsoDate(new Date())
+  weldingScheduleDateIso.value = baseIso
+  const baseDate = parseIsoDate(baseIso) ?? new Date()
+  weldingScheduleCalendarMonth.value = new Date(baseDate.getFullYear(), baseDate.getMonth(), 1)
+  isWeldingScheduleDateDialogOpen.value = true
+}
+
+const openWeldingScheduleInspectorDialog = () => {
+  if (!activeTestDateRow.value) return
+  activeWeldingScheduleRow.value = activeTestDateRow.value
+  selectedWeldingScheduleInspector.value = String(activeTestDateRow.value?.welding_schedule_inspector ?? '').trim()
+  isWeldingScheduleInspectorDialogOpen.value = true
+}
+
+const closeWeldingScheduleInspectorDialog = () => {
+  isWeldingScheduleInspectorDialogOpen.value = false
+  if (!isWeldingScheduleDateDialogOpen.value) {
+    activeWeldingScheduleRow.value = null
+    selectedWeldingScheduleInspector.value = ''
+  }
+}
+
+const selectWeldingScheduleInspector = (inspector) => {
+  selectedWeldingScheduleInspector.value = inspector
+  isWeldingScheduleInspectorDialogOpen.value = false
+  openWeldingScheduleDateDialog()
+}
+
+const closeWeldingScheduleDateDialog = () => {
+  isWeldingScheduleDateDialogOpen.value = false
+  activeWeldingScheduleRow.value = null
+  weldingScheduleDateIso.value = ''
+  selectedWeldingScheduleInspector.value = ''
+}
+
+const moveWeldingScheduleCalendarMonth = (delta) => {
+  const base = weldingScheduleCalendarMonth.value
+  weldingScheduleCalendarMonth.value = new Date(base.getFullYear(), base.getMonth() + delta, 1)
+}
+
+const selectWeldingScheduleDate = (day) => {
+  if (!activeWeldingScheduleRow.value || !day?.key) return
+  weldingScheduleDateIso.value = day.key
+  emit('add-welding-schedule', {
+    row: activeWeldingScheduleRow.value,
+    scheduleDateIso: day.key,
+    inspector: selectedWeldingScheduleInspector.value,
+    onResult: (result) => {
+      if (!result?.ok) {
+        showSnackbar('용접일정 추가에 실패했습니다.')
+        return
+      }
+      activeWeldingScheduleRow.value = {
+        ...activeWeldingScheduleRow.value,
+        welding_schedule_date: day.key,
+        welding_schedule_inspector: selectedWeldingScheduleInspector.value,
+      }
+      showSnackbar(`${formatKoreanDateLabel(day.key)} 용접일정에 추가했습니다.`)
+      closeWeldingScheduleDateDialog()
+      closeWeldingScheduleInspectorDialog()
+      closeTestDateDialog()
+    },
+  })
+}
+
+const removeWeldingSchedule = () => {
+  if (!activeTestDateRow.value) return
+  emit('remove-welding-schedule', {
+    row: activeTestDateRow.value,
+    onResult: (result) => {
+      if (!result?.ok) {
+        showSnackbar('용접일정 삭제에 실패했습니다.')
+        return
+      }
+      activeTestDateRow.value = {
+        ...activeTestDateRow.value,
+        welding_schedule_date: null,
+        welding_schedule_inspector: '',
+      }
+      showSnackbar('용접일정을 삭제했습니다.')
+      closeWeldingScheduleDateDialog()
+      closeWeldingScheduleInspectorDialog()
+      closeTestDateDialog()
+    },
+  })
 }
 
 const shiftPendingTestDate = (deltaDays) => {
@@ -1012,7 +1135,7 @@ const selectDrawingFile = (file) => {
           {{ pendingTestDateLabel }}
           <span class="text-orange-500"> 검수로 이동</span>
         </p>
-        <div class="mt-6 flex items-center gap-3">
+        <div class="mt-6 flex flex-wrap items-center gap-3">
           <button
             type="button"
             class="rounded-md bg-sky-500 px-5 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-sky-600"
@@ -1034,6 +1157,129 @@ const selectDrawingFile = (file) => {
           >
             이동
           </button>
+          <button
+            type="button"
+            class="rounded-md px-5 py-2 text-sm font-bold shadow-sm transition"
+            :class="
+              activeTestDateRow.welding_schedule_date
+                ? 'bg-rose-100 text-rose-700 hover:bg-rose-200'
+                : 'bg-slate-900 text-white hover:bg-slate-800'
+            "
+            @click="activeTestDateRow.welding_schedule_date ? removeWeldingSchedule() : openWeldingScheduleInspectorDialog()"
+          >
+            {{ activeTestDateRow.welding_schedule_date ? '용접일정삭제' : '용접일정추가' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div
+      v-if="isWeldingScheduleInspectorDialogOpen && activeWeldingScheduleRow"
+      class="print-hide fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 px-4"
+    >
+      <div class="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <h3 class="text-base font-extrabold text-slate-900">용접사 선택</h3>
+            <p class="mt-2 truncate text-sm font-semibold text-slate-700">
+              {{ activeWeldingScheduleRow.company || '-' }} / {{ activeWeldingScheduleRow.place || '-' }}
+            </p>
+            <p class="truncate text-sm text-slate-500">{{ activeWeldingScheduleRow.area || '-' }}</p>
+          </div>
+          <button type="button" class="shrink-0 text-sm text-slate-500 hover:text-slate-700" @click="closeWeldingScheduleInspectorDialog">
+            닫기
+          </button>
+        </div>
+
+        <div class="mt-5 grid grid-cols-2 gap-3">
+          <button
+            type="button"
+            class="rounded-xl border-2 border-cyan-300 bg-cyan-200 py-5 text-base font-extrabold text-cyan-950 transition active:scale-[0.98]"
+            @click="selectWeldingScheduleInspector('민뚜라')"
+          >
+            민뚜라
+          </button>
+          <button
+            type="button"
+            class="rounded-xl border-2 border-fuchsia-300 bg-fuchsia-200 py-5 text-base font-extrabold text-fuchsia-950 transition active:scale-[0.98]"
+            @click="selectWeldingScheduleInspector('진민택')"
+          >
+            진민택
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div
+      v-if="isWeldingScheduleDateDialogOpen && activeWeldingScheduleRow"
+      class="print-hide fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 px-4"
+    >
+      <div class="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <h3 class="text-base font-extrabold text-slate-900">용접일정 날짜 선택</h3>
+            <p class="mt-2 truncate text-sm font-semibold text-slate-700">
+              {{ activeWeldingScheduleRow.company || '-' }} / {{ activeWeldingScheduleRow.place || '-' }}
+            </p>
+            <p class="truncate text-sm text-slate-500">{{ activeWeldingScheduleRow.area || '-' }}</p>
+          </div>
+          <button type="button" class="shrink-0 text-sm text-slate-500 hover:text-slate-700" @click="closeWeldingScheduleDateDialog">
+            닫기
+          </button>
+        </div>
+
+        <p class="mt-5 text-sm font-bold text-slate-700">
+          선택일: <span class="text-slate-950">{{ weldingScheduleDateLabel }}</span>
+        </p>
+
+        <div class="mt-4">
+          <div class="mb-3 flex items-center justify-between">
+            <button
+              type="button"
+              class="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+              @click="moveWeldingScheduleCalendarMonth(-1)"
+            >
+              <svg viewBox="0 0 24 24" class="h-4 w-4 fill-none stroke-current" stroke-width="2">
+                <path d="m15 18-6-6 6-6" />
+              </svg>
+            </button>
+            <p class="text-sm font-extrabold text-slate-900">{{ weldingScheduleCalendarMonthLabel }}</p>
+            <button
+              type="button"
+              class="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+              @click="moveWeldingScheduleCalendarMonth(1)"
+            >
+              <svg viewBox="0 0 24 24" class="h-4 w-4 fill-none stroke-current" stroke-width="2">
+                <path d="m9 6 6 6-6 6" />
+              </svg>
+            </button>
+          </div>
+
+          <div class="grid grid-cols-7 gap-1">
+            <div
+              v-for="label in calendarWeekLabels"
+              :key="`welding-schedule-${label}`"
+              class="flex h-8 items-center justify-center text-xs font-bold text-slate-500"
+            >
+              {{ label }}
+            </div>
+            <button
+              v-for="day in weldingScheduleCalendarWeeks.flat()"
+              :key="`welding-schedule-${day.key}`"
+              type="button"
+              class="flex h-11 items-center justify-center rounded-lg border text-sm font-bold transition"
+              :class="[
+                day.isSelected
+                  ? 'border-slate-900 bg-slate-900 text-white'
+                  : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
+                !day.isCurrentMonth ? 'opacity-40' : '',
+              ]"
+              @click="selectWeldingScheduleDate(day)"
+            >
+              {{ day.label }}
+            </button>
+          </div>
+
         </div>
       </div>
     </div>

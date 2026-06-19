@@ -436,6 +436,36 @@ const handleMoveTestDate = async ({ row, nextDateIso }) => {
   })
 }
 
+const handleAddWeldingSchedule = async ({ row, scheduleDateIso, inspector, onResult }) => {
+  if (!row?.id || !scheduleDateIso) {
+    onResult?.({ ok: false })
+    return
+  }
+  const result = await updatePlanRowFields({
+    rowId: row.id,
+    updates: {
+      welding_schedule_date: scheduleDateIso,
+      welding_schedule_inspector: inspector ?? '',
+    },
+  })
+  onResult?.(result)
+}
+
+const handleRemoveWeldingSchedule = async ({ row, onResult }) => {
+  if (!row?.id) {
+    onResult?.({ ok: false })
+    return
+  }
+  const result = await updatePlanRowFields({
+    rowId: row.id,
+    updates: {
+      welding_schedule_date: null,
+      welding_schedule_inspector: '',
+    },
+  })
+  onResult?.(result)
+}
+
 const handleLoadDrawingFiles = async ({ rowId, onResult }) => {
   const result = await fetchDrawingFiles({ rowId })
   onResult?.(result)
@@ -525,6 +555,8 @@ watch(
     @nasa-long-press="handleNasaLongPress"
     @update-inch="handleUpdateInch"
     @move-test-date="handleMoveTestDate"
+    @add-welding-schedule="handleAddWeldingSchedule"
+    @remove-welding-schedule="handleRemoveWeldingSchedule"
     @load-drawing-files="handleLoadDrawingFiles"
     @upload-drawing-files="handleUploadDrawingFiles"
     @delete-drawing-file="handleDeleteDrawingFile"

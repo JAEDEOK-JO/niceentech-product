@@ -101,6 +101,8 @@
 | nasa_status | text | Y | `'작업전'::text` | 무용접 상태 |
 | virtual_drawing_distributed | boolean | Y | `false` | 가상도면배포 여부 |
 | complete_date | text | Y | `''::text` | 완료일자(`MM.DD` 형식 사용 중) |
+| welding_schedule_date | date | N |  | 용접일정 배정일 |
+| welding_schedule_inspector | text | N |  | 용접일정 배정 용접사 |
 | marking_weld_a_started_on | date | N |  | 마킹1 시작일 |
 | marking_weld_a_completed_on | date | N |  | 마킹1 완료일 |
 | marking_weld_b_started_on | date | N |  | 마킹2 시작일 |
@@ -118,6 +120,7 @@
 
 ## 앱 연동 메모
 - 홈 생산계획/스케줄카드/통계는 `test_date` 기준으로 `product_list`를 직접 조회해서 집계함
+- 용접일정 화면은 `welding_schedule_date` 기준으로 주간(월~일) 조회함
 - 공정 상태 통계는 `marking_*`, `beveling_status`, `main_status`, `nasa_status`, `complete`, `complete_date`를 주로 사용함
 - 관리자용 가이드/대시보드에서도 `product_list`에서 가져올 수 있는 값은 우선 재사용하는 방향이 적합함
 - 별도 입력이 필요한 값만 추가 테이블로 분리하고, `company/place/test_date/출하/매출/지연`처럼 이미 `product_list`에 있는 값은 중복 저장하지 않는 편이 좋음

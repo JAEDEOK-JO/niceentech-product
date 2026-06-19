@@ -11,6 +11,7 @@ import QualityCreatePage from '@/pages/QualityCreatePage.vue'
 import QualityUpdatePage from '@/pages/QualityUpdatePage.vue'
 import QualityCountCheckPage from '@/pages/QualityCountCheckPage.vue'
 import QualityCalculationPage from '@/pages/QualityCalculationPage.vue'
+import WeldingSchedulePage from '@/pages/WeldingSchedulePage.vue'
 import ShipmentSchedulePage from '@/pages/ShipmentSchedulePage.vue'
 import InventoryPage from '@/pages/InventoryPage.vue'
 import MyPage from '@/pages/MyPage.vue'
@@ -105,6 +106,12 @@ const routes = [
     path: '/quality/calculation',
     name: 'quality-calculation',
     component: QualityCalculationPage,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/welding-schedule',
+    name: 'welding-schedule',
+    component: WeldingSchedulePage,
     meta: { requiresAuth: true },
   },
   {

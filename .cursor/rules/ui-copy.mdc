@@ -1,0 +1,9 @@
+---
+description: UI copy guidance
+alwaysApply: true
+---
+
+# UI Copy
+
+- 사용자가 명시적으로 요청하지 않은 안내성 설명 문구를 화면에 추가하지 않는다.
+- 버튼, 제목, 상태값처럼 기능에 필요한 짧은 문구만 사용한다.

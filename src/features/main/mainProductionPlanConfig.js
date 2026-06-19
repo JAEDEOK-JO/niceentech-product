@@ -185,7 +185,16 @@ export const getBodyCellClass = (row, column) => {
   const classes = ['border', 'border-slate-200', 'h-[50px]', 'align-middle', 'text-[12px]', 'font-medium', 'text-slate-700']
   classes.push(column.align === 'center' ? 'text-center' : 'text-left')
 
-  if (Boolean(row?.hold)) {
+  if (column.key === 'area' && String(row?.welding_schedule_date ?? '').trim()) {
+    const inspector = String(row?.welding_schedule_inspector ?? '').trim()
+    if (inspector === '민뚜라') {
+      classes.push('bg-cyan-200', 'text-cyan-950')
+    } else if (inspector === '진민택') {
+      classes.push('bg-fuchsia-200', 'text-fuchsia-950')
+    } else {
+      classes.push('bg-purple-50', 'text-purple-950')
+    }
+  } else if (Boolean(row?.hold)) {
     classes.push('bg-orange-100')
   } else if (isStatusCompactColumn(column.key)) {
     if (Boolean(row?.shipment)) {
