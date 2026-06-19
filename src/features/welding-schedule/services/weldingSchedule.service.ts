@@ -15,6 +15,9 @@ export interface WeldingScheduleRow {
   groove: number
   welding_status: string
   worker_welding: string
+  worker_welding_time: string
+  worker_welding_time_final: string
+  shipment: boolean
   welding_schedule_inspector: string
   welding_inspector: string
   welding_schedule_date: string
@@ -87,6 +90,9 @@ const mapWeldingScheduleRow = (row: Record<string, unknown>): WeldingScheduleRow
   groove: toNumber(row.groove),
   welding_status: normalizeText(row.welding_status),
   worker_welding: normalizeText(row.worker_welding),
+  worker_welding_time: normalizeText(row.worker_welding_time),
+  worker_welding_time_final: normalizeText(row.worker_welding_time_final),
+  shipment: Boolean(row.shipment),
   welding_schedule_inspector: normalizeText(row.welding_schedule_inspector),
   welding_inspector: normalizeText(row.welding_inspector),
   welding_schedule_date: normalizeText(row.welding_schedule_date),
@@ -102,7 +108,7 @@ export const fetchWeldingScheduleRows = async (weekStartIso: string) => {
   const { data, error } = await supabase
     .from(PRODUCT_LIST_TABLE)
     .select(
-      'id,initial,company,place,area,work_type,head,hole,inch,groove,welding_status,worker_welding,welding_schedule_inspector,welding_inspector,welding_schedule_date,memo,test_date',
+      'id,initial,company,place,area,work_type,head,hole,inch,groove,welding_status,worker_welding,worker_welding_time,worker_welding_time_final,shipment,welding_schedule_inspector,welding_inspector,welding_schedule_date,memo,test_date',
     )
     .gte('welding_schedule_date', weekStartIso)
     .lte('welding_schedule_date', weekEndIso)

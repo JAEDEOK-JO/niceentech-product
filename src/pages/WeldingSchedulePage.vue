@@ -1,6 +1,12 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import Button from '@/components/ui/button/Button.vue'
+import WeldingScheduleDayQtyBadges from '@/features/welding-schedule/components/WeldingScheduleDayQtyBadges.vue'
+import WeldingScheduleStatusLegend from '@/features/welding-schedule/components/WeldingScheduleStatusLegend.vue'
+import {
+  getWeldingAreaClass,
+  getWeldingAreaLabel,
+} from '@/features/welding-schedule/utils/weldingScheduleAreaDisplay'
 import {
   addDays,
   clearWeldingScheduleRow,
@@ -64,6 +70,7 @@ const getRowsTotals = (targetRows) =>
     },
     { head: 0, hole: 0, inch: 0 },
   )
+const getDayTotals = (dateKey) => getRowsTotals(rowsByDate.value.get(dateKey) ?? [])
 const totalCount = computed(() => rows.value.length)
 
 const loadRows = async () => {
@@ -171,37 +178,38 @@ watch(weekStartIso, loadRows)
 
 <template>
   <main class="min-h-screen bg-slate-50 px-4 py-6 pt-[76px] md:px-6 md:pt-[96px]">
-    <section class="mx-auto max-w-[1600px] space-y-4">
-      <div class="print-hide rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div class="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-          <div>
-            <p class="text-sm font-bold text-slate-500">용접일정</p>
-            <h1 class="mt-1 text-2xl font-extrabold text-slate-900">용접일정</h1>
-            <p class="mt-2 text-sm font-semibold text-slate-600">{{ weekRangeLabel }}</p>
-          </div>
+    <section class="mx-auto max-w-[1600px]">
+      <div class="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <div class="print-hide border-b border-slate-200 px-5 py-5">
+          <div class="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+            <div class="min-w-0">
+              <h1 class="text-2xl font-extrabold text-slate-900">용접일정</h1>
+              <div class="mt-2 flex flex-wrap items-center gap-2">
+                <p class="text-sm font-semibold text-slate-600">{{ weekRangeLabel }}</p>
+                <WeldingScheduleStatusLegend />
+                <span class="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-bold text-slate-600">
+                  총 {{ totalCount }}건
+                </span>
+                <span v-if="savingMessage" class="text-xs font-bold text-slate-500">{{ savingMessage }}</span>
+              </div>
+            </div>
 
-          <div class="flex flex-wrap gap-2">
-            <Button class="h-9 px-3 text-sm" variant="outline" @click="moveWeek(-1)">지난주</Button>
-            <Button class="h-9 px-3 text-sm" variant="outline" @click="resetWeek">이번주</Button>
-            <Button class="h-9 px-3 text-sm" variant="outline" @click="moveWeek(1)">다음주</Button>
-            <Button class="h-9 px-3 text-sm" variant="outline" @click="loadRows">새로고침</Button>
-            <Button class="h-9 bg-slate-900 px-3 text-sm text-white hover:bg-slate-800" @click="printPage">출력</Button>
-          </div>
-        </div>
-      </div>
-
-      <div class="border border-slate-300 bg-white p-3">
-        <div class="mb-3 flex items-center justify-between gap-3">
-          <div>
-            <p class="hidden text-sm font-bold text-slate-500 print:block">용접일정</p>
-            <h2 class="text-lg font-extrabold text-slate-900">{{ weekRangeLabel }}</h2>
-          </div>
-          <div class="text-right">
-            <span class="text-xs font-bold text-slate-700">총 {{ totalCount }}건</span>
-            <p v-if="savingMessage" class="mt-1 text-xs font-bold text-slate-500">{{ savingMessage }}</p>
+            <div class="flex flex-wrap gap-2">
+              <Button class="h-9 px-3 text-sm" variant="outline" @click="moveWeek(-1)">지난주</Button>
+              <Button class="h-9 px-3 text-sm" variant="outline" @click="resetWeek">이번주</Button>
+              <Button class="h-9 px-3 text-sm" variant="outline" @click="moveWeek(1)">다음주</Button>
+              <Button class="h-9 px-3 text-sm" variant="outline" @click="loadRows">새로고침</Button>
+              <Button class="h-9 bg-slate-900 px-3 text-sm text-white hover:bg-slate-800" @click="printPage">출력</Button>
+            </div>
           </div>
         </div>
 
+        <div class="hidden border-b border-slate-200 px-5 py-4 print:block">
+          <h1 class="text-xl font-extrabold text-slate-900">용접일정</h1>
+          <p class="mt-1 text-sm font-semibold text-slate-700">{{ weekRangeLabel }}</p>
+        </div>
+
+        <div class="p-3 md:p-4">
         <div v-if="loading" class="py-10 text-center text-sm font-semibold text-slate-500">용접일정을 불러오는 중입니다.</div>
         <div v-else-if="errorMessage" class="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-5 text-sm font-semibold text-rose-700">
           {{ errorMessage }}
@@ -212,8 +220,9 @@ watch(weekStartIso, loadRows)
             :key="day.key"
             class="border border-slate-400 bg-white"
           >
-            <div class="border-b border-slate-400 bg-slate-100 px-3 py-1.5">
+            <div class="flex flex-wrap items-center gap-2 border-b border-slate-400 bg-slate-100 px-3 py-1.5">
               <h3 class="text-sm font-extrabold text-slate-900">{{ day.label }}요일({{ day.displayLabel }})</h3>
+              <WeldingScheduleDayQtyBadges :totals="getDayTotals(day.key)" />
             </div>
 
             <div class="grid gap-[10px] xl:grid-cols-2">
@@ -253,10 +262,11 @@ watch(weekStartIso, loadRows)
                         <td class="border border-slate-300 px-2 py-1.5 text-center font-bold text-slate-900">{{ row.company || '-' }}</td>
                         <td class="border border-slate-300 px-2 py-1.5 text-center text-slate-800">{{ row.place || '-' }}</td>
                         <td
-                          class="border border-slate-300 px-2 py-1.5 text-center text-slate-800 cursor-pointer hover:text-blue-700 hover:underline"
+                          class="border border-slate-300 px-2 py-1.5 text-center cursor-pointer"
+                          :class="getWeldingAreaClass(row)"
                           @click.stop="openRowDialog(row)"
                         >
-                          {{ row.area || '-' }}
+                          {{ getWeldingAreaLabel(row) }}
                         </td>
                         <td class="border border-slate-300 px-2 py-1.5 text-center font-extrabold text-emerald-700">{{ formatQty(row.head) }}</td>
                         <td class="border border-slate-300 px-2 py-1.5 text-center font-extrabold text-sky-700">{{ formatQty(row.hole) }}</td>
@@ -295,10 +305,11 @@ watch(weekStartIso, loadRows)
                       <td class="border border-slate-300 px-1.5 py-1 text-center">{{ row.company || '-' }}</td>
                       <td class="border border-slate-300 px-1.5 py-1 text-center">{{ row.place || '-' }}</td>
                       <td
-                        class="border border-slate-300 px-1.5 py-1 text-center cursor-pointer hover:text-blue-700 hover:underline"
+                        class="border border-slate-300 px-1.5 py-1 text-center cursor-pointer"
+                        :class="getWeldingAreaClass(row)"
                         @click.stop="openRowDialog(row)"
                       >
-                        {{ row.area || '-' }}
+                        {{ getWeldingAreaLabel(row) }}
                       </td>
                       <td class="border border-slate-300 px-1.5 py-1 text-center font-bold">{{ formatQty(row.head) }}</td>
                       <td class="border border-slate-300 px-1.5 py-1 text-center font-bold">{{ formatQty(row.hole) }}</td>
@@ -316,6 +327,7 @@ watch(weekStartIso, loadRows)
             </div>
           </section>
         </div>
+        </div>
       </div>
     </section>
 
@@ -326,7 +338,7 @@ watch(weekStartIso, loadRows)
       <div class="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
         <p class="text-[15px] font-extrabold text-slate-900">{{ activeRow.company || '-' }}</p>
         <p class="mt-1 text-sm font-semibold text-slate-700">{{ activeRow.place || '-' }}</p>
-        <p class="text-sm text-slate-600">{{ activeRow.area || '-' }}</p>
+        <p class="text-sm text-slate-600">{{ getWeldingAreaLabel(activeRow) }}</p>
         <div class="mt-6 flex flex-wrap items-center gap-3">
           <button
             type="button"
