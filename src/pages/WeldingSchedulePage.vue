@@ -4,6 +4,7 @@ import Button from '@/components/ui/button/Button.vue'
 import { useAuth } from '@/composables/useAuth'
 import { useDragAutoScroll } from '@/features/welding-schedule/composables/useDragAutoScroll'
 import { useWeldingSchedulePermission } from '@/features/welding-schedule/composables/useWeldingSchedulePermission'
+import WeldingScheduleDateDialog from '@/features/welding-schedule/components/WeldingScheduleDateDialog.vue'
 import WeldingScheduleDayQtyBadges from '@/features/welding-schedule/components/WeldingScheduleDayQtyBadges.vue'
 import WeldingScheduleSearchInput from '@/features/welding-schedule/components/WeldingScheduleSearchInput.vue'
 import WeldingScheduleStatusLegend from '@/features/welding-schedule/components/WeldingScheduleStatusLegend.vue'
@@ -23,6 +24,11 @@ import {
   updateWeldingScheduleRow,
 } from '@/features/welding-schedule/services/weldingSchedule.service'
 import { WELDING_SCHEDULE_PERMISSION_ERROR } from '@/features/welding-schedule/utils/weldingSchedulePermission'
+import {
+  getInspectorTheme,
+  tableCellClass,
+  tableHeaderClass,
+} from '@/features/welding-schedule/utils/weldingScheduleDayTheme'
 
 const { session } = useAuth()
 const { canManageWeldingSchedule } = useWeldingSchedulePermission(session)
@@ -35,6 +41,8 @@ const draggingRowId = ref(null)
 const dragOverKey = ref('')
 const activeRow = ref(null)
 const isRowDialogOpen = ref(false)
+const dateDialogRow = ref(null)
+const isDateDialogOpen = ref(false)
 const searchText = ref('')
 const weldingInspectors = ['민뚜라', '진민택']
 const { start: startDragAutoScroll, stop: stopDragAutoScroll } = useDragAutoScroll()
@@ -90,7 +98,7 @@ const getRowsTotals = (targetRows) =>
     { head: 0, hole: 0, inch: 0 },
   )
 const getDayTotals = (dateKey) => getRowsTotals(rowsByDate.value.get(dateKey) ?? [])
-const displayCount = computed(() => filteredRows.value.length)
+const weekTotals = computed(() => getRowsTotals(rows.value))
 
 const loadRows = async () => {
   loading.value = true
@@ -128,6 +136,60 @@ const openRowDialog = (row) => {
 const closeRowDialog = () => {
   isRowDialogOpen.value = false
   activeRow.value = null
+}
+const openDateDialog = (row) => {
+  if (!canManageWeldingSchedule.value) return
+  dateDialogRow.value = row
+  isDateDialogOpen.value = true
+}
+const closeDateDialog = () => {
+  isDateDialogOpen.value = false
+  dateDialogRow.value = null
+}
+const handleDateSelect = async (scheduleDateIso) => {
+  if (!canManageWeldingSchedule.value) {
+    savingMessage.value = WELDING_SCHEDULE_PERMISSION_ERROR
+    window.setTimeout(() => {
+      savingMessage.value = ''
+    }, 2500)
+    return
+  }
+  const target = dateDialogRow.value
+  if (!target?.id) return
+
+  const currentDate = String(target.welding_schedule_date ?? '').trim()
+  if (scheduleDateIso === currentDate) {
+    closeDateDialog()
+    return
+  }
+
+  const inspector = String(target.welding_schedule_inspector || target.welding_inspector || '').trim()
+  const rowId = target.id
+
+  savingMessage.value = '용접일정 변경 중...'
+  try {
+    await updateWeldingScheduleRow(rowId, scheduleDateIso, inspector)
+    const weekEndIso = formatIsoDate(addDays(weekStartDate.value, 6))
+    if (scheduleDateIso < weekStartIso.value || scheduleDateIso > weekEndIso) {
+      rows.value = rows.value.filter((row) => row.id !== rowId)
+    } else {
+      rows.value = rows.value.map((row) =>
+        row.id === rowId
+          ? {
+              ...row,
+              welding_schedule_date: scheduleDateIso,
+            }
+          : row,
+      )
+    }
+    closeDateDialog()
+    savingMessage.value = ''
+  } catch (error) {
+    savingMessage.value = error?.message ?? '용접일정을 변경하지 못했습니다.'
+    window.setTimeout(() => {
+      savingMessage.value = ''
+    }, 2500)
+  }
 }
 const cancelWeldingSchedule = async () => {
   if (!canManageWeldingSchedule.value) {
@@ -222,19 +284,17 @@ watch(weekStartIso, loadRows)
 </script>
 
 <template>
-  <main class="min-h-screen bg-slate-50 px-4 py-6 pt-[76px] md:px-6 md:pt-[96px]">
+  <main class="welding-schedule-page min-h-screen bg-white px-[5px] md:px-6">
     <section class="mx-auto max-w-[1600px]">
-      <div class="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-        <div class="print-hide border-b border-slate-200 px-5 py-5">
+      <div class="md:border md:border-slate-200 md:bg-white">
+        <div class="print-hide border-b border-slate-200 py-2 md:px-4 md:py-3">
           <div class="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
             <div class="min-w-0">
               <h1 class="text-2xl font-extrabold text-slate-900">용접일정</h1>
               <div class="mt-2 flex flex-wrap items-center gap-2">
                 <p class="text-sm font-semibold text-slate-600">{{ weekRangeLabel }}</p>
                 <WeldingScheduleStatusLegend />
-                <span class="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-bold text-slate-600">
-                  총 {{ displayCount }}건
-                </span>
+                <WeldingScheduleDayQtyBadges :totals="weekTotals" />
                 <span v-if="savingMessage" class="text-xs font-bold text-slate-500">{{ savingMessage }}</span>
               </div>
             </div>
@@ -254,46 +314,53 @@ watch(weekStartIso, loadRows)
           <p class="mt-1 text-sm font-semibold text-slate-700">{{ weekRangeLabel }}</p>
         </div>
 
-        <div class="p-3 md:p-4">
+        <div class="md:p-3">
         <div v-if="loading" class="py-10 text-center text-sm font-semibold text-slate-500">용접일정을 불러오는 중입니다.</div>
-        <div v-else-if="errorMessage" class="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-5 text-sm font-semibold text-rose-700">
+        <div v-else-if="errorMessage" class="border border-rose-200 bg-rose-50 px-4 py-5 text-sm font-semibold text-rose-700">
           {{ errorMessage }}
         </div>
         <div v-else-if="hasActiveSearch && filteredRows.length === 0" class="py-10 text-center text-sm font-semibold text-slate-500">
           검색 결과가 없습니다.
         </div>
-        <div v-else class="space-y-3">
+        <div v-else class="space-y-2">
           <section
             v-for="day in visibleWeekDays"
             :key="day.key"
-            class="border border-slate-400 bg-white"
+            class="border border-slate-300 bg-white"
           >
-            <div class="flex flex-wrap items-center gap-2 border-b border-slate-400 bg-slate-100 px-3 py-1.5">
-              <h3 class="text-sm font-extrabold text-slate-900">{{ day.label }}요일({{ day.displayLabel }})</h3>
+            <div class="flex flex-wrap items-center gap-2 border-b border-slate-300 bg-slate-100 px-2 py-1.5">
+              <h3 class="text-sm font-bold text-slate-900">{{ day.label }}요일({{ day.displayLabel }})</h3>
               <WeldingScheduleDayQtyBadges :totals="getDayTotals(day.key)" />
             </div>
 
-            <div class="grid gap-[10px] xl:grid-cols-2">
-              <div
-                v-for="inspector in weldingInspectors"
-                :key="`${day.key}-${inspector}`"
-                class="min-h-[34px] overflow-x-auto border border-slate-300 bg-white"
-                :class="isDropActive(day.key, inspector) ? 'bg-blue-50 ring-2 ring-blue-300' : ''"
-                @dragenter.prevent="dragOverKey = getDropKey(day.key, inspector)"
-                @dragover="handleDragOver($event, day.key, inspector)"
-                @dragleave="dragOverKey = ''"
-                @drop="handleDrop($event, day.key, inspector)"
-              >
+            <div class="overflow-x-auto xl:overflow-visible">
+              <div class="grid min-w-[620px] gap-[10px] xl:min-w-0 xl:grid-cols-2">
+                <div
+                  v-for="inspector in weldingInspectors"
+                  :key="`${day.key}-${inspector}`"
+                  class="min-h-[34px] bg-white xl:overflow-x-auto"
+                  :class="isDropActive(day.key, inspector) ? 'bg-blue-50' : ''"
+                  @dragenter.prevent="dragOverKey = getDropKey(day.key, inspector)"
+                  @dragover="handleDragOver($event, day.key, inspector)"
+                  @dragleave="dragOverKey = ''"
+                  @drop="handleDrop($event, day.key, inspector)"
+                >
+                  <div
+                    class="border-b border-slate-300 bg-white px-2 py-1 text-center text-[11px] font-bold"
+                    :class="getInspectorTheme(inspector).label"
+                  >
+                    {{ inspector }}
+                  </div>
                   <table v-if="getInspectorRows(day.key, inspector).length > 0" class="min-w-[620px] w-full border-collapse text-[12px]">
                     <thead>
-                      <tr class="bg-slate-800 text-white">
-                        <th class="border border-slate-500 px-2 py-1.5 text-center">도번</th>
-                        <th class="border border-slate-500 px-2 py-1.5 text-center">회사명</th>
-                        <th class="border border-slate-500 px-2 py-1.5 text-center">현장명</th>
-                        <th class="border border-slate-500 px-2 py-1.5 text-center">구역명</th>
-                        <th class="border border-slate-500 px-2 py-1.5 text-center">헤드</th>
-                        <th class="border border-slate-500 px-2 py-1.5 text-center">홀</th>
-                        <th class="border border-slate-500 px-2 py-1.5 text-center">인치</th>
+                      <tr :class="getInspectorTheme(inspector).thead">
+                        <th :class="tableHeaderClass">도번</th>
+                        <th :class="tableHeaderClass">회사명</th>
+                        <th :class="tableHeaderClass">현장명</th>
+                        <th :class="tableHeaderClass">구역명</th>
+                        <th :class="tableHeaderClass">헤드</th>
+                        <th :class="tableHeaderClass">홀</th>
+                        <th :class="tableHeaderClass">인치</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -301,7 +368,7 @@ watch(weekStartIso, loadRows)
                         v-for="row in getInspectorRows(day.key, inspector)"
                         :key="row.id"
                         :draggable="canManageWeldingSchedule"
-                        class="odd:bg-white even:bg-slate-50 hover:bg-blue-50"
+                        class="odd:bg-white even:bg-slate-50 hover:bg-slate-50"
                         :class="[
                           canManageWeldingSchedule ? 'cursor-move' : '',
                           draggingRowId === row.id ? 'opacity-50' : '',
@@ -309,52 +376,67 @@ watch(weekStartIso, loadRows)
                         @dragstart="handleDragStart($event, row)"
                         @dragend="handleDragEnd"
                       >
-                        <td class="border border-slate-300 px-2 py-1.5 text-center font-extrabold text-slate-950">{{ row.initial || '-' }}</td>
-                        <td class="border border-slate-300 px-2 py-1.5 text-center font-bold text-slate-900">{{ row.company || '-' }}</td>
-                        <td class="border border-slate-300 px-2 py-1.5 text-center text-slate-800">{{ row.place || '-' }}</td>
+                        <td :class="[tableCellClass, 'font-semibold text-slate-800']">{{ row.initial || '-' }}</td>
+                        <td :class="[tableCellClass, 'font-medium text-slate-700']">{{ row.company || '-' }}</td>
                         <td
-                          class="border border-slate-300 px-2 py-1.5 text-center cursor-pointer"
-                          :class="getWeldingAreaClass(row)"
+                          :class="[
+                            tableCellClass,
+                            'text-slate-700',
+                            canManageWeldingSchedule ? 'cursor-pointer hover:bg-slate-100' : '',
+                          ]"
+                          @click.stop="openDateDialog(row)"
+                        >
+                          {{ row.place || '-' }}
+                        </td>
+                        <td
+                          :class="[tableCellClass, 'cursor-pointer', getWeldingAreaClass(row)]"
                           @click.stop="openRowDialog(row)"
                         >
                           {{ getWeldingAreaLabel(row) }}
                         </td>
-                        <td class="border border-slate-300 px-2 py-1.5 text-center font-extrabold text-emerald-700">{{ formatQty(row.head) }}</td>
-                        <td class="border border-slate-300 px-2 py-1.5 text-center font-extrabold text-sky-700">{{ formatQty(row.hole) }}</td>
-                        <td class="border border-slate-300 px-2 py-1.5 text-center font-extrabold text-amber-700">{{ formatQty(row.inch) }}</td>
+                        <td :class="[tableCellClass, 'font-semibold text-emerald-700']">{{ formatQty(row.head) }}</td>
+                        <td :class="[tableCellClass, 'font-semibold text-sky-700']">{{ formatQty(row.hole) }}</td>
+                        <td :class="[tableCellClass, 'font-semibold text-amber-700']">{{ formatQty(row.inch) }}</td>
                       </tr>
-                      <tr v-if="getInspectorRows(day.key, inspector).length > 0" class="bg-slate-100 font-extrabold text-slate-900">
-                        <td colspan="4" class="border border-slate-300 px-2 py-1.5 text-center">합계</td>
-                        <td class="border border-slate-300 px-2 py-1.5 text-center text-emerald-700">{{ formatQty(getRowsTotals(getInspectorRows(day.key, inspector)).head) }}</td>
-                        <td class="border border-slate-300 px-2 py-1.5 text-center text-sky-700">{{ formatQty(getRowsTotals(getInspectorRows(day.key, inspector)).hole) }}</td>
-                        <td class="border border-slate-300 px-2 py-1.5 text-center text-amber-700">{{ formatQty(getRowsTotals(getInspectorRows(day.key, inspector)).inch) }}</td>
+                      <tr v-if="getInspectorRows(day.key, inspector).length > 0" class="bg-slate-50 font-bold text-slate-800">
+                        <td colspan="4" :class="[tableCellClass, 'text-center']">합계</td>
+                        <td :class="[tableCellClass, 'text-center text-emerald-700']">{{ formatQty(getRowsTotals(getInspectorRows(day.key, inspector)).head) }}</td>
+                        <td :class="[tableCellClass, 'text-center text-sky-700']">{{ formatQty(getRowsTotals(getInspectorRows(day.key, inspector)).hole) }}</td>
+                        <td :class="[tableCellClass, 'text-center text-amber-700']">{{ formatQty(getRowsTotals(getInspectorRows(day.key, inspector)).inch) }}</td>
                       </tr>
                     </tbody>
                   </table>
                   <div v-else class="h-9 border border-dashed border-slate-300 bg-slate-50"></div>
+                </div>
               </div>
             </div>
 
-            <div v-if="getUnassignedRows(day.key).length > 0" class="border-t border-slate-400 bg-white">
-              <div class="border-b border-slate-300 bg-slate-100 px-2 py-1 text-xs font-extrabold text-slate-900">미지정</div>
+            <div v-if="getUnassignedRows(day.key).length > 0" class="border-t border-slate-300 bg-white">
+              <div class="border-b border-slate-300 bg-slate-100 px-2 py-1 text-center text-[11px] font-bold text-slate-600">미지정</div>
               <div class="overflow-x-auto">
                 <table class="min-w-[620px] w-full border-collapse text-[11px]">
                   <thead>
-                    <tr class="bg-white text-slate-600">
-                      <th class="border border-slate-300 px-1.5 py-1 text-center">도번</th>
-                      <th class="border border-slate-300 px-1.5 py-1 text-center">회사명</th>
-                      <th class="border border-slate-300 px-1.5 py-1 text-center">현장명</th>
-                      <th class="border border-slate-300 px-1.5 py-1 text-center">구역명</th>
-                      <th class="border border-slate-300 px-1.5 py-1 text-center">헤드</th>
-                      <th class="border border-slate-300 px-1.5 py-1 text-center">홀</th>
-                      <th class="border border-slate-300 px-1.5 py-1 text-center">인치</th>
+                    <tr class="bg-slate-100 text-slate-700">
+                      <th class="border border-slate-300 px-1.5 py-1 text-center text-[11px] font-semibold">도번</th>
+                      <th class="border border-slate-300 px-1.5 py-1 text-center text-[11px] font-semibold">회사명</th>
+                      <th class="border border-slate-300 px-1.5 py-1 text-center text-[11px] font-semibold">현장명</th>
+                      <th class="border border-slate-300 px-1.5 py-1 text-center text-[11px] font-semibold">구역명</th>
+                      <th class="border border-slate-300 px-1.5 py-1 text-center text-[11px] font-semibold">헤드</th>
+                      <th class="border border-slate-300 px-1.5 py-1 text-center text-[11px] font-semibold">홀</th>
+                      <th class="border border-slate-300 px-1.5 py-1 text-center text-[11px] font-semibold">인치</th>
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="row in getUnassignedRows(day.key)" :key="`unassigned-${row.id}`">
-                      <td class="border border-slate-300 px-1.5 py-1 text-center font-bold text-slate-900">{{ row.initial || '-' }}</td>
-                      <td class="border border-slate-300 px-1.5 py-1 text-center">{{ row.company || '-' }}</td>
-                      <td class="border border-slate-300 px-1.5 py-1 text-center">{{ row.place || '-' }}</td>
+                    <tr v-for="row in getUnassignedRows(day.key)" :key="`unassigned-${row.id}`" class="odd:bg-white even:bg-slate-50">
+                      <td class="border border-slate-300 px-1.5 py-1 text-center font-semibold text-slate-800">{{ row.initial || '-' }}</td>
+                      <td class="border border-slate-300 px-1.5 py-1 text-center font-medium text-slate-700">{{ row.company || '-' }}</td>
+                      <td
+                        class="border border-slate-300 px-1.5 py-1 text-center text-slate-700"
+                        :class="canManageWeldingSchedule ? 'cursor-pointer hover:bg-slate-100' : ''"
+                        @click.stop="openDateDialog(row)"
+                      >
+                        {{ row.place || '-' }}
+                      </td>
                       <td
                         class="border border-slate-300 px-1.5 py-1 text-center cursor-pointer"
                         :class="getWeldingAreaClass(row)"
@@ -362,15 +444,15 @@ watch(weekStartIso, loadRows)
                       >
                         {{ getWeldingAreaLabel(row) }}
                       </td>
-                      <td class="border border-slate-300 px-1.5 py-1 text-center font-bold">{{ formatQty(row.head) }}</td>
-                      <td class="border border-slate-300 px-1.5 py-1 text-center font-bold">{{ formatQty(row.hole) }}</td>
-                      <td class="border border-slate-300 px-1.5 py-1 text-center font-bold">{{ formatQty(row.inch) }}</td>
+                      <td class="border border-slate-300 px-1.5 py-1 text-center font-semibold text-emerald-700">{{ formatQty(row.head) }}</td>
+                      <td class="border border-slate-300 px-1.5 py-1 text-center font-semibold text-sky-700">{{ formatQty(row.hole) }}</td>
+                      <td class="border border-slate-300 px-1.5 py-1 text-center font-semibold text-amber-700">{{ formatQty(row.inch) }}</td>
                     </tr>
-                    <tr class="bg-slate-100 font-extrabold text-slate-900">
+                    <tr class="bg-slate-50 font-bold text-slate-800">
                       <td colspan="4" class="border border-slate-300 px-1.5 py-1 text-center">합계</td>
-                      <td class="border border-slate-300 px-1.5 py-1 text-center">{{ formatQty(getRowsTotals(getUnassignedRows(day.key)).head) }}</td>
-                      <td class="border border-slate-300 px-1.5 py-1 text-center">{{ formatQty(getRowsTotals(getUnassignedRows(day.key)).hole) }}</td>
-                      <td class="border border-slate-300 px-1.5 py-1 text-center">{{ formatQty(getRowsTotals(getUnassignedRows(day.key)).inch) }}</td>
+                      <td class="border border-slate-300 px-1.5 py-1 text-center text-emerald-700">{{ formatQty(getRowsTotals(getUnassignedRows(day.key)).head) }}</td>
+                      <td class="border border-slate-300 px-1.5 py-1 text-center text-sky-700">{{ formatQty(getRowsTotals(getUnassignedRows(day.key)).hole) }}</td>
+                      <td class="border border-slate-300 px-1.5 py-1 text-center text-amber-700">{{ formatQty(getRowsTotals(getUnassignedRows(day.key)).inch) }}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -381,6 +463,13 @@ watch(weekStartIso, loadRows)
         </div>
       </div>
     </section>
+
+    <WeldingScheduleDateDialog
+      :open="isDateDialogOpen"
+      :row="dateDialogRow"
+      @close="closeDateDialog"
+      @select="handleDateSelect"
+    />
 
     <div
       v-if="isRowDialogOpen && activeRow"
@@ -413,6 +502,11 @@ watch(weekStartIso, loadRows)
 </template>
 
 <style scoped>
+.welding-schedule-page {
+  padding-top: 20px;
+  padding-bottom: 16px;
+}
+
 @media print {
   main {
     background: white !important;

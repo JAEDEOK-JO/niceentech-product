@@ -86,9 +86,19 @@ const toNumber = (value) => {
 }
 const normalizeText = (value) => String(value ?? '').trim()
 const isCompletedOrShipped = (row) => Boolean(row?.complete) || Boolean(row?.shipment)
+const isCompletedStatus = (value) => {
+  const text = normalizeText(value)
+  return text.includes('작업완료') || text.includes('출하완료')
+}
+const isWorkerProductionCompleted = (row) =>
+  isCompletedStatus(row?.worker_t) ||
+  isCompletedStatus(row?.worker_nasa) ||
+  isCompletedStatus(row?.worker_main) ||
+  isCompletedStatus(row?.worker_welding)
+const isWeekCompletedOrShipped = (row) => isCompletedOrShipped(row) || isWorkerProductionCompleted(row)
 const isInProgressStatus = (value) => normalizeText(value).includes('작업중')
-const isProductionInProgress = (row) =>
-  !isCompletedOrShipped(row) &&
+const isWeekProductionInProgress = (row) =>
+  !isWeekCompletedOrShipped(row) &&
   (isInProgressStatus(row?.worker_t) || isInProgressStatus(row?.worker_nasa) || isInProgressStatus(row?.worker_main))
 const formatCount = (value, unit = '개') => `${Number(value || 0).toLocaleString('ko-KR')}${unit}`
 const formatCurrency = (value) => `${Number(value || 0).toLocaleString('ko-KR')}원`
@@ -190,7 +200,7 @@ const fetchRows = async () => {
     const { data, error } = await supabase
       .from(PRODUCT_LIST_TABLE)
       .select(
-        'id,work_type,head,hole,groove,test_date,complete,shipment,hold,worker_t,worker_main,worker_nasa',
+        'id,work_type,head,hole,groove,test_date,complete,shipment,hold,worker_t,worker_main,worker_nasa,worker_welding',
       )
       .order('id', { ascending: false })
       .range(from, to)
@@ -334,8 +344,8 @@ const currentWeekTargetRows = computed(() =>
     return date ? startOfDay(date).getTime() === currentWeekTuesday.getTime() : false
   }),
 )
-const currentWeekRows = computed(() => currentWeekTargetRows.value.filter((row) => isCompletedOrShipped(row)))
-const currentWeekInProgressRows = computed(() => currentWeekTargetRows.value.filter((row) => isProductionInProgress(row)))
+const currentWeekRows = computed(() => currentWeekTargetRows.value.filter((row) => isWeekCompletedOrShipped(row)))
+const currentWeekInProgressRows = computed(() => currentWeekTargetRows.value.filter((row) => isWeekProductionInProgress(row)))
 
 const buildCategoryCounts = (targetRows) => {
   const head = targetRows.reduce((sum, row) => sum + toNumber(row?.head), 0)
