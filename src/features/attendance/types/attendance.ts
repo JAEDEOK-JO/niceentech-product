@@ -199,7 +199,7 @@ export interface DailyWorkHour {
 export function mapDailyWorkHour(raw: Record<string, unknown>): DailyWorkHour {
   return {
     id: toNum(raw.id),
-    workDate: toStr(raw.work_date),
+    workDate: toStr(raw.work_date).slice(0, 10),
     employeeId: toNum(raw.employee_id),
     endTime: toStr(raw.end_time),
     createdAt: toStr(raw.created_at),

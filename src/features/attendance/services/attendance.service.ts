@@ -531,6 +531,9 @@ export async function fetchDailyWorkHoursRange(startDate: string, endDate: strin
     .select('*')
     .gte('work_date', startDate)
     .lte('work_date', endDate)
+    .order('work_date', { ascending: true })
+    .order('employee_id', { ascending: true })
+    .limit(10000)
 
   if (error) throw error
   return (data ?? []).map((r) => mapDailyWorkHour(r as Record<string, unknown>))

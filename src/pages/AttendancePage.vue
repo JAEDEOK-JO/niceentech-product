@@ -156,8 +156,10 @@ async function loadDailyWorkHours({ silent = false } = {}) {
   try {
     const { startDate, endDate } = getMonthRange(dailyWorkDate.value)
     dailyWorkHours.value = await fetchDailyWorkHoursRange(startDate, endDate)
-  } catch {
+  } catch (err) {
+    console.error('[loadDailyWorkHours]', err)
     dailyWorkHours.value = []
+    showToast('작업시간을 불러오지 못했습니다.', 'error')
   } finally {
     if (!silent) dailyWorkHoursLoading.value = false
   }
@@ -183,9 +185,10 @@ async function handleSaveDailyWorkHours(records: { employeeId: number; endTime: 
   try {
     const payload = records.map((r) => ({ workDate: dailyWorkDate.value, employeeId: r.employeeId, endTime: r.endTime }))
     await upsertDailyWorkHoursBulk(payload)
-    upsertLocalDailyWorkHours(payload)
+    await loadDailyWorkHours({ silent: true })
     showToast(`${records.length}명 저장되었습니다.`)
-  } catch {
+  } catch (err) {
+    console.error('[handleSaveDailyWorkHours]', err)
     showToast('저장 중 오류가 발생했습니다.', 'error')
   }
 }
@@ -218,9 +221,10 @@ async function handleDeleteDailyWorkHoursBulk(payload: { workDate: string; emplo
 async function handleUpdateDailyWorkHour(payload: { workDate: string; employeeId: number; endTime: string }) {
   try {
     await upsertDailyWorkHoursBulk([payload])
-    upsertLocalDailyWorkHours([payload])
+    await loadDailyWorkHours({ silent: true })
     showToast('작업시간이 수정되었습니다.')
-  } catch {
+  } catch (err) {
+    console.error('[handleUpdateDailyWorkHour]', err)
     showToast('수정 중 오류가 발생했습니다.', 'error')
   }
 }
