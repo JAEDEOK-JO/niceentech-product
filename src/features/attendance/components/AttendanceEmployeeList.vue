@@ -1,8 +1,13 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useDialog } from '@/composables/useDialog'
 import type { Employee } from '../types/attendance'
 import type { EmployeeFormData } from '../services/attendance.service'
+import {
+  getDefaultPasswordForDepartment,
+  PRODUCTION_DEPARTMENT,
+  PRODUCTION_DEPARTMENT_PASSWORD,
+} from '../utils/employeePassword'
 import {
   DEFAULT_EMPLOYEE_OPTIONS,
   fetchEmployeeOptionGroups,
@@ -98,12 +103,21 @@ const emptyForm = (): EmployeeFormData => ({
   hireDate: '',
   homeLeaveStart: '',
   homeLeaveEnd: '',
-  password: 0,
+  password: getDefaultPasswordForDepartment(departmentOptions.value[0] ?? ''),
 })
 
 const isValidEmployeeCode = (code: string) => /^\d{8}$/.test(code.trim())
 
 const form = ref<EmployeeFormData>(emptyForm())
+
+watch(
+  () => form.value.department,
+  (department) => {
+    if (department === PRODUCTION_DEPARTMENT) {
+      form.value.password = PRODUCTION_DEPARTMENT_PASSWORD
+    }
+  },
+)
 
 function openCreate() {
   form.value = emptyForm()
@@ -492,7 +506,8 @@ onMounted(loadEmployeeOptions)
                   step="1"
                   inputmode="numeric"
                   placeholder="0"
-                  class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-slate-400"
+                  class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-slate-400 disabled:bg-slate-50 disabled:text-slate-500"
+                  :disabled="form.department === PRODUCTION_DEPARTMENT"
                 />
               </div>
             </div>

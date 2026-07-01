@@ -14,6 +14,8 @@ import {
   type Employee,
   type LeaveType,
 } from '../types/attendance'
+import { normalizeEmployeePassword } from '../utils/employeePassword'
+import { sendAttendanceRequestPushToAdmins } from './attendanceNotification.service'
 
 // 연차 차감 일수 계산 (연차/병가만 일수 차감)
 const DEDUCTED_LEAVE_TYPES: string[] = ['연차', '반차(오전)', '반차(오후)', '병가']
@@ -69,6 +71,33 @@ export async function fetchMyAttendanceRequests(userId: string): Promise<Attenda
   return (data ?? []).map((row) => mapAttendanceRequest(row as Record<string, unknown>))
 }
 
+// ─── 직원별 신청 목록 조회 ─────────────────────────────────────────────────────
+export async function fetchEmployeeAttendanceRequests(
+  userName: string,
+  department: string,
+): Promise<AttendanceRequest[]> {
+  const { data, error } = await supabase
+    .from('attendance_requests')
+    .select('*')
+    .eq('user_name', userName)
+    .eq('department', department)
+    .order('created_at', { ascending: false })
+
+  if (error) throw error
+  return (data ?? []).map((row) => mapAttendanceRequest(row as Record<string, unknown>))
+}
+
+export async function fetchAttendanceRequestById(id: number): Promise<AttendanceRequest | null> {
+  const { data, error } = await supabase
+    .from('attendance_requests')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle()
+
+  if (error) throw error
+  return data ? mapAttendanceRequest(data as Record<string, unknown>) : null
+}
+
 // ─── 신청 생성 ─────────────────────────────────────────────────────────────────
 export async function createAttendanceRequest(
   form: AttendanceFormState,
@@ -112,7 +141,9 @@ export async function createAttendanceRequest(
     .single()
 
   if (error) throw error
-  return mapAttendanceRequest(data as Record<string, unknown>)
+  const created = mapAttendanceRequest(data as Record<string, unknown>)
+  void sendAttendanceRequestPushToAdmins(created)
+  return created
 }
 
 // ─── 신청 수정 (본인, 대기중 상태만) ──────────────────────────────────────────
@@ -466,7 +497,7 @@ export async function createEmployee(data: EmployeeFormData): Promise<Employee> 
       hire_date: data.hireDate || null,
       home_leave_start: data.homeLeaveStart || null,
       home_leave_end: data.homeLeaveEnd || null,
-      password: data.password,
+      password: normalizeEmployeePassword(data.department, data.password),
     })
     .select()
     .single()
@@ -502,7 +533,7 @@ export async function updateEmployee(id: number, data: EmployeeFormData): Promis
       hire_date: data.hireDate || null,
       home_leave_start: data.homeLeaveStart || null,
       home_leave_end: data.homeLeaveEnd || null,
-      password: data.password,
+      password: normalizeEmployeePassword(data.department, data.password),
     })
     .eq('id', id)
 

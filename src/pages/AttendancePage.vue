@@ -9,6 +9,7 @@
  * 관리자 판별: profiles.role === '관리자' (isAdminRole 사용)
  */
 import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useDialog } from '@/composables/useDialog'
 import { useAuth } from '@/composables/useAuth'
 import { useProfile } from '@/composables/useProfile'
@@ -40,9 +41,13 @@ import {
   fetchDailyWorkHoursRange,
   upsertDailyWorkHoursBulk,
   deleteDailyWorkHour,
+  fetchAttendanceRequestById,
   type EmployeeFormData,
   type SignatureInfo,
 } from '@/features/attendance/services/attendance.service'
+import { useAttendanceNotifications } from '@/features/attendance/composables/useAttendanceNotifications'
+import { usePushNotification } from '@/composables/usePushNotification'
+import type { AttendanceRequestNotification } from '@/features/attendance/types/attendanceNotification'
 import {
   createEmptyForm,
   type AttendanceRequest,
@@ -66,8 +71,33 @@ const currentDept = computed(() => profile.value?.department ?? '')
 
 // 관리자 판별: profiles.role 컬럼 기준
 const isAdmin = computed(() => isAdminRole(profile.value?.role))
+const {
+  notifications: attendanceNotifications,
+  unreadCount: attendanceUnreadCount,
+  loading: attendanceNotificationsLoading,
+  markAsRead: markAttendanceNotificationAsRead,
+  markAllAsRead: markAllAttendanceNotificationsAsRead,
+} = useAttendanceNotifications(session, profile)
+const {
+  isElectron: isPushElectron,
+  isSupported: isPushSupported,
+  permission: pushPermission,
+  isSubscribed: isPushSubscribed,
+  requestPermission: requestPushPermission,
+} = usePushNotification()
+const showAdminPushSetup = computed(() => {
+  if (!isAdmin.value || isPushElectron || !isPushSupported.value) return false
+  return !(pushPermission.value === 'granted' && isPushSubscribed.value)
+})
+const iosNeedsHomeScreenInstall = computed(() => {
+  if (typeof window === 'undefined') return false
+  const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent)
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+  return isIos && !isStandalone
+})
 const { confirm } = useDialog()
 const isRootAdminUser = computed(() => isRootAdmin(profile.value?.role))
+const router = useRouter()
 
 // ─── 필터 ──────────────────────────────────────────────────────────────────────
 const thisYear = new Date().getFullYear()
@@ -283,6 +313,31 @@ function closeDetail() {
   detailSignatures.value = []
 }
 
+async function handleEnableAdminPush() {
+  const userId = currentUserId.value
+  if (!userId) return
+  await requestPushPermission(userId)
+}
+
+async function handleOpenAttendanceNotification(notification: AttendanceRequestNotification) {
+  if (!notification.isRead) {
+    await markAttendanceNotificationAsRead(notification.id)
+  }
+
+  let item = items.value.find((row) => row.id === notification.attendanceRequestId) ?? null
+  if (!item) {
+    try {
+      item = await fetchAttendanceRequestById(notification.attendanceRequestId)
+    } catch {
+      item = null
+    }
+  }
+
+  if (item) {
+    await openDetail(item)
+  }
+}
+
 // ─── 반려 다이얼로그 ───────────────────────────────────────────────────────────
 const rejectDialogVisible = ref(false)
 const rejectTarget = ref<AttendanceRequest | null>(null)
@@ -455,6 +510,14 @@ function openFormForEmployee(emp: Employee) {
 
 function closeForm() {
   formVisible.value = false
+}
+
+function handleViewHistory(payload: { name: string; department: string }) {
+  formVisible.value = false
+  router.push({
+    name: 'attendance-history',
+    query: { name: payload.name, department: payload.department },
+  })
 }
 
 function openEditForm(item: AttendanceRequest) {
@@ -702,6 +765,11 @@ async function handleDeleteEmployee(id: number) {
     :current-user-id="currentUserId"
     :is-admin="isAdmin"
     :is-root-admin="isRootAdminUser"
+    :attendance-notifications="attendanceNotifications"
+    :attendance-unread-count="attendanceUnreadCount"
+    :attendance-notifications-loading="attendanceNotificationsLoading"
+    :show-admin-push-setup="showAdminPushSetup"
+    :ios-needs-home-screen-install="iosNeedsHomeScreenInstall"
     :approval-pending-count="items.filter(i => i.status === '대기중').length"
     :daepyo-pending-count="items.filter(i => i.status === '부서장승인').length"
     :gyeongyu-pending-count="items.filter(i => !i.gyeongyuBy).length"
@@ -725,6 +793,7 @@ async function handleDeleteEmployee(id: number) {
     @open-summary-request-detail="openSummaryRequestDetail"
     @open-form="openForm"
     @close-form="closeForm"
+    @view-history="handleViewHistory"
     @submit-form="submitForm"
     @edit="openEditForm"
     @delete="handleDelete"
@@ -743,6 +812,9 @@ async function handleDeleteEmployee(id: number) {
     :detail-signatures="detailSignatures"
     @open-detail="openDetail"
     @close-detail="closeDetail"
+    @open-attendance-notification="handleOpenAttendanceNotification"
+    @mark-all-attendance-notifications-read="markAllAttendanceNotificationsAsRead"
+    @enable-admin-push="handleEnableAdminPush"
     @create-employee="handleCreateEmployee"
     @update-employee="handleUpdateEmployee"
     @delete-employee="handleDeleteEmployee"

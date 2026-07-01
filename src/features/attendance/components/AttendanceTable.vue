@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { AttendanceRequest } from '../types/attendance'
+import { getFinalApproverDisplayName } from '../utils/attendanceApprover'
 
 const props = defineProps<{
   items: AttendanceRequest[]
@@ -110,8 +111,8 @@ const formatDate = (dateStr: string) => {
             <div v-if="item.status === '반려' && item.rejectReason" class="mt-1 text-xs text-red-500">
               {{ item.rejectReason }}
             </div>
-            <div v-if="item.status === '승인' && item.approvedBy" class="mt-1 text-xs text-slate-400">
-              {{ item.approvedBy }}
+            <div v-if="getFinalApproverDisplayName(item)" class="mt-1 text-xs text-slate-400">
+              {{ getFinalApproverDisplayName(item) }}
             </div>
           </td>
 

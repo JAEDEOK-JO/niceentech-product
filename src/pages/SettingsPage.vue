@@ -64,9 +64,9 @@ const notificationStatus = computed(() => {
   if (isIos && !isInStandaloneMode) return 'iPhone에서 알림을 받으려면 Safari에서 "홈 화면에 추가" 후 앱을 열어 설정해주세요.'
   if (!isSupported.value) return '이 브라우저는 푸시 알림을 지원하지 않습니다. Chrome 브라우저를 사용해주세요.'
   if (permission.value === 'denied') return '브라우저에서 알림이 차단되어 있습니다. 브라우저 설정에서 알림을 허용해주세요.'
-  if (permission.value === 'granted' && isSubscribed.value) return '메신저 푸시 알림이 켜져 있습니다.'
+  if (permission.value === 'granted' && isSubscribed.value) return '푸시 알림이 켜져 있습니다.'
   if (permission.value === 'granted' && !isSubscribed.value) return '브라우저 권한은 허용되어 있습니다. 알림 켜기를 눌러 등록해주세요.'
-  return '알림 켜기를 눌러 메신저 알림을 활성화하세요.'
+  return '알림 켜기를 눌러 푸시 알림을 활성화하세요.'
 })
 
 const statusToneClass = computed(() => {

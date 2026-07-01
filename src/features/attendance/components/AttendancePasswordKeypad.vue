@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import type { Employee } from '../types/attendance'
+import { resolveEmployeePassword } from '../utils/employeePassword'
 
 const props = defineProps<{
   employee: Employee
@@ -47,7 +48,7 @@ function clear() {
 function submit() {
   if (!canSubmit.value) return
   const entered = Number(input.value)
-  const stored = Number(props.employee.password)
+  const stored = resolveEmployeePassword(props.employee)
   // 0은 통과 불가 (기본값/미설정 처리)
   if (entered !== 0 && stored !== 0 && entered === stored) {
     emit('success', props.employee)

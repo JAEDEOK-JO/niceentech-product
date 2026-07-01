@@ -16,11 +16,14 @@ import AttendanceAnalysisPanel from './AttendanceAnalysisPanel.vue'
 import AttendanceSummaryBoard from './AttendanceSummaryBoard.vue'
 import AttendanceSummaryDetailModal from './AttendanceSummaryDetailModal.vue'
 import AttendanceDetailModal from './AttendanceDetailModal.vue'
+import AttendanceNotificationPanel from './AttendanceNotificationPanel.vue'
+import AttendancePushSetupBanner from './AttendancePushSetupBanner.vue'
 import AttendanceRequestSignatureDialog from './AttendanceRequestSignatureDialog.vue'
 import AttendancePasswordKeypad from './AttendancePasswordKeypad.vue'
 import DailyWorkHoursInputDialog from './DailyWorkHoursInputDialog.vue'
 import DailyWorkHoursPanel from './DailyWorkHoursPanel.vue'
 import type { DailyWorkHour } from '../types/attendance'
+import { getFinalApproverDisplayName } from '../utils/attendanceApprover'
 
 const props = defineProps<{
   items: AttendanceRequest[]
@@ -61,6 +64,11 @@ const props = defineProps<{
   dailyWorkHours: DailyWorkHour[]
   dailyWorkRequests: AttendanceRequest[]
   dailyWorkHoursLoading: boolean
+  attendanceNotifications: import('../types/attendanceNotification').AttendanceRequestNotification[]
+  attendanceUnreadCount: number
+  attendanceNotificationsLoading: boolean
+  showAdminPushSetup: boolean
+  iosNeedsHomeScreenInstall: boolean
 }>()
 
 const emit = defineEmits<{
@@ -100,6 +108,10 @@ const emit = defineEmits<{
   (e: 'deleteDailyWorkHoursBulk', payload: { workDate: string; employeeIds: number[] }): void
   (e: 'selectDailyWorkDate', workDate: string): void
   (e: 'updateDailyWorkHour', payload: { workDate: string; employeeId: number; endTime: string }): void
+  (e: 'viewHistory', payload: { name: string; department: string }): void
+  (e: 'openAttendanceNotification', notification: import('../types/attendanceNotification').AttendanceRequestNotification): void
+  (e: 'markAllAttendanceNotificationsRead'): void
+  (e: 'enableAdminPush'): void
 }>()
 
 // ─── 비밀번호 키패드 상태 ─────────────────────────────────────────────────────
@@ -221,6 +233,21 @@ watch(
           <p class="mt-1 text-sm text-slate-500">{{ thisMonthLabel }} 휴가 신청 및 근태 현황</p>
         </div>
       </div>
+
+      <AttendancePushSetupBanner
+        v-if="isAdmin && showAdminPushSetup"
+        :ios-needs-install="iosNeedsHomeScreenInstall"
+        @enable="emit('enableAdminPush')"
+      />
+
+      <AttendanceNotificationPanel
+        v-if="isAdmin"
+        :notifications="attendanceNotifications"
+        :unread-count="attendanceUnreadCount"
+        :loading="attendanceNotificationsLoading"
+        @open="emit('openAttendanceNotification', $event)"
+        @mark-all-read="emit('markAllAttendanceNotificationsRead')"
+      />
 
       <!-- 통계 카드 (관리자만) -->
       <div v-if="isAdmin" class="mb-4 grid grid-cols-4 gap-1.5">
@@ -606,7 +633,7 @@ watch(
                   </div>
                   <div class="mt-1.5 flex flex-wrap items-center gap-3 text-xs text-slate-500" @click="emit('openDetail', item)">
                     <span>{{ formatPeriod(item) }}</span>
-                    <span v-if="item.status === '승인' && item.approvedBy" class="text-slate-400">승인: {{ item.approvedBy }}</span>
+                    <span v-if="getFinalApproverDisplayName(item)" class="text-slate-400">승인: {{ getFinalApproverDisplayName(item) }}</span>
                     <span v-else-if="item.status === '반려' && item.rejectReason" class="text-red-500">반려: {{ item.rejectReason }}</span>
                     <span class="truncate">{{ item.reason || '-' }}</span>
                   </div>
@@ -658,6 +685,7 @@ watch(
             @update:model-value="emit('update:formData', $event)"
             @submit="emit('submitForm')"
             @cancel="emit('closeForm')"
+            @view-history="emit('viewHistory', $event)"
           />
         </div>
       </div>

@@ -6,6 +6,7 @@ import { useMessengerUnread } from '@/composables/useMessengerUnread'
 import { useProfile } from '@/composables/useProfile'
 import { useElectronBridge } from '@/composables/useElectronBridge'
 import { useElectronNotifications } from '@/composables/useElectronNotifications'
+import { useAttendanceNotifications } from '@/features/attendance/composables/useAttendanceNotifications'
 import { isAdminRole, isDesignDepartment } from '@/utils/adminAccess'
 
 const route = useRoute()
@@ -13,6 +14,7 @@ const router = useRouter()
 const { session } = useAuth()
 const { totalUnreadCount, startUnreadTracking, stopUnreadTracking } = useMessengerUnread()
 const { profile } = useProfile(session)
+const { unreadCount: attendanceUnreadCount } = useAttendanceNotifications(session, profile)
 const mobileMenuOpen = ref(false)
 
 // Electron: 트레이 아이콘/배지 업데이트
@@ -57,7 +59,12 @@ const navItems = computed(() => {
     to: { name: 'messenger' },
     badgeCount: totalUnreadCount.value,
   })
-  items.push({ key: 'attendance', label: '근태관리', to: { name: 'attendance' } })
+  items.push({
+    key: 'attendance',
+    label: '근태관리',
+    to: { name: 'attendance' },
+    badgeCount: isAdminRole(profile.value?.role) ? attendanceUnreadCount.value : 0,
+  })
   return items
 })
 

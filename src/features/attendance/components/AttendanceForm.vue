@@ -14,6 +14,7 @@ const emit = defineEmits<{
   (e: 'update:modelValue', value: AttendanceFormState): void
   (e: 'submit'): void
   (e: 'cancel'): void
+  (e: 'viewHistory', payload: { name: string; department: string }): void
 }>()
 
 const form = ref<AttendanceFormState>({ ...props.modelValue })
@@ -146,6 +147,13 @@ function onEndDateChange(date: string) {
       >
         잔여 연차가 없어 신청할 수 없습니다. 인사담당자에게 문의하세요.
       </p>
+      <button
+        type="button"
+        class="mt-4 w-full rounded-xl bg-emerald-600 py-3.5 text-base font-extrabold text-white transition-colors hover:bg-emerald-500"
+        @click="emit('viewHistory', { name: selectedEmployee.name, department: selectedEmployee.department })"
+      >
+        신청현황 보기
+      </button>
     </div>
 
     <!-- 부서 선택 -->

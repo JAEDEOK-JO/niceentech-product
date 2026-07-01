@@ -252,9 +252,9 @@ onBeforeUnmount(() => {
           <div class="inline-flex rounded-full bg-indigo-100 px-3 py-1 text-xs font-extrabold tracking-[0.18em] text-indigo-700">
             NOTIFICATION
           </div>
-          <h2 class="mt-4 text-2xl font-extrabold text-slate-900">메신저 알림을 켜시겠어요?</h2>
+          <h2 class="mt-4 text-2xl font-extrabold text-slate-900">푸시 알림을 켜시겠어요?</h2>
           <p class="mt-3 text-sm leading-6 text-slate-600">
-            채팅방에 새 메시지가 오면 브라우저 푸시 알림으로 바로 받을 수 있습니다.
+            메신저, 휴가 신청 등 알림을 휴대폰에서 바로 받을 수 있습니다.
           </p>
           <div class="mt-6 flex gap-3">
             <button

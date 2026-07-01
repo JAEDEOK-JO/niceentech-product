@@ -30,6 +30,7 @@ import AdminOperationsDashboardPage from '@/pages/AdminOperationsDashboardPage.v
 import AdminProductionDashboardPage from '@/pages/AdminProductionDashboardPage.vue'
 import MessengerPage from '@/pages/MessengerPage.vue'
 import AttendancePage from '@/pages/AttendancePage.vue'
+import AttendanceRequestHistoryPage from '@/pages/AttendanceRequestHistoryPage.vue'
 import { isAdminRole, isDesignDepartment, isRootAdmin } from '@/utils/adminAccess'
 
 
@@ -136,6 +137,12 @@ const routes = [
     path: '/attendance',
     name: 'attendance',
     component: AttendancePage,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/attendance/history',
+    name: 'attendance-history',
+    component: AttendanceRequestHistoryPage,
     meta: { requiresAuth: true },
   },
   {
