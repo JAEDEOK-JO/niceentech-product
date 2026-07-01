@@ -11,6 +11,7 @@ import { isAdminRole, isProductionAdmin } from '@/utils/adminAccess'
 import { WELDING_INSPECTORS, getWeldingInspectorClass } from '@/utils/productionStatus'
 import { sanitizeDecimalOne } from '@/features/main/productionPlanNumbers'
 import { WELDING_SCHEDULE_PERMISSION_ERROR } from '@/features/welding-schedule/utils/weldingSchedulePermission'
+import CncPlanRegisterDialog from '@/features/cnc/components/CncPlanRegisterDialog.vue'
 
 const { confirm, alert } = useDialog()
 
@@ -33,6 +34,7 @@ const emit = defineEmits([
   'reset-week',
   'go-register',
   'go-stats',
+  'go-cnc',
   'search-change',
   'select-tuesday',
   'edit-row',
@@ -52,6 +54,8 @@ const emit = defineEmits([
   'nasa-long-press',
   'welding-start',
   'update-inch',
+  'register-cnc',
+  'cancel-cnc',
 ])
 
 const overallTotals = computed(() =>
@@ -83,6 +87,9 @@ const selectedRowId = ref(null)
 const isTestDateDialogOpen = ref(false)
 const pendingTestDateIso = ref('')
 const activeTestDateRow = ref(null)
+const isCncRegisterDialogOpen = ref(false)
+const cncRegisterSaving = ref(false)
+const cncCancelSaving = ref(false)
 const isWeldingScheduleInspectorDialogOpen = ref(false)
 const isWeldingScheduleDateDialogOpen = ref(false)
 const activeWeldingScheduleRow = ref(null)
@@ -176,8 +183,7 @@ const headerLegendBadges = [
   { label: '보류', className: 'border-orange-200 bg-orange-100 text-orange-900' },
   { label: '민뚜라', className: 'border-cyan-300 bg-cyan-200 text-cyan-950' },
   { label: '진민택', className: 'border-fuchsia-300 bg-fuchsia-200 text-fuchsia-950' },
-  { label: '석산', className: 'border-amber-300 bg-amber-200 text-amber-950' },
-  { label: '조경천', className: 'border-emerald-300 bg-emerald-200 text-emerald-950' },
+  { label: 'CNC', className: 'border-violet-300 bg-violet-200 text-violet-950' },
 ]
 
 const formatKoreanDateLabel = (value) => {
@@ -661,6 +667,69 @@ const closeTestDateDialog = () => {
   pendingTestDateIso.value = ''
 }
 
+const openCncRegisterDialog = () => {
+  if (!activeTestDateRow.value) return
+  isCncRegisterDialogOpen.value = true
+}
+
+const handleCncButtonClick = () => {
+  if (!activeTestDateRow.value || cncCancelSaving.value) return
+  if (activeTestDateRow.value.has_cnc) {
+    handleCncCancel()
+    return
+  }
+  openCncRegisterDialog()
+}
+
+const handleCncCancel = () => {
+  if (!activeTestDateRow.value || cncCancelSaving.value) return
+  cncCancelSaving.value = true
+  emit('cancel-cnc', {
+    row: activeTestDateRow.value,
+    onResult: (result) => {
+      cncCancelSaving.value = false
+      if (!result?.ok) {
+        showSnackbar('CNC 취소에 실패했습니다.')
+        return
+      }
+      activeTestDateRow.value = {
+        ...activeTestDateRow.value,
+        has_cnc: false,
+      }
+      showSnackbar('CNC 등록이 취소되었습니다.')
+    },
+  })
+}
+
+const closeCncRegisterDialog = () => {
+  if (cncRegisterSaving.value) return
+  isCncRegisterDialogOpen.value = false
+}
+
+const handleCncRegisterSubmit = ({ kind, quantity, length }) => {
+  if (!activeTestDateRow.value) return
+  cncRegisterSaving.value = true
+  emit('register-cnc', {
+    row: activeTestDateRow.value,
+    kind,
+    quantity,
+    length,
+    onResult: (result) => {
+      cncRegisterSaving.value = false
+      if (result?.ok) {
+        isCncRegisterDialogOpen.value = false
+        activeTestDateRow.value = {
+          ...activeTestDateRow.value,
+          has_cnc: true,
+        }
+        showSnackbar('CNC 등록되었습니다.')
+        return
+      }
+      showSnackbar('CNC 등록에 실패했습니다.')
+    },
+  })
+}
+
 const openWeldingScheduleDateDialog = () => {
   if (!activeWeldingScheduleRow.value) return
   const baseIso = String(activeWeldingScheduleRow.value?.welding_schedule_date ?? '').trim() || formatIsoDate(new Date())
@@ -916,6 +985,9 @@ const selectDrawingFile = (file) => {
                 <Printer class="mr-1 h-4 w-4" />
                 인쇄
               </Button>
+              <Button class="h-8 px-3 text-xs md:text-sm" variant="outline" @click="emit('go-cnc')">
+                CNC
+              </Button>
               <button
                 type="button"
                 class="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
@@ -1168,6 +1240,19 @@ const selectDrawingFile = (file) => {
             이동
           </button>
           <button
+            type="button"
+            class="rounded-md px-5 py-2 text-sm font-bold shadow-sm transition disabled:opacity-60"
+            :class="
+              activeTestDateRow.has_cnc
+                ? 'bg-rose-100 text-rose-700 hover:bg-rose-200'
+                : 'bg-violet-600 text-white hover:bg-violet-700'
+            "
+            :disabled="cncCancelSaving"
+            @click="handleCncButtonClick"
+          >
+            {{ cncCancelSaving ? '처리 중...' : activeTestDateRow.has_cnc ? 'CNC취소' : 'CNC' }}
+          </button>
+          <button
             v-if="canManageWeldingSchedule"
             type="button"
             class="rounded-md px-5 py-2 text-sm font-bold shadow-sm transition"
@@ -1183,6 +1268,17 @@ const selectDrawingFile = (file) => {
         </div>
       </div>
     </div>
+
+    <CncPlanRegisterDialog
+      :open="isCncRegisterDialogOpen && Boolean(activeTestDateRow)"
+      :saving="cncRegisterSaving"
+      :company="String(activeTestDateRow?.company ?? '')"
+      :place="String(activeTestDateRow?.place ?? '')"
+      :area="String(activeTestDateRow?.area ?? '')"
+      :drawing-no="String(activeTestDateRow?.initial ?? '')"
+      @close="closeCncRegisterDialog"
+      @submit="handleCncRegisterSubmit"
+    />
 
     <div
       v-if="isWeldingScheduleInspectorDialogOpen && activeWeldingScheduleRow"

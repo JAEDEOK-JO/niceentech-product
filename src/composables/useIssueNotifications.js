@@ -2,13 +2,6 @@ import { onUnmounted, ref, watch } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { isAdminRole, normalizeWorkMan } from '@/utils/adminAccess'
 
-const sendPush = async ({ userIds, title, body, url = '/notifications' }) => {
-  if (!userIds?.length) return
-  try {
-    await supabase.functions.invoke('send-push', { body: { user_ids: userIds, title, body, url } })
-  } catch {}
-}
-
 export function useIssueNotifications(session) {
   const notifications = ref([])
   const completionAlerts = ref([])
@@ -374,18 +367,6 @@ export function useIssueNotifications(session) {
         { onConflict: 'request_id,recipient_user_id,notification_kind' },
       )
     }
-
-    const allRecipientIds = [
-      ...recipientUsers.map((u) => u.id),
-      ...adminTargets.map((a) => a.recipient_user_id),
-    ].filter((id) => id && id !== userId)
-
-    sendPush({
-      userIds: [...new Set(allRecipientIds)],
-      title: `✅ 요청 완료: ${request.company || '-'}`,
-      body: `${request.place || '-'} / ${request.area || '-'}`,
-      url: '/notifications',
-    })
 
     return { ok: true }
   }

@@ -8,6 +8,7 @@ import { useProductionPlan } from '@/composables/useProductionPlan'
 import { canManageWeldingSchedule } from '@/features/welding-schedule/utils/weldingSchedulePermission'
 import { isAdminRole, isDesignDepartment, normalizeDepartment } from '@/utils/adminAccess'
 import { supabase } from '@/lib/supabase'
+import { createCncItem, deleteCncItemByProductListId } from '@/features/cnc/services/cnc.service'
 
 const router = useRouter()
 const route = useRoute()
@@ -30,6 +31,8 @@ const {
   fetchDrawingFiles,
   uploadDrawingFiles,
   deleteDrawingFile,
+  markCncRegistered,
+  unmarkCncRegistered,
 } = useProductionPlan(session)
 
 const canManageWeldingSchedulePermission = computed(() => canManageWeldingSchedule(profile.value))
@@ -59,6 +62,9 @@ const goStats = () => {
       testDate: selectedTuesdayIso.value,
     },
   })
+}
+const goCnc = () => {
+  router.push({ name: 'cnc' })
 }
 
 const handleSearchChange = (value) => {
@@ -484,7 +490,46 @@ const handleDeleteDrawingFile = async ({ fileId, onResult }) => {
   onResult?.(result)
 }
 
+const handleRegisterCnc = async ({ row, kind, quantity, length, onResult }) => {
+  const userId = session.value?.user?.id ?? ''
+  if (!userId || !row?.id) {
+    onResult?.({ ok: false })
+    return
+  }
 
+  try {
+    await createCncItem({
+      company: String(row.company ?? ''),
+      place: String(row.place ?? ''),
+      area: String(row.area ?? ''),
+      drawingNo: String(row.initial ?? ''),
+      kind: String(kind ?? ''),
+      quantity: Number(quantity ?? 0),
+      length: Number(length ?? 0),
+      productListId: row.id,
+    }, userId)
+    markCncRegistered(row.id)
+    onResult?.({ ok: true })
+  } catch {
+    onResult?.({ ok: false })
+  }
+}
+
+const handleCancelCnc = async ({ row, onResult }) => {
+  const productListId = Number(row?.id ?? 0)
+  if (!productListId) {
+    onResult?.({ ok: false })
+    return
+  }
+
+  try {
+    await deleteCncItemByProductListId(productListId)
+    unmarkCncRegistered(productListId)
+    onResult?.({ ok: true })
+  } catch {
+    onResult?.({ ok: false })
+  }
+}
 
 watch(
   () => [route.query.date, route.query.q, route.query.all],
@@ -545,6 +590,7 @@ watch(
     @reset-week="resetWeek"
     @go-register="goRegister"
     @go-stats="goStats"
+    @go-cnc="goCnc"
     @search-change="handleSearchChange"
     @select-tuesday="handleSelectTuesday"
     @edit-row="handleEditRow"
@@ -564,5 +610,7 @@ watch(
     @load-drawing-files="handleLoadDrawingFiles"
     @upload-drawing-files="handleUploadDrawingFiles"
     @delete-drawing-file="handleDeleteDrawingFile"
+    @register-cnc="handleRegisterCnc"
+    @cancel-cnc="handleCancelCnc"
   />
 </template>

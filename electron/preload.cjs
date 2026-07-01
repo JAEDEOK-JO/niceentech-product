@@ -17,7 +17,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   /**
-   * 네이티브 알림 요청 (OneSignal 대신 Electron 네이티브 알림 사용 시)
+   * 네이티브 알림 요청 (Electron 네이티브 알림)
    * @param {{ title: string, body: string, url?: string }} options
    */
   showNotification: (options) => {

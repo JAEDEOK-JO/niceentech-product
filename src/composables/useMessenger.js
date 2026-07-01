@@ -1,23 +1,6 @@
 import { ref, computed } from 'vue'
 import { supabase } from '@/lib/supabase'
 
-const sendPush = async ({ roomId, excludeUserId, title, body, url }) => {
-  try {
-    const { data, error } = await supabase.functions.invoke('send-push', {
-      body: { room_id: roomId, exclude_user_id: excludeUserId, title, body, url },
-    })
-    if (error) {
-      console.error('send-push invoke failed:', error)
-      return
-    }
-    if (data?.error) {
-      console.error('send-push response error:', data)
-    }
-  } catch (error) {
-    console.error('send-push unexpected error:', error)
-  }
-}
-
 export const useMessenger = (session) => {
   const rooms = ref([])
   const messages = ref([])
@@ -256,15 +239,6 @@ export const useMessenger = (session) => {
     sending.value = false
     if (err) return { ok: false, reason: err.message }
 
-    const textPreview = content.trim() ? content.trim().slice(0, 60) : '파일을 보냈습니다.'
-    sendPush({
-      roomId,
-      excludeUserId: userId,
-      title: `💬 ${senderName}`,
-      body: textPreview,
-      url: '/messenger',
-    })
-
     return { ok: true, message: data }
   }
 
@@ -302,17 +276,6 @@ export const useMessenger = (session) => {
     const { error: err } = await supabase.from('chat_messages').insert(insertRows)
     sending.value = false
     if (err) return { ok: false, reason: err.message }
-
-    const textPreview = content.trim()
-      ? content.trim().slice(0, 60)
-      : `파일 ${files.length}개를 보냈습니다.`
-    sendPush({
-      roomId,
-      excludeUserId: userId,
-      title: `💬 ${senderName}`,
-      body: textPreview,
-      url: '/messenger',
-    })
 
     return { ok: true }
   }

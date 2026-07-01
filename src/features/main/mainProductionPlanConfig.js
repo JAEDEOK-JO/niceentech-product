@@ -185,7 +185,9 @@ export const getBodyCellClass = (row, column) => {
   const classes = ['border', 'border-slate-200', 'h-[50px]', 'align-middle', 'text-[12px]', 'font-medium', 'text-slate-700']
   classes.push(column.align === 'center' ? 'text-center' : 'text-left')
 
-  if (column.key === 'area' && String(row?.welding_schedule_date ?? '').trim()) {
+  if (column.key === 'weight' && Boolean(row?.has_cnc)) {
+    classes.push('bg-violet-200', 'text-violet-950')
+  } else if (column.key === 'area' && String(row?.welding_schedule_date ?? '').trim()) {
     const inspector = String(row?.welding_schedule_inspector ?? '').trim()
     if (inspector === '민뚜라') {
       classes.push('bg-cyan-200', 'text-cyan-950')

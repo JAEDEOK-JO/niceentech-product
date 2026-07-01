@@ -19,7 +19,7 @@ const mobileMenuOpen = ref(false)
 
 // Electron: 트레이 아이콘/배지 업데이트
 useElectronBridge(totalUnreadCount)
-// Electron: 새 메시지 네이티브 알림 (OneSignal 대신 Supabase 리얼타임 사용)
+// Electron: 새 메시지 네이티브 알림 (Supabase Realtime)
 useElectronNotifications(session)
 
 watch(

@@ -46,7 +46,6 @@ import {
   type SignatureInfo,
 } from '@/features/attendance/services/attendance.service'
 import { useAttendanceNotifications } from '@/features/attendance/composables/useAttendanceNotifications'
-import { usePushNotification } from '@/composables/usePushNotification'
 import type { AttendanceRequestNotification } from '@/features/attendance/types/attendanceNotification'
 import {
   createEmptyForm,
@@ -78,23 +77,6 @@ const {
   markAsRead: markAttendanceNotificationAsRead,
   markAllAsRead: markAllAttendanceNotificationsAsRead,
 } = useAttendanceNotifications(session, profile)
-const {
-  isElectron: isPushElectron,
-  isSupported: isPushSupported,
-  permission: pushPermission,
-  isSubscribed: isPushSubscribed,
-  requestPermission: requestPushPermission,
-} = usePushNotification()
-const showAdminPushSetup = computed(() => {
-  if (!isAdmin.value || isPushElectron || !isPushSupported.value) return false
-  return !(pushPermission.value === 'granted' && isPushSubscribed.value)
-})
-const iosNeedsHomeScreenInstall = computed(() => {
-  if (typeof window === 'undefined') return false
-  const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent)
-  const isStandalone = window.matchMedia('(display-mode: standalone)').matches
-  return isIos && !isStandalone
-})
 const { confirm } = useDialog()
 const isRootAdminUser = computed(() => isRootAdmin(profile.value?.role))
 const router = useRouter()
@@ -311,12 +293,6 @@ async function openDetail(item: AttendanceRequest) {
 function closeDetail() {
   detailItem.value = null
   detailSignatures.value = []
-}
-
-async function handleEnableAdminPush() {
-  const userId = currentUserId.value
-  if (!userId) return
-  await requestPushPermission(userId)
 }
 
 async function handleOpenAttendanceNotification(notification: AttendanceRequestNotification) {
@@ -768,8 +744,6 @@ async function handleDeleteEmployee(id: number) {
     :attendance-notifications="attendanceNotifications"
     :attendance-unread-count="attendanceUnreadCount"
     :attendance-notifications-loading="attendanceNotificationsLoading"
-    :show-admin-push-setup="showAdminPushSetup"
-    :ios-needs-home-screen-install="iosNeedsHomeScreenInstall"
     :approval-pending-count="items.filter(i => i.status === '대기중').length"
     :daepyo-pending-count="items.filter(i => i.status === '부서장승인').length"
     :gyeongyu-pending-count="items.filter(i => !i.gyeongyuBy).length"
@@ -814,7 +788,6 @@ async function handleDeleteEmployee(id: number) {
     @close-detail="closeDetail"
     @open-attendance-notification="handleOpenAttendanceNotification"
     @mark-all-attendance-notifications-read="markAllAttendanceNotificationsAsRead"
-    @enable-admin-push="handleEnableAdminPush"
     @create-employee="handleCreateEmployee"
     @update-employee="handleUpdateEmployee"
     @delete-employee="handleDeleteEmployee"

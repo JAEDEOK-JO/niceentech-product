@@ -1,7 +1,5 @@
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
-import { isAdminRole } from '@/utils/adminAccess'
-import type { AttendanceRequest } from '../types/attendance'
 import {
   mapAttendanceRequestNotification,
   type AttendanceRequestNotification,
@@ -82,42 +80,4 @@ export function subscribeAttendanceNotifications(
 
 export function unsubscribeAttendanceNotifications(channel: RealtimeChannel): void {
   supabase.removeChannel(channel)
-}
-
-export async function fetchActiveAdminUserIds(): Promise<string[]> {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('id, role, activate')
-    .eq('activate', true)
-
-  if (error) throw error
-
-  return (data ?? [])
-    .filter((row) => isAdminRole(String(row.role ?? '')))
-    .map((row) => String(row.id ?? '').trim())
-    .filter(Boolean)
-}
-
-export async function sendAttendanceRequestPushToAdmins(request: AttendanceRequest): Promise<void> {
-  try {
-    const adminIds = await fetchActiveAdminUserIds()
-    if (adminIds.length === 0) return
-
-    const startDate = request.startDate.slice(0, 10)
-    const title = `[휴가 신청] ${request.userName}`
-    const body = `${request.department} · ${request.leaveType} ${request.daysCount}일 · ${startDate}`
-
-    const { error } = await supabase.functions.invoke('send-push', {
-      body: {
-        user_ids: adminIds,
-        title,
-        body,
-        url: '/attendance',
-      },
-    })
-
-    if (error) console.error('[sendAttendanceRequestPushToAdmins]', error)
-  } catch (err) {
-    console.error('[sendAttendanceRequestPushToAdmins]', err)
-  }
 }

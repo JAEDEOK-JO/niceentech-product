@@ -31,6 +31,8 @@ import AdminProductionDashboardPage from '@/pages/AdminProductionDashboardPage.v
 import MessengerPage from '@/pages/MessengerPage.vue'
 import AttendancePage from '@/pages/AttendancePage.vue'
 import AttendanceRequestHistoryPage from '@/pages/AttendanceRequestHistoryPage.vue'
+import CncPage from '@/pages/CncPage.vue'
+import CncStandalonePage from '@/pages/CncStandalonePage.vue'
 import { isAdminRole, isDesignDepartment, isRootAdmin } from '@/utils/adminAccess'
 
 
@@ -143,6 +145,18 @@ const routes = [
     path: '/attendance/history',
     name: 'attendance-history',
     component: AttendanceRequestHistoryPage,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/cnc-only',
+    name: 'cnc-only',
+    component: CncStandalonePage,
+    meta: { standalone: true },
+  },
+  {
+    path: '/cnc',
+    name: 'cnc',
+    component: CncPage,
     meta: { requiresAuth: true },
   },
   {

@@ -17,7 +17,6 @@ import AttendanceSummaryBoard from './AttendanceSummaryBoard.vue'
 import AttendanceSummaryDetailModal from './AttendanceSummaryDetailModal.vue'
 import AttendanceDetailModal from './AttendanceDetailModal.vue'
 import AttendanceNotificationPanel from './AttendanceNotificationPanel.vue'
-import AttendancePushSetupBanner from './AttendancePushSetupBanner.vue'
 import AttendanceRequestSignatureDialog from './AttendanceRequestSignatureDialog.vue'
 import AttendancePasswordKeypad from './AttendancePasswordKeypad.vue'
 import DailyWorkHoursInputDialog from './DailyWorkHoursInputDialog.vue'
@@ -67,8 +66,6 @@ const props = defineProps<{
   attendanceNotifications: import('../types/attendanceNotification').AttendanceRequestNotification[]
   attendanceUnreadCount: number
   attendanceNotificationsLoading: boolean
-  showAdminPushSetup: boolean
-  iosNeedsHomeScreenInstall: boolean
 }>()
 
 const emit = defineEmits<{
@@ -111,7 +108,6 @@ const emit = defineEmits<{
   (e: 'viewHistory', payload: { name: string; department: string }): void
   (e: 'openAttendanceNotification', notification: import('../types/attendanceNotification').AttendanceRequestNotification): void
   (e: 'markAllAttendanceNotificationsRead'): void
-  (e: 'enableAdminPush'): void
 }>()
 
 // ─── 비밀번호 키패드 상태 ─────────────────────────────────────────────────────
@@ -233,12 +229,6 @@ watch(
           <p class="mt-1 text-sm text-slate-500">{{ thisMonthLabel }} 휴가 신청 및 근태 현황</p>
         </div>
       </div>
-
-      <AttendancePushSetupBanner
-        v-if="isAdmin && showAdminPushSetup"
-        :ios-needs-install="iosNeedsHomeScreenInstall"
-        @enable="emit('enableAdminPush')"
-      />
 
       <AttendanceNotificationPanel
         v-if="isAdmin"

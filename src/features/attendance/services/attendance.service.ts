@@ -15,8 +15,6 @@ import {
   type LeaveType,
 } from '../types/attendance'
 import { normalizeEmployeePassword } from '../utils/employeePassword'
-import { sendAttendanceRequestPushToAdmins } from './attendanceNotification.service'
-
 // 연차 차감 일수 계산 (연차/병가만 일수 차감)
 const DEDUCTED_LEAVE_TYPES: string[] = ['연차', '반차(오전)', '반차(오후)', '병가']
 const normalizeAttendanceApproverName = (value: string) => String(value ?? '').replace(/\(t\)/gi, '').trim()
@@ -141,9 +139,7 @@ export async function createAttendanceRequest(
     .single()
 
   if (error) throw error
-  const created = mapAttendanceRequest(data as Record<string, unknown>)
-  void sendAttendanceRequestPushToAdmins(created)
-  return created
+  return mapAttendanceRequest(data as Record<string, unknown>)
 }
 
 // ─── 신청 수정 (본인, 대기중 상태만) ──────────────────────────────────────────
