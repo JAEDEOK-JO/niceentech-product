@@ -112,9 +112,8 @@ const formatShortMonthDay = (value) => {
   return `${String(parsed.getMonth() + 1).padStart(2, '0')}월 ${String(parsed.getDate()).padStart(2, '0')}일`
 }
 const currentWeekTuesday = getUpcomingTuesday(now)
-const currentMonthProgressCutoff = startOfDay(now)
+const currentMonthProgressCutoff = startOfDay(currentWeekTuesday)
 const currentMonthProgressLabel = `${reportMonthLabel} 현재까지`
-const currentMonthProgressRangeLabel = `${reportMonth + 1}월 1일~오늘까지`
 const weeklyAveragePeriodLabel = `2022년 9월 ~ ${reportYear}년 ${reportMonth + 1}월 현재까지`
 const weeklyAverageEnd = new Date(reportYear, reportMonth + 1, 0)
 
@@ -316,12 +315,12 @@ const fetchReportData = async () => {
   }
 }
 
-const currentMonthRows = computed(() => rows.value.filter((row) => isCompletedOrShipped(row) && isMonthRow(row, reportMonth)))
+const currentMonthRows = computed(() => rows.value.filter((row) => isWeekCompletedOrShipped(row) && isMonthRow(row, reportMonth)))
 const twoMonthsAgoRows = computed(() =>
-  rows.value.filter((row) => isCompletedOrShipped(row) && isMonthRow(row, getMonthDateByOffset(-2).getMonth())),
+  rows.value.filter((row) => isWeekCompletedOrShipped(row) && isMonthRow(row, getMonthDateByOffset(-2).getMonth())),
 )
 const previousMonthRows = computed(() =>
-  rows.value.filter((row) => isCompletedOrShipped(row) && isMonthRow(row, getMonthDateByOffset(-1).getMonth())),
+  rows.value.filter((row) => isWeekCompletedOrShipped(row) && isMonthRow(row, getMonthDateByOffset(-1).getMonth())),
 )
 const currentMonthProgressRows = computed(() =>
   currentMonthRows.value.filter((row) => {
@@ -329,15 +328,15 @@ const currentMonthProgressRows = computed(() =>
     return date ? startOfDay(date).getTime() <= currentMonthProgressCutoff.getTime() : false
   }),
 )
-const currentYearRows = computed(() => rows.value.filter((row) => isCompletedOrShipped(row) && isYearRow(row)))
+const currentYearRows = computed(() => rows.value.filter((row) => isWeekCompletedOrShipped(row) && isYearRow(row)))
 const currentYearProgressRows = computed(() =>
   currentYearRows.value.filter((row) => {
     const date = getMonthlyReferenceDate(row)
     return date ? startOfDay(date).getTime() <= startOfDay(currentWeekTuesday).getTime() : false
   }),
 )
-const previousYearRows = computed(() => rows.value.filter((row) => isCompletedOrShipped(row) && isPreviousYearRow(row)))
-const twoYearsAgoYearRows = computed(() => rows.value.filter((row) => isCompletedOrShipped(row) && isTwoYearsAgoRow(row)))
+const previousYearRows = computed(() => rows.value.filter((row) => isWeekCompletedOrShipped(row) && isPreviousYearRow(row)))
+const twoYearsAgoYearRows = computed(() => rows.value.filter((row) => isWeekCompletedOrShipped(row) && isTwoYearsAgoRow(row)))
 const currentWeekTargetRows = computed(() =>
   rows.value.filter((row) => {
     const date = getMonthlyReferenceDate(row)
@@ -800,7 +799,6 @@ onMounted(async () => {
                 <p class="text-[15px] font-extrabold text-slate-900">
                   {{ twoMonthsAgoLabel }} / {{ previousMonthLabel }} / {{ currentMonthProgressLabel }} 비교
                 </p>
-                <p class="mt-1 text-[14px] text-slate-500">이번달은 {{ currentMonthProgressRangeLabel }} 반영합니다.</p>
                 <div class="mt-4">
                   <table class="min-w-full table-fixed border-collapse text-sm">
                     <thead class="border-b border-slate-200 text-[12px] font-bold text-slate-600">

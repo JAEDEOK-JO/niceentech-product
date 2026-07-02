@@ -95,7 +95,7 @@ const formatMonthValue = (date) => `${date.getFullYear()}-${String(date.getMonth
 const formatMonthTitle = (date) => `${date.getFullYear()}년 ${String(date.getMonth() + 1).padStart(2, '0')}월`
 const sanitizeMoneyInput = (value) => String(value ?? '').replace(/[^\d]/g, '')
 const getWeekLabel = (weekIndex) => ['첫째주', '둘째주', '셋째주', '넷째주', '다섯째주'][weekIndex - 1] ?? `${weekIndex}주차`
-const isCurrentMonthRow = (row) => String(row?.registration_month ?? '').slice(0, 7) === reportMonthValue.slice(0, 7)
+const isCurrentMonthRow = (row) => String(row?.registration_month ?? '').slice(0, 7) === selectedSalesReportMonthValue.value.slice(0, 7)
 const isSalesBaselineRow = (row) => {
   const raw = String(row?.registration_month ?? '').trim()
   return Boolean(raw) && raw >= SALES_REPORT_BASELINE_START
@@ -133,6 +133,19 @@ const fetchWeeklySalesByMonth = async (monthValue) => {
     .select('id,target_month,week_index,sales_amount,sales_amount_head,sales_amount_screw,sales_amount_supipe')
     .eq('target_month', monthValue)
     .order('week_index', { ascending: true })
+
+  return {
+    data: data ?? [],
+    error,
+  }
+}
+
+const fetchAsRowsByMonth = async (monthValue) => {
+  const { data, error } = await supabase
+    .from(SALES_AS_TABLE)
+    .select('id,target_month,reported_at,company_list_id,company,place,issue,cost,image_urls')
+    .eq('target_month', monthValue)
+    .order('reported_at', { ascending: false })
 
   return {
     data: data ?? [],
@@ -360,7 +373,7 @@ const saveAsEntry = async () => {
           .from(SALES_AS_TABLE)
           .update({ ...payload, image_urls: imageUrls })
           .eq('id', editingAsId.value)
-      : supabase.from(SALES_AS_TABLE).insert({ ...payload, target_month: reportMonthValue, created_by: createdBy, image_urls: imageUrls })
+      : supabase.from(SALES_AS_TABLE).insert({ ...payload, target_month: selectedSalesReportMonthValue.value, created_by: createdBy, image_urls: imageUrls })
     const { data, error } = await query.select('id,target_month,reported_at,company_list_id,company,place,issue,cost,image_urls').single()
     savingAsEntry.value = false
 
@@ -497,8 +510,8 @@ const expectedCombinedTotal = computed(() => expectedHeadTotal.value + expectedS
 const summaryCards = computed(() => [
   { label: '신규 수주', value: formatPieces(confirmedCombinedTotal.value), note: `헤드 ${formatPieces(confirmedHeadTotal.value)} · 나사 ${formatPieces(confirmedScrewTotal.value)} · STS/SU ${formatPieces(confirmedSupipeTotal.value)}`, tone: 'bg-emerald-50 border-emerald-200 text-emerald-800', clickable: false },
   { label: '신규 수주 예정', value: formatPieces(expectedCombinedTotal.value), note: `헤드 ${formatPieces(expectedHeadTotal.value)} · 나사 ${formatPieces(expectedScrewTotal.value)} · STS/SU ${formatPieces(expectedSupipeTotal.value)}`, tone: 'bg-indigo-50 border-indigo-200 text-indigo-800', clickable: false },
-  { label: 'AS 발생 건수', value: `${asRows.value.length}건`, note: `${reportMonthLabel} 접수 누계`, tone: 'bg-rose-50 border-rose-200 text-rose-800', clickable: true },
-  { label: 'AS 발생 비용', value: formatCurrency(asTotalCost.value), note: `${reportMonthLabel} 접수 비용 합계`, tone: 'bg-amber-50 border-amber-200 text-amber-800', clickable: false },
+  { label: 'AS 발생 건수', value: `${asRows.value.length}건`, note: `${selectedSalesReportMonthLabel.value} 접수 누계`, tone: 'bg-rose-50 border-rose-200 text-rose-800', clickable: true },
+  { label: 'AS 발생 비용', value: formatCurrency(asTotalCost.value), note: `${selectedSalesReportMonthLabel.value} 접수 비용 합계`, tone: 'bg-amber-50 border-amber-200 text-amber-800', clickable: false },
 ])
 const hasSalesDialogData = computed(() =>
   weeklySalesInputs.value.some(
@@ -534,17 +547,23 @@ const moveSalesReportWeek = async (delta) => {
   }
 
   const nextMonthValue = formatMonthValue(nextMonth)
-  if (nextMonthValue !== reportMonthValue && nextMonthValue !== selectedSalesReportMonthValue.value) {
+  const monthChanged = nextMonthValue !== selectedSalesReportMonthValue.value
+
+  if (monthChanged) {
     loadingSalesReportWeek.value = true
-    const { data, error } = await fetchWeeklySalesByMonth(nextMonthValue)
+    const [weeklyResult, asResult] = await Promise.all([
+      nextMonthValue !== reportMonthValue ? fetchWeeklySalesByMonth(nextMonthValue) : Promise.resolve(null),
+      fetchAsRowsByMonth(nextMonthValue),
+    ])
     loadingSalesReportWeek.value = false
 
-    if (error) {
-      await alert(error.message ?? '매출 데이터를 불러오지 못했습니다.')
+    if (weeklyResult?.error || asResult.error) {
+      await alert(weeklyResult?.error?.message ?? asResult.error?.message ?? '데이터를 불러오지 못했습니다.')
       return
     }
 
-    selectedSalesWeekRows.value = data
+    if (weeklyResult) selectedSalesWeekRows.value = weeklyResult.data
+    asRows.value = asResult.data
   }
 
   selectedSalesReportMonth.value = nextMonth
@@ -677,8 +696,8 @@ onBeforeUnmount(revokeAsPreviewUrls)
           <section class="rounded-3xl border border-emerald-200 bg-gradient-to-r from-emerald-50 via-white to-indigo-50 p-6 shadow-sm">
             <div class="flex flex-col gap-4 md:flex-row md:items-stretch md:justify-between">
               <div class="flex-1">
-                <p class="text-[12px] font-bold text-emerald-700">{{ reportMonthLabel }} 영업 핵심 지표</p>
-                <h2 class="mt-2 text-2xl font-extrabold text-slate-900">{{ reportMonthLabel }} 영업 실적 요약</h2>
+                <p class="text-[12px] font-bold text-emerald-700">{{ selectedSalesReportMonthLabel }} 영업 핵심 지표</p>
+                <h2 class="mt-2 text-2xl font-extrabold text-slate-900">{{ selectedSalesReportMonthLabel }} 영업 실적 요약</h2>
                 <div class="mt-4 space-y-2 text-[12px] font-semibold">
                   <div class="grid gap-2 sm:grid-cols-3">
                     <span class="rounded-full border border-emerald-200 bg-white px-3 py-1 text-center text-slate-700">월 목표 {{ targetSummary.monthlyTarget }}</span>
@@ -779,7 +798,7 @@ onBeforeUnmount(revokeAsPreviewUrls)
             <div class="flex items-center justify-between gap-3">
               <div>
                 <p class="text-[13px] font-extrabold text-slate-900">신규 수주 목록</p>
-                <p class="mt-1 text-[12px] text-slate-500">{{ reportMonthLabel }} 계약 완료 기준</p>
+                <p class="mt-1 text-[12px] text-slate-500">{{ selectedSalesReportMonthLabel }} 계약 완료 기준</p>
               </div>
               <span class="rounded-full bg-emerald-100 px-3 py-1 text-[11px] font-bold text-emerald-700">{{ confirmedRows.length }}건</span>
             </div>
@@ -817,7 +836,7 @@ onBeforeUnmount(revokeAsPreviewUrls)
             <div class="flex items-center justify-between gap-3">
               <div>
                 <p class="text-[13px] font-extrabold text-slate-900">AS 발생 목록</p>
-                <p class="mt-1 text-[12px] text-slate-500">{{ reportMonthLabel }} 접수 기준</p>
+                <p class="mt-1 text-[12px] text-slate-500">{{ selectedSalesReportMonthLabel }} 접수 기준</p>
               </div>
               <span class="rounded-full bg-rose-100 px-3 py-1 text-[11px] font-bold text-rose-700">{{ asRows.length }}건</span>
             </div>

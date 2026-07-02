@@ -41,12 +41,10 @@ import {
   fetchDailyWorkHoursRange,
   upsertDailyWorkHoursBulk,
   deleteDailyWorkHour,
-  fetchAttendanceRequestById,
   type EmployeeFormData,
   type SignatureInfo,
 } from '@/features/attendance/services/attendance.service'
 import { useAttendanceNotifications } from '@/features/attendance/composables/useAttendanceNotifications'
-import type { AttendanceRequestNotification } from '@/features/attendance/types/attendanceNotification'
 import {
   createEmptyForm,
   type AttendanceRequest,
@@ -71,12 +69,18 @@ const currentDept = computed(() => profile.value?.department ?? '')
 // 관리자 판별: profiles.role 컬럼 기준
 const isAdmin = computed(() => isAdminRole(profile.value?.role))
 const {
-  notifications: attendanceNotifications,
   unreadCount: attendanceUnreadCount,
-  loading: attendanceNotificationsLoading,
-  markAsRead: markAttendanceNotificationAsRead,
   markAllAsRead: markAllAttendanceNotificationsAsRead,
 } = useAttendanceNotifications(session, profile)
+
+// 페이지 진입 시 알림 읽음 처리 (앱바 배지 해제)
+watch(
+  attendanceUnreadCount,
+  (count) => {
+    if (count > 0) void markAllAttendanceNotificationsAsRead()
+  },
+  { immediate: true },
+)
 const { confirm } = useDialog()
 const isRootAdminUser = computed(() => isRootAdmin(profile.value?.role))
 const router = useRouter()
@@ -293,25 +297,6 @@ async function openDetail(item: AttendanceRequest) {
 function closeDetail() {
   detailItem.value = null
   detailSignatures.value = []
-}
-
-async function handleOpenAttendanceNotification(notification: AttendanceRequestNotification) {
-  if (!notification.isRead) {
-    await markAttendanceNotificationAsRead(notification.id)
-  }
-
-  let item = items.value.find((row) => row.id === notification.attendanceRequestId) ?? null
-  if (!item) {
-    try {
-      item = await fetchAttendanceRequestById(notification.attendanceRequestId)
-    } catch {
-      item = null
-    }
-  }
-
-  if (item) {
-    await openDetail(item)
-  }
 }
 
 // ─── 반려 다이얼로그 ───────────────────────────────────────────────────────────
@@ -741,9 +726,6 @@ async function handleDeleteEmployee(id: number) {
     :current-user-id="currentUserId"
     :is-admin="isAdmin"
     :is-root-admin="isRootAdminUser"
-    :attendance-notifications="attendanceNotifications"
-    :attendance-unread-count="attendanceUnreadCount"
-    :attendance-notifications-loading="attendanceNotificationsLoading"
     :approval-pending-count="items.filter(i => i.status === '대기중').length"
     :daepyo-pending-count="items.filter(i => i.status === '부서장승인').length"
     :gyeongyu-pending-count="items.filter(i => !i.gyeongyuBy).length"
@@ -786,8 +768,6 @@ async function handleDeleteEmployee(id: number) {
     :detail-signatures="detailSignatures"
     @open-detail="openDetail"
     @close-detail="closeDetail"
-    @open-attendance-notification="handleOpenAttendanceNotification"
-    @mark-all-attendance-notifications-read="markAllAttendanceNotificationsAsRead"
     @create-employee="handleCreateEmployee"
     @update-employee="handleUpdateEmployee"
     @delete-employee="handleDeleteEmployee"

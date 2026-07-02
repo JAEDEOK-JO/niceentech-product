@@ -62,6 +62,7 @@ const form = reactive({
   arrivalTime: '',
   hasPlot: false,
   floatStatus: 'O',
+  misc: '',
 })
 
 const addDays = (value, days) => {
@@ -113,6 +114,7 @@ const normalizeRow = (row) => ({
   scheduleType: normalizeText(row.schedule_type),
   arrivalTime: normalizeText(row.arrival_time),
   floatStatus: normalizeText(row.float_status),
+  misc: normalizeText(row.misc),
   managerId: row.manager_id ? String(row.manager_id) : '',
   createdAt: normalizeText(row.created_at),
 })
@@ -140,7 +142,7 @@ const filteredRows = computed(() => {
     })
   if (!keyword) return baseRows
   return baseRows.filter((row) => {
-    const target = `${row.managerName} ${row.company} ${row.place} ${row.area}`.toLowerCase()
+    const target = `${row.managerName} ${row.company} ${row.place} ${row.area} ${row.misc}`.toLowerCase()
     return target.includes(keyword)
   })
 })
@@ -156,6 +158,7 @@ const resetForm = () => {
   form.arrivalTime = ''
   form.hasPlot = false
   form.floatStatus = 'O'
+  form.misc = ''
   companyPlaceSearchText.value = ''
   companyPlaceResults.value = []
 }
@@ -177,6 +180,7 @@ const openEditDialog = (row) => {
   form.arrivalTime = row.arrivalTime || ''
   form.hasPlot = Boolean(row.floatStatus)
   form.floatStatus = row.floatStatus || 'O'
+  form.misc = row.misc || ''
   companyPlaceSearchText.value = [row.company, row.place].filter(Boolean).join(' / ')
   companyPlaceResults.value = []
   isDialogOpen.value = true
@@ -412,7 +416,7 @@ const fetchShipmentSchedules = async () => {
   errorMessage.value = ''
   const { data, error } = await supabase
     .from(SHIPMENT_SCHEDULE_TABLE)
-    .select('id,company,place,manager_id,area,shipment_date,schedule_type,arrival_time,float_status,created_at')
+    .select('id,company,place,manager_id,area,shipment_date,schedule_type,arrival_time,float_status,misc,created_at')
     .order('shipment_date', { ascending: true })
     .order('created_at', { ascending: false })
 
@@ -499,6 +503,7 @@ const submit = async () => {
   const scheduleType = normalizeText(form.scheduleType)
   const arrivalTime = normalizeText(form.arrivalTime)
   const floatStatus = form.hasPlot ? normalizeText(form.floatStatus || 'O') : ''
+  const misc = normalizeText(form.misc)
 
   if (!company) {
     saveError.value = '회사명을 입력해주세요.'
@@ -538,6 +543,7 @@ const submit = async () => {
     schedule_type: scheduleType,
     arrival_time: arrivalTime || null,
     float_status: form.hasPlot ? floatStatus : null,
+    misc: misc || null,
   }
 
   const query = form.id
@@ -707,10 +713,11 @@ onMounted(async () => {
               <col :style="{ width: isRangeFilterActive ? '9%' : '5%' }" />
               <col :style="{ width: isRangeFilterActive ? '10%' : '10%' }" />
               <col :style="{ width: isRangeFilterActive ? '16%' : '17%' }" />
-              <col :style="{ width: isRangeFilterActive ? '34%' : '35%' }" />
-              <col :style="{ width: isRangeFilterActive ? '9%' : '12%' }" />
-              <col :style="{ width: isRangeFilterActive ? '9%' : '12%' }" />
-              <col :style="{ width: isRangeFilterActive ? '6%' : '9%' }" />
+              <col :style="{ width: isRangeFilterActive ? '28%' : '29%' }" />
+              <col :style="{ width: isRangeFilterActive ? '8%' : '9%' }" />
+              <col :style="{ width: isRangeFilterActive ? '8%' : '9%' }" />
+              <col :style="{ width: isRangeFilterActive ? '5%' : '6%' }" />
+              <col :style="{ width: isRangeFilterActive ? '12%' : '13%' }" />
             </colgroup>
             <thead class="bg-slate-50 text-slate-600">
               <tr>
@@ -722,11 +729,12 @@ onMounted(async () => {
                 <th class="border border-slate-200 px-3 py-3 text-center font-bold">당착</th>
                 <th class="border border-slate-200 px-3 py-3 text-center font-bold">야상</th>
                 <th class="border border-slate-200 px-3 py-3 text-center font-bold">플롯</th>
+                <th class="border border-slate-200 px-3 py-3 text-center font-bold">기타</th>
               </tr>
             </thead>
             <tbody>
               <tr v-if="filteredRows.length === 0">
-                <td :colspan="isRangeFilterActive ? 8 : 7" class="border border-slate-200 px-3 py-8 text-center text-slate-400">등록된 출하일정이 없습니다.</td>
+                <td :colspan="isRangeFilterActive ? 9 : 8" class="border border-slate-200 px-3 py-8 text-center text-slate-400">등록된 출하일정이 없습니다.</td>
               </tr>
               <tr
                 v-for="(row, index) in filteredRows"
@@ -742,6 +750,7 @@ onMounted(async () => {
                 <td class="border border-slate-200 px-3 py-3 text-center text-slate-700">{{ row.scheduleType === 'day' ? (row.arrivalTime || 'O') : '' }}</td>
                 <td class="border border-slate-200 px-3 py-3 text-center text-slate-700">{{ row.scheduleType === 'night' ? (row.arrivalTime || 'O') : '' }}</td>
                 <td class="border border-slate-200 px-3 py-3 text-center text-slate-700">{{ row.floatStatus || '' }}</td>
+                <td class="border border-slate-200 px-3 py-3 text-center text-slate-700">{{ row.misc || '' }}</td>
               </tr>
             </tbody>
           </table>
@@ -921,6 +930,14 @@ onMounted(async () => {
                 <span>{{ option.label }}</span>
               </label>
             </div>
+          </div>
+          <div class="space-y-2 md:col-span-2">
+            <label class="text-sm font-bold text-slate-700">기타</label>
+            <input
+              v-model="form.misc"
+              type="text"
+              class="h-11 w-full rounded-xl border border-slate-300 px-4 text-sm text-slate-700"
+            />
           </div>
 
         </div>

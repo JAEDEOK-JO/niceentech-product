@@ -50,7 +50,6 @@ const navItems = computed(() => {
     { key: 'reports', label: '보고서', to: { name: 'reports' } },
   ]
   if (isAdminRole(profile.value?.role) || isDesignDepartment(profile.value?.department)) {
-    items.push({ key: 'company-register', label: '회사등록', to: { name: 'company-register' } })
     items.push({ key: 'company-list', label: '회사리스트', to: { name: 'company-list' } })
   }
   items.push({
@@ -71,8 +70,7 @@ const navItems = computed(() => {
 const activeSection = computed(() => {
   if (route.path.startsWith('/attendance')) return 'attendance'
   if (route.path.startsWith('/messenger')) return 'messenger'
-  if (route.path.startsWith('/company/list')) return 'company-list'
-  if (route.path.startsWith('/company/register')) return 'company-register'
+  if (route.path.startsWith('/company')) return 'company-list'
   if (route.path.startsWith('/reports')) return 'reports'
   if (route.path.startsWith('/quality')) return 'quality-list'
   if (route.path.startsWith('/welding-schedule')) return 'welding-schedule'

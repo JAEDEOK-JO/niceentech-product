@@ -25,23 +25,35 @@ const props = defineProps({
 })
 
 const now = new Date()
+const formatDateInput = (date) =>
+  `${String(date.getFullYear()).padStart(4, '0')}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 const reportYear = now.getFullYear()
 const reportMonth = now.getMonth() + 1
 const reportMonthLabel = `${reportMonth}월`
 const reportMonthValue = `${reportYear}-${String(reportMonth).padStart(2, '0')}-01`
 const reportMonthEndValue = `${reportYear}-${String(reportMonth).padStart(2, '0')}-${String(new Date(reportYear, reportMonth, 0).getDate()).padStart(2, '0')}`
+const reportTodayValue = formatDateInput(now)
 
 const MONTH_COUNT = 3
 const last3Months = Array.from({ length: MONTH_COUNT }, (_, i) => {
   const d = new Date(reportYear, reportMonth - 1 - (MONTH_COUNT - 1 - i), 1)
   const y = d.getFullYear()
   const m = d.getMonth() + 1
+  const monthKey = `${y}-${String(m).padStart(2, '0')}`
+  const monthValue = `${monthKey}-01`
   const lastDay = new Date(y, m, 0).getDate()
+  const isCurrentMonth = monthKey === `${reportYear}-${String(reportMonth).padStart(2, '0')}`
+  const monthEndValue = isCurrentMonth
+    ? reportTodayValue
+    : `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
   return {
     label: `${m}월`,
-    key: `${y}-${String(m).padStart(2, '0')}`,
-    start: `${y}-${String(m).padStart(2, '0')}-01T00:00:00`,
-    end: `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}T23:59:59`,
+    key: monthKey,
+    monthValue,
+    monthEndValue,
+    isCurrentMonth,
+    start: `${monthValue}T00:00:00`,
+    end: `${monthEndValue}T23:59:59`,
   }
 })
 const weldingFetchStart = last3Months[0].start
@@ -58,6 +70,7 @@ const selectedInventoryMonth = ref(new Date(reportYear, reportMonth - 1, 1))
 const inventoryError = ref('')
 const savingInventory = ref(false)
 const totalBalanceSum = ref(0)
+const monthlyInventoryMetrics = ref([])
 const weldingInspections = ref([])
 const weldingIssues = ref([])
 const isWeldingIssueDialogOpen = ref(false)
@@ -104,8 +117,6 @@ const sanitizeDecimalInput = (value) => {
   return decimalParts.length ? `${integerPart}.${decimalParts.join('').slice(0, 1)}` : integerPart
 }
 const sanitizeCountInput = (value) => String(value ?? '').replace(/[^\d]/g, '')
-const formatDateInput = (date) =>
-  `${String(date.getFullYear()).padStart(4, '0')}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 const formatMonthValue = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-01`
 const formatMonthEndValue = (date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate()).padStart(2, '0')}`
@@ -376,6 +387,23 @@ const sumInventoryRows = (rows) =>
     { received: 0, used: 0, balance: 0 },
   )
 
+const fetchInventoryTotalsForMonth = async (month) => {
+  const [weeklyRows, legacyRows] = await Promise.all([
+    fetchWeeklyInventoryEntriesByMonth(month.monthValue, month.monthEndValue),
+    fetchLegacyInventoryEntriesByMonth(month.monthValue),
+  ])
+  return weeklyRows.length > 0 ? sumInventoryRows(weeklyRows) : sumInventoryRows(legacyRows)
+}
+
+const loadMonthlyInventoryMetrics = async () => {
+  const totalsList = await Promise.all(last3Months.map((month) => fetchInventoryTotalsForMonth(month)))
+  monthlyInventoryMetrics.value = last3Months.map((month, index) => ({
+    ...month,
+    received: totalsList[index].received,
+    used: totalsList[index].used,
+  }))
+}
+
 const buildInventoryDraftWeeks = ({ monthDate, weeklyRows, legacyRows }) => {
   const weeks = getInventoryWeeks(monthDate)
   const weeklyEntryMap = new Map(
@@ -419,9 +447,7 @@ const fetchReportData = async () => {
   errorMessage.value = ''
 
   try {
-    const [weeklyInventoryRows, legacyInventoryRows, balanceRows, weldingRows, issueRows] = await Promise.all([
-      fetchWeeklyInventoryEntriesByMonth(reportMonthValue, reportMonthEndValue),
-      fetchLegacyInventoryEntriesByMonth(reportMonthValue),
+    const [balanceRows, weldingRows, issueRows] = await Promise.all([
       fetchAllBalanceEntries(),
       fetchWeldingInspections(),
       fetchWeldingIssues(),
@@ -429,18 +455,20 @@ const fetchReportData = async () => {
     weldingInspections.value = weldingRows
     weldingIssues.value = issueRows
     totalBalanceSum.value = balanceRows.reduce((sum, row) => sum + toNumber(row?.numeric_value), 0)
-    const inventoryTotals = weeklyInventoryRows.length > 0 ? sumInventoryRows(weeklyInventoryRows) : sumInventoryRows(legacyInventoryRows)
+    await loadMonthlyInventoryMetrics()
 
+    const currentMonthMetrics = monthlyInventoryMetrics.value.find((month) => month.isCurrentMonth)
     inventoryForm.value = {
-      received: String(inventoryTotals.received),
-      used: String(inventoryTotals.used),
-      balance: String(inventoryTotals.balance),
+      received: String(currentMonthMetrics?.received ?? 0),
+      used: String(currentMonthMetrics?.used ?? 0),
+      balance: '0',
     }
   } catch (error) {
     errorMessage.value = error?.message ?? '공무부 데이터를 불러오지 못했습니다.'
     inventoryForm.value = createDefaultInventoryForm()
     inventoryDraftWeeks.value = []
     totalBalanceSum.value = 0
+    monthlyInventoryMetrics.value = []
     weldingInspections.value = []
     weldingIssues.value = []
   } finally {
@@ -454,26 +482,7 @@ const inventoryValues = computed(() => ({
   balance: toNumber(inventoryForm.value.balance),
 }))
 
-const summaryCards = computed(() => [
-  {
-    label: `${reportMonthLabel} 입고`,
-    value: formatTon(inventoryValues.value.received),
-    note: '당월 누적 입고량',
-    tone: 'bg-sky-50 border-sky-200 text-sky-800',
-  },
-  {
-    label: `${reportMonthLabel} 사용`,
-    value: formatTon(inventoryValues.value.used),
-    note: '당월 누적 사용량',
-    tone: 'bg-emerald-50 border-emerald-200 text-emerald-800',
-  },
-  {
-    label: '총 잔고',
-    value: formatTon(totalBalanceSum.value),
-    note: '전체 입력 월 잔고 합산',
-    tone: 'bg-indigo-50 border-indigo-200 text-indigo-800',
-  },
-])
+const totalBalanceLabel = computed(() => formatTon(totalBalanceSum.value))
 
 const weldingComparisonManagers = computed(() => {
   const names = new Set(MANAGERS)
@@ -671,6 +680,7 @@ const saveInventory = async () => {
         balance: String(totals.balance),
       }
     }
+    await loadMonthlyInventoryMetrics()
     closeInventoryDialog()
   } catch (error) {
     inventoryError.value = error?.message ?? '공무 수치 저장에 실패했습니다.'
@@ -737,27 +747,58 @@ onMounted(fetchReportData)
       <template v-else>
       <div v-show="currentPage === 1 || isPrinting" class="report-page report-page-break space-y-6">
         <div class="report-print-title">공무부 대표 보고 · 1페이지 요약본</div>
-        <section class="rounded-3xl border border-amber-200 bg-gradient-to-r from-amber-50 via-white to-orange-50 p-6 shadow-sm">
-          <div class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-            <div>
-              <p class="text-[12px] font-bold text-amber-700">{{ reportMonthLabel }} 공무부 보고</p>
-              <h2 class="mt-2 text-2xl font-extrabold text-slate-900">{{ reportMonthLabel }} 입고 · 사용 · 잔고</h2>
-              <p class="mt-2 text-sm text-slate-600">이번 달 입력값 기준입니다.</p>
-            </div>
-            <div class="rounded-3xl border border-white bg-white px-5 py-4 text-center shadow-sm">
-              <p class="text-[12px] font-bold text-amber-700">총 잔고</p>
-              <p class="mt-1 text-4xl font-extrabold text-slate-900">{{ summaryCards[2].value }}</p>
-            </div>
-          </div>
-        </section>
 
         <section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
-          <div class="grid gap-3 md:grid-cols-3">
-            <div v-for="card in summaryCards" :key="card.label" class="rounded-2xl border p-4" :class="card.tone">
-              <p class="text-[13px] font-bold">{{ card.label }}</p>
-              <p class="mt-2 text-2xl font-extrabold">{{ card.value }}</p>
-              <p class="mt-1 text-[11px] font-semibold opacity-80">{{ card.note }}</p>
-            </div>
+          <div class="flex items-center justify-between gap-3">
+            <p class="text-[13px] font-extrabold text-slate-900">입고 · 사용</p>
+            <p class="text-[12px] text-slate-500">최근 3개월</p>
+          </div>
+
+          <div class="mt-4 overflow-hidden rounded-2xl border border-slate-200">
+            <table class="w-full border-collapse text-sm">
+              <thead>
+                <tr class="bg-slate-50">
+                  <th class="border border-slate-200 px-3 py-2.5 text-center text-xs font-bold text-slate-500">구분</th>
+                  <th
+                    v-for="month in monthlyInventoryMetrics"
+                    :key="month.key"
+                    class="border border-slate-200 px-4 py-2.5 text-center text-xs font-bold"
+                    :class="month.isCurrentMonth ? 'bg-blue-50 text-blue-700' : 'text-slate-500'"
+                  >
+                    <span>{{ month.label }}</span>
+                    <span v-if="month.isCurrentMonth" class="mt-0.5 block text-[10px] font-semibold leading-tight opacity-60">현재까지</span>
+                  </th>
+                  <th class="border border-slate-200 bg-orange-50 px-4 py-2.5 text-center text-xs font-bold text-orange-800">잔고</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="border border-slate-200 px-3 py-3 text-center text-xs font-semibold text-slate-600">입고</td>
+                  <td
+                    v-for="month in monthlyInventoryMetrics"
+                    :key="`${month.key}-received`"
+                    class="border border-slate-200 px-4 py-3 text-center"
+                    :class="month.isCurrentMonth ? 'bg-blue-50/40' : ''"
+                  >
+                    <span class="text-lg font-extrabold text-sky-800">{{ formatTon(month.received) }}</span>
+                  </td>
+                  <td rowspan="2" class="border border-slate-200 bg-orange-50/50 px-4 py-3 text-center align-middle">
+                    <span class="text-lg font-extrabold text-orange-800">{{ totalBalanceLabel }}</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="border border-slate-200 px-3 py-3 text-center text-xs font-semibold text-slate-600">사용</td>
+                  <td
+                    v-for="month in monthlyInventoryMetrics"
+                    :key="`${month.key}-used`"
+                    class="border border-slate-200 px-4 py-3 text-center"
+                    :class="month.isCurrentMonth ? 'bg-blue-50/40' : ''"
+                  >
+                    <span class="text-lg font-extrabold text-emerald-800">{{ formatTon(month.used) }}</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </section>
 

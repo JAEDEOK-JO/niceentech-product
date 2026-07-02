@@ -7,6 +7,18 @@
 
 ---
 
+## Supabase 배포 원칙
+
+**반드시 이 순서로 배포한다.**
+
+1. Supabase Storage `update` 버킷 업로드
+2. `latest.yml` 버전 확인
+3. `public.setting.version` 업데이트
+
+`setting.version`을 Storage 업로드보다 먼저 올리지 않는다.
+
+---
+
 ## 업데이트 배포 순서
 
 ### 1단계 — package.json 버전 올리기
@@ -18,10 +30,10 @@
 ### 2단계 — 빌드
 
 ```bash
-npm run electron:build
+npm run desktop:publish
 ```
 
-`dist-electron/` 폴더에 아래 파일이 생성됩니다.
+`release/` 폴더에 아래 파일이 생성됩니다.
 
 ```
 NICEENTECH Setup 1.0.11.exe
@@ -31,20 +43,24 @@ latest.yml
 
 ### 3단계 — Supabase Storage 업로드
 
-Supabase 대시보드 → Storage → **`update`** 버킷에 3개 파일을 업로드합니다.
+Supabase 대시보드 또는 CLI로 Storage → **`update`** 버킷에 3개 파일을 업로드합니다.
 
 - `NICEENTECH Setup 1.0.11.exe`
 - `NICEENTECH Setup 1.0.11.exe.blockmap`
-- `latest.yml` *(기존 파일 덮어쓰기)*
+- `latest.yml` *(기존 `latest.yml`은 삭제 후 재업로드)*
 
-업로드 즉시 실행 중인 모든 Electron 앱이 다음 실행 때(또는 현재 실행 중이면 체크 시점에) 자동 다운로드를 시작합니다. 다운로드 완료되면 "지금 재시작 / 나중에" 다이얼로그가 뜹니다.
+업로드 후 `latest.yml`의 `version`이 새 버전인지 확인합니다.
 
-### 4단계 — Supabase `setting.version` 수정 *(웹 클라이언트용)*
+업로드가 끝나면 실행 중인 Electron 앱이 `latest.yml`을 읽고 자동 다운로드를 시작합니다. 다운로드 완료되면 "지금 재시작 / 나중에" 다이얼로그가 뜹니다.
 
-Supabase 대시보드 → Table Editor → `setting` 테이블 → `version` 필드를 배포 버전과 동일하게 수정.
+### 4단계 — Supabase `setting.version` 수정
 
-```
-version: 1.0.11
+**3단계 Storage 업로드가 끝난 뒤에** Table Editor 또는 SQL로 `setting.version`을 배포 버전과 동일하게 수정합니다.
+
+```sql
+update public.setting
+set version = '1.0.11'
+returning version, update_message;
 ```
 
 이 순간부터 **웹**으로 접속한 구버전 사용자에게 강제 새로고침 다이얼로그가 표시됩니다.
@@ -65,15 +81,6 @@ version: 1.0.11
 - 앱 시작 시 Supabase `setting.version` 조회 + Realtime 구독
 - 앱의 `package.json` 버전과 Supabase `setting.version` 이 **다르면** 다이얼로그 표시
 - "지금 업데이트" → `window.location.reload()` → 최신 번들 로드
-
----
-
-## 순서 권장
-
-1. exe + latest.yml 업로드 **먼저** → 데스크톱 사용자 자동 다운로드 시작
-2. `setting.version` 수정 → 웹 사용자 강제 새로고침
-
-순서가 반대가 돼도 큰 문제는 없지만, 웹 사용자가 새로고침했을 때 데스크톱 업데이트 파일이 아직 없으면 의미가 없으니 exe 먼저 올리는 게 안전합니다.
 
 ---
 

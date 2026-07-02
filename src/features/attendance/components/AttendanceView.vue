@@ -16,7 +16,6 @@ import AttendanceAnalysisPanel from './AttendanceAnalysisPanel.vue'
 import AttendanceSummaryBoard from './AttendanceSummaryBoard.vue'
 import AttendanceSummaryDetailModal from './AttendanceSummaryDetailModal.vue'
 import AttendanceDetailModal from './AttendanceDetailModal.vue'
-import AttendanceNotificationPanel from './AttendanceNotificationPanel.vue'
 import AttendanceRequestSignatureDialog from './AttendanceRequestSignatureDialog.vue'
 import AttendancePasswordKeypad from './AttendancePasswordKeypad.vue'
 import DailyWorkHoursInputDialog from './DailyWorkHoursInputDialog.vue'
@@ -63,9 +62,6 @@ const props = defineProps<{
   dailyWorkHours: DailyWorkHour[]
   dailyWorkRequests: AttendanceRequest[]
   dailyWorkHoursLoading: boolean
-  attendanceNotifications: import('../types/attendanceNotification').AttendanceRequestNotification[]
-  attendanceUnreadCount: number
-  attendanceNotificationsLoading: boolean
 }>()
 
 const emit = defineEmits<{
@@ -106,8 +102,6 @@ const emit = defineEmits<{
   (e: 'selectDailyWorkDate', workDate: string): void
   (e: 'updateDailyWorkHour', payload: { workDate: string; employeeId: number; endTime: string }): void
   (e: 'viewHistory', payload: { name: string; department: string }): void
-  (e: 'openAttendanceNotification', notification: import('../types/attendanceNotification').AttendanceRequestNotification): void
-  (e: 'markAllAttendanceNotificationsRead'): void
 }>()
 
 // ─── 비밀번호 키패드 상태 ─────────────────────────────────────────────────────
@@ -229,15 +223,6 @@ watch(
           <p class="mt-1 text-sm text-slate-500">{{ thisMonthLabel }} 휴가 신청 및 근태 현황</p>
         </div>
       </div>
-
-      <AttendanceNotificationPanel
-        v-if="isAdmin"
-        :notifications="attendanceNotifications"
-        :unread-count="attendanceUnreadCount"
-        :loading="attendanceNotificationsLoading"
-        @open="emit('openAttendanceNotification', $event)"
-        @mark-all-read="emit('markAllAttendanceNotificationsRead')"
-      />
 
       <!-- 통계 카드 (관리자만) -->
       <div v-if="isAdmin" class="mb-4 grid grid-cols-4 gap-1.5">

@@ -5,7 +5,19 @@ const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectr
 
 let msgChannel = null
 let memberChannel = null
+let attendanceChannel = null
 let myRoomIds = new Set()
+
+const buildAttendanceBody = (row) => {
+  const days = Number(row.days_count ?? 0)
+  const parts = [
+    String(row.department ?? '').trim(),
+    [String(row.leave_type ?? '').trim(), days > 0 ? `${days}일` : ''].filter(Boolean).join(' '),
+    String(row.start_date ?? '').trim(),
+    String(row.reason ?? '').trim(),
+  ].filter(Boolean)
+  return parts.join(' · ') || '새 휴가 신청이 등록되었습니다.'
+}
 
 export function useElectronNotifications(sessionRef) {
   if (!isElectron) return
@@ -21,6 +33,7 @@ export function useElectronNotifications(sessionRef) {
   const stop = () => {
     if (msgChannel) { supabase.removeChannel(msgChannel); msgChannel = null }
     if (memberChannel) { supabase.removeChannel(memberChannel); memberChannel = null }
+    if (attendanceChannel) { supabase.removeChannel(attendanceChannel); attendanceChannel = null }
     myRoomIds.clear()
   }
 
@@ -46,6 +59,27 @@ export function useElectronNotifications(sessionRef) {
             title: `💬 ${msg.sender_name || '메신저'}`,
             body: msg.content?.trim() || '파일을 보냈습니다.',
             url: '/messenger',
+          })
+        },
+      )
+      .subscribe()
+
+    // 휴가 신청 등록 시 전 직원에게 알림 (추후 권한별 필터링 예정)
+    attendanceChannel = supabase
+      .channel(`electron_attendance:${userId}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'attendance_requests' },
+        (payload) => {
+          const row = payload.new
+          if (!row) return
+          if (row.user_id === userId) return
+          if (document.hasFocus()) return
+
+          window.electronAPI.showNotification({
+            title: `[휴가 신청] ${String(row.user_name ?? '').trim() || '직원'}`,
+            body: buildAttendanceBody(row),
+            url: '/attendance',
           })
         },
       )

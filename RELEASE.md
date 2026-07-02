@@ -2,6 +2,16 @@
 
 사용자가 "버전업해줘"라고 요청하면 아래 순서로 진행한다.
 
+## Supabase 배포 원칙
+
+**반드시 이 순서를 지킨다.**
+
+1. **Supabase Storage `update` 버킷 업로드** (exe, blockmap, latest.yml)
+2. 업로드 완료 및 `latest.yml` 버전 확인
+3. **`public.setting.version` 업데이트**
+
+`setting.version`을 먼저 올리지 않는다. 웹 사용자가 새로고침했을 때 데스크톱 설치 파일이 아직 없으면 업데이트가 깨질 수 있다.
+
 ## 1. 현재 상태 확인
 
 ```powershell
@@ -103,16 +113,11 @@ git ls-remote --tags origin v<version>
 Supabase CLI 인증을 확인한다.
 
 ```powershell
+Remove-Item Env:SUPABASE_ACCESS_TOKEN -ErrorAction SilentlyContinue
 supabase projects list
 ```
 
-`Unauthorized`가 나오면 기존 환경변수가 잘못된 토큰을 가리킬 수 있으므로 현재 세션에서 제거한다.
-
-```powershell
-Remove-Item Env:SUPABASE_ACCESS_TOKEN -ErrorAction SilentlyContinue
-```
-
-필요하면 사용자가 제공한 access token으로 로그인한다.
+`Unauthorized`가 나오면 위처럼 잘못된 `SUPABASE_ACCESS_TOKEN` 환경변수를 먼저 제거한다. 그래도 안 되면 로그인한다.
 
 ```powershell
 supabase login --token "<token>"
@@ -144,11 +149,13 @@ supabase --experimental storage cp --cache-control "no-cache" ".\release\latest.
 https://joxfohziazjhscewifjj.supabase.co/storage/v1/object/public/update/latest.yml
 ```
 
-내용의 `version`이 새 버전인지 확인한다.
+내용의 `version`이 새 버전인지 확인한 뒤에만 다음 단계로 넘어간다.
 
 ## 7. Supabase setting 테이블 업데이트
 
-앱은 `public.setting.version`을 읽어 새 버전 배포 여부를 판단한다. Storage 업로드 후 반드시 업데이트한다.
+**6단계 Storage 업로드가 끝난 뒤에** `public.setting.version`을 올린다.
+
+웹 클라이언트는 이 값을 기준으로 새 버전 배포 여부를 판단한다.
 
 ```sql
 update public.setting
@@ -174,8 +181,9 @@ git status --short --branch
 
 - `main`이 `origin/main`과 동기화되어 있는지
 - `v<version>` 태그가 원격에 있는지
-- Supabase Storage `latest.yml` 공개 URL이 새 버전을 가리키는지
-- `public.setting.version`이 새 버전인지
+- Supabase Storage 업로드가 **먼저** 끝났는지
+- `latest.yml` 공개 URL이 새 버전을 가리키는지
+- 그 **다음에** `public.setting.version`이 새 버전인지
 - 빌드 산출물을 제외한 변경사항이 릴리즈 커밋에 모두 포함됐는지
 
 ## 주의

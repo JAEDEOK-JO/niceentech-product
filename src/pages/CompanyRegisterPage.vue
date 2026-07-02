@@ -57,6 +57,11 @@ const fullNamePreview = computed(() =>
 const canManageCompany = computed(() => isAdminRole(profile.value?.role) || isDesignDepartment(profile.value?.department))
 
 const goBack = () => {
+  if (route.query.returnTo === 'company-list') {
+    router.push({ name: 'company-list' })
+    return
+  }
+
   if (route.query.returnTo === 'main-register') {
     router.push({
       name: 'main-register',
@@ -224,6 +229,11 @@ const submit = async () => {
   }
 
   await alert(`"${fullName}" 회사가 등록되었습니다.`)
+
+  if (route.query.returnTo === 'company-list') {
+    router.push({ name: 'company-list' })
+    return
+  }
 
   if (route.query.returnTo === 'main-register') {
     router.push({

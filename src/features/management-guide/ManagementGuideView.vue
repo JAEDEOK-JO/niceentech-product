@@ -6,13 +6,16 @@ import SalesExecutiveReportExampleView from '@/features/management-guide/SalesEx
 import DesignExecutiveReportExampleView from '@/features/management-guide/DesignExecutiveReportExampleView.vue'
 import OperationsExecutiveReportExampleView from '@/features/management-guide/OperationsExecutiveReportExampleView.vue'
 import ProductionExecutiveReportExampleView from '@/features/management-guide/ProductionExecutiveReportExampleView.vue'
+import TotalExecutiveReportView from '@/features/management-guide/total-report/TotalExecutiveReportView.vue'
 
 const emit = defineEmits(['go-home'])
 
-const activeTab = ref(departments[0].key)
+const tabs = [...departments, { key: 'total', name: '총보고서', tone: 'slate' }]
+
+const activeTab = ref(tabs[0].key)
 
 const currentDepartment = computed(
-  () => departments.find((department) => department.key === activeTab.value) ?? departments[0],
+  () => tabs.find((department) => department.key === activeTab.value) ?? tabs[0],
 )
 
 const toneClasses = {
@@ -36,6 +39,11 @@ const toneClasses = {
     panel: 'border-rose-200 bg-rose-50/50',
     badge: 'bg-rose-100 text-rose-700',
   },
+  slate: {
+    tab: 'border-slate-400 bg-slate-900 text-white',
+    panel: 'border-slate-300 bg-slate-50',
+    badge: 'bg-slate-200 text-slate-800',
+  },
 }
 
 const getTone = (tone) =>
@@ -49,6 +57,7 @@ const currentView = computed(() => {
   if (activeTab.value === 'sales') return SalesExecutiveReportExampleView
   if (activeTab.value === 'design') return DesignExecutiveReportExampleView
   if (activeTab.value === 'operations') return OperationsExecutiveReportExampleView
+  if (activeTab.value === 'total') return TotalExecutiveReportView
   return ProductionExecutiveReportExampleView
 })
 </script>
@@ -59,7 +68,7 @@ const currentView = computed(() => {
       <section class="management-report-shell rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-7">
         <div class="management-report-tabs flex flex-wrap gap-2">
           <button
-            v-for="department in departments"
+            v-for="department in tabs"
             :key="department.key"
             type="button"
             class="rounded-2xl border px-4 py-2 text-sm font-bold transition"

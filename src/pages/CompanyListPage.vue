@@ -294,6 +294,13 @@ const goBack = () => {
   router.push({ name: 'main' })
 }
 
+const goRegister = () => {
+  router.push({
+    name: 'company-register',
+    query: { returnTo: 'company-list' },
+  })
+}
+
 let hasFetchedInitialData = false
 
 watch(
@@ -321,6 +328,7 @@ watch(
     :saving-ids="savingIds"
     :deleting-ids="deletingIds"
     @go-back="goBack"
+    @go-register="goRegister"
     @refresh="fetchRows"
     @update-search="searchText = $event"
     @toggle-expected-only="showExpectedOnly = !showExpectedOnly"

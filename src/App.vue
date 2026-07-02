@@ -6,10 +6,12 @@ import DesktopInstallGate from '@/components/desktop/DesktopInstallGate.vue'
 import AppDialog from '@/components/ui/AppDialog.vue'
 import { supabase } from '@/lib/supabase'
 import { isDesktopBrowser } from '@/utils/device'
+import { useCncOnlyPwa } from '@/composables/useCncOnlyPwa'
 import packageJson from '../package.json'
 
 const route = useRoute()
 const router = useRouter()
+useCncOnlyPwa()
 const showGlobalAppBar = computed(() => route.meta.requiresAuth === true && route.meta.standalone !== true)
 
 const currentVersion = packageJson.version

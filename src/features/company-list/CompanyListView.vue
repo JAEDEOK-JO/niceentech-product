@@ -17,7 +17,7 @@ const props = defineProps({
   deletingIds: { type: Array, default: () => [] },
 })
 
-const emit = defineEmits(['go-back', 'refresh', 'update-search', 'toggle-expected-only', 'update-row', 'save-row', 'delete-row'])
+const emit = defineEmits(['go-back', 'go-register', 'refresh', 'update-search', 'toggle-expected-only', 'update-row', 'save-row', 'delete-row'])
 
 const onNumericInput = (event, rowId, field) => {
   const digits = String(event.target.value ?? '').replace(/\D/g, '')
@@ -102,6 +102,7 @@ const groupedByConsonant = computed(() => {
           <p class="mt-1 text-sm text-slate-500">등록된 회사와 현장 정보를 확인하고 바로 수정 저장할 수 있습니다.</p>
         </div>
         <div class="flex gap-2">
+          <Button class="h-9 px-4 text-sm" @click="emit('go-register')">회사등록</Button>
           <Button class="h-9 px-4 text-sm" variant="outline" @click="emit('refresh')">새로고침</Button>
           <Button class="h-9 px-4 text-sm" variant="outline" @click="emit('go-back')">돌아가기</Button>
         </div>
