@@ -205,17 +205,21 @@ export async function gyeongyuAttendanceRequest(
   id: number,
   byName: string,
 ): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('attendance_requests')
     .update({
+      status: '최종대기',
       gyeongyu_by: byName,
       gyeongyu_at: new Date().toISOString(),
     })
     .eq('id', id)
-    .eq('status', '부서장승인')
+    .in('status', ['경유대기', '부서장승인'])
     .is('gyeongyu_by', null)
+    .select('id')
+    .maybeSingle()
 
   if (error) throw error
+  if (!data) throw new Error('경유 처리할 수 없는 상태입니다.')
 }
 
 // ─── 부서장 승인 (1차) ────────────────────────────────────────────────────────
@@ -223,16 +227,24 @@ export async function approveAttendanceRequest(
   id: number,
   approverName: string,
 ): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('attendance_requests')
     .update({
-      status: '부서장승인',
+      status: '경유대기',
       approved_by: normalizeAttendanceApproverName(approverName),
       approved_at: new Date().toISOString(),
+      gyeongyu_by: null,
+      gyeongyu_at: null,
+      daepyo_by: null,
+      daepyo_at: null,
     })
     .eq('id', id)
+    .eq('status', '대기중')
+    .select('id')
+    .maybeSingle()
 
   if (error) throw error
+  if (!data) throw new Error('승인할 수 없는 상태입니다.')
 }
 
 // ─── 대표 최종 승인 (2차) ──────────────────────────────────────────────────────
@@ -244,11 +256,12 @@ export async function daepyoApproveAttendanceRequest(
     .from('attendance_requests')
     .select('user_id, leave_type, days_count, start_date')
     .eq('id', id)
+    .eq('status', '최종대기')
     .single()
 
   if (fetchErr) throw fetchErr
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('attendance_requests')
     .update({
       status: '승인',
@@ -256,10 +269,12 @@ export async function daepyoApproveAttendanceRequest(
       daepyo_at: new Date().toISOString(),
     })
     .eq('id', id)
-    .eq('status', '부서장승인')
-    .not('gyeongyu_by', 'is', null)
+    .eq('status', '최종대기')
+    .select('id')
+    .maybeSingle()
 
   if (error) throw error
+  if (!data) throw new Error('최종 승인할 수 없는 상태입니다.')
 
   // 연차 차감은 최종 승인 시점에 처리
   if (DEDUCTED_LEAVE_TYPES.includes(req.leave_type)) {

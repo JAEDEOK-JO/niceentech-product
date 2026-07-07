@@ -1,6 +1,6 @@
 export const LEAVE_TYPES = ['연차', '반차(오전)', '반차(오후)', '기타'] as const
 export const LEAVE_REASONS = ['병원', '출입국방문', '은행업무', '자동차수리'] as const
-export const LEAVE_STATUSES = ['대기중', '부서장승인', '승인', '반려'] as const
+export const LEAVE_STATUSES = ['대기중', '경유대기', '최종대기', '부서장승인', '승인', '반려'] as const
 
 export type LeaveType = (typeof LEAVE_TYPES)[number]
 export type LeaveStatus = (typeof LEAVE_STATUSES)[number]

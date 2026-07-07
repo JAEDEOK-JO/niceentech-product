@@ -637,8 +637,8 @@ async function handleDaepyoApprove(item: AttendanceRequest) {
     markLocalAttendanceMutation()
     showToast('최종 승인 처리되었습니다.')
     await refreshAttendanceAfterMutation()
-  } catch {
-    showToast('최종 승인 중 오류가 발생했습니다.', 'error')
+  } catch (err) {
+    showToast((err as Error)?.message || '최종 승인 중 오류가 발생했습니다.', 'error')
   }
 }
 
@@ -646,7 +646,7 @@ async function handleDaepyoApprove(item: AttendanceRequest) {
 async function handleGyeongyu(item: AttendanceRequest) {
   if (!await ensureApprovalAccess(canGyeongyuApprove(currentUserName.value))) return
   if (!isGyeongyuPending(item)) {
-    showToast('부서장 승인 후 경유 처리할 수 있습니다.', 'error')
+    showToast('경유 대기 상태에서만 경유 처리할 수 있습니다.', 'error')
     return
   }
   if (!await confirm(`${item.userName}의 신청을 경유 처리하시겠습니까?`)) return
@@ -655,8 +655,8 @@ async function handleGyeongyu(item: AttendanceRequest) {
     markLocalAttendanceMutation()
     showToast('경유 처리되었습니다.')
     await refreshAttendanceAfterMutation()
-  } catch {
-    showToast('경유 처리 중 오류가 발생했습니다.', 'error')
+  } catch (err) {
+    showToast((err as Error)?.message || '경유 처리 중 오류가 발생했습니다.', 'error')
   }
 }
 
@@ -669,8 +669,8 @@ async function handleApprove(item: AttendanceRequest) {
     markLocalAttendanceMutation()
     showToast('승인 처리되었습니다.')
     await refreshAttendanceAfterMutation()
-  } catch {
-    showToast('승인 중 오류가 발생했습니다.', 'error')
+  } catch (err) {
+    showToast((err as Error)?.message || '승인 중 오류가 발생했습니다.', 'error')
   }
 }
 

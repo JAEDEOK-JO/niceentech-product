@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { AttendanceRequest } from '../types/attendance'
-import { getFinalApproverDisplayName } from '../utils/attendanceApprover'
+import { getFinalApproverDisplayName, isDeptHeadApproved } from '../utils/attendanceApprover'
 
 defineProps<{
   userName: string
@@ -17,14 +17,16 @@ const emit = defineEmits<{
 const statusBorder = (status: string) => {
   if (status === '승인') return 'border-l-emerald-500'
   if (status === '반려') return 'border-l-red-400'
-  if (status === '부서장승인') return 'border-l-purple-400'
+  if (status === '최종대기' || status === '부서장승인') return 'border-l-purple-400'
+  if (status === '경유대기') return 'border-l-blue-400'
   return 'border-l-amber-400'
 }
 
 const statusBadge = (status: string) => {
   if (status === '승인') return 'bg-emerald-100 text-emerald-700'
   if (status === '반려') return 'bg-red-100 text-red-600'
-  if (status === '부서장승인') return 'bg-purple-100 text-purple-700'
+  if (status === '최종대기' || status === '부서장승인') return 'bg-purple-100 text-purple-700'
+  if (status === '경유대기') return 'bg-blue-100 text-blue-700'
   return 'bg-amber-100 text-amber-700'
 }
 
@@ -95,7 +97,7 @@ const formatPeriod = (item: AttendanceRequest) =>
             <span v-if="getFinalApproverDisplayName(item)" class="text-slate-400">
               승인: {{ getFinalApproverDisplayName(item) }}
             </span>
-            <span v-else-if="item.status === '부서장승인' && item.approvedBy" class="text-slate-400">
+            <span v-else-if="isDeptHeadApproved(item) && item.approvedBy" class="text-slate-400">
               부서장: {{ item.approvedBy }}
             </span>
             <span v-else-if="item.status === '반려' && item.rejectReason" class="text-red-500">

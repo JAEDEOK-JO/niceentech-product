@@ -15,9 +15,9 @@ const isWithinPeriod = (workDate: string, startDate: string, endDate: string) =>
   return !end || target <= end
 }
 
-const isDepartmentApproved = (request: AttendanceRequest) => {
-  return request.status === '부서장승인' || request.status === '승인'
-}
+import { isDeptHeadApproved } from './attendanceApprover'
+
+const isDepartmentApproved = (request: AttendanceRequest) => isDeptHeadApproved(request)
 
 const formatLeaveLabel = (leaveType: string) => {
   if (leaveType === '연차') return '연차휴가'
