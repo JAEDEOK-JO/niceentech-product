@@ -57,6 +57,15 @@ import {
   type Employee,
 } from '@/features/attendance/types/attendance'
 import AttendanceView from '@/features/attendance/components/AttendanceView.vue'
+import { isDeptHeadPending, isFinalApprovalPending, isGyeongyuPending } from '@/features/attendance/utils/attendanceApprover'
+import {
+  ATTENDANCE_APPROVAL_DENIED_MESSAGE,
+  canDeptHeadApprove,
+  canFinalApprove,
+  canGyeongyuApprove,
+  TEMP_FINAL_APPROVER_NAME,
+  TEMP_GYEONGYU_APPROVER_NAME,
+} from '@/features/attendance/utils/attendanceApprovalAccess'
 
 // ─── Auth / Profile ────────────────────────────────────────────────────────────
 const { session } = useAuth()
@@ -81,7 +90,7 @@ watch(
   },
   { immediate: true },
 )
-const { confirm } = useDialog()
+const { confirm, alert } = useDialog()
 const isRootAdminUser = computed(() => isRootAdmin(profile.value?.role))
 const router = useRouter()
 
@@ -108,11 +117,15 @@ const stats = computed<AttendanceDashboardStats>(() => {
   return {
     employeeCount: employeeCount.value,
     thisMonthTotal: items.value.filter((i) => i.startDate.startsWith(ym)).length,
-    pendingCount: items.value.filter((i) => i.status === '대기중').length,
+    pendingCount: items.value.filter(isDeptHeadPending).length,
     approvedCount: items.value.filter((i) => i.status === '승인').length,
     myRemainingDays: quota.value?.remainingDays ?? 0,
   }
 })
+
+const approvalPendingCount = computed(() => items.value.filter(isDeptHeadPending).length)
+const gyeongyuPendingCount = computed(() => items.value.filter(isGyeongyuPending).length)
+const daepyoPendingCount = computed(() => items.value.filter(isFinalApprovalPending).length)
 
 // ─── 직원 목록 상태 ────────────────────────────────────────────────────────────
 const employees = ref<Employee[]>([])
@@ -605,11 +618,22 @@ async function handleAdminDelete(item: AttendanceRequest) {
   }
 }
 
+async function ensureApprovalAccess(allowed: boolean): Promise<boolean> {
+  if (allowed) return true
+  await alert(ATTENDANCE_APPROVAL_DENIED_MESSAGE)
+  return false
+}
+
 // ─── 대표 최종 승인 ────────────────────────────────────────────────────────────
 async function handleDaepyoApprove(item: AttendanceRequest) {
+  if (!await ensureApprovalAccess(canFinalApprove(currentUserName.value))) return
+  if (!isFinalApprovalPending(item)) {
+    showToast('경유 승인 후 최종 승인할 수 있습니다.', 'error')
+    return
+  }
   if (!await confirm(`${item.userName}의 신청을 최종 승인하시겠습니까?`)) return
   try {
-    await daepyoApproveAttendanceRequest(item.id, '이용필')
+    await daepyoApproveAttendanceRequest(item.id, TEMP_FINAL_APPROVER_NAME)
     markLocalAttendanceMutation()
     showToast('최종 승인 처리되었습니다.')
     await refreshAttendanceAfterMutation()
@@ -620,9 +644,14 @@ async function handleDaepyoApprove(item: AttendanceRequest) {
 
 // ─── 경유 ──────────────────────────────────────────────────────────────────────
 async function handleGyeongyu(item: AttendanceRequest) {
+  if (!await ensureApprovalAccess(canGyeongyuApprove(currentUserName.value))) return
+  if (!isGyeongyuPending(item)) {
+    showToast('부서장 승인 후 경유 처리할 수 있습니다.', 'error')
+    return
+  }
   if (!await confirm(`${item.userName}의 신청을 경유 처리하시겠습니까?`)) return
   try {
-    await gyeongyuAttendanceRequest(item.id, currentUserName.value)
+    await gyeongyuAttendanceRequest(item.id, TEMP_GYEONGYU_APPROVER_NAME)
     markLocalAttendanceMutation()
     showToast('경유 처리되었습니다.')
     await refreshAttendanceAfterMutation()
@@ -633,6 +662,7 @@ async function handleGyeongyu(item: AttendanceRequest) {
 
 // ─── 승인 ──────────────────────────────────────────────────────────────────────
 async function handleApprove(item: AttendanceRequest) {
+  if (!await ensureApprovalAccess(canDeptHeadApprove(currentUserName.value))) return
   if (!await confirm(`${item.userName}의 신청을 승인하시겠습니까?`)) return
   try {
     await approveAttendanceRequest(item.id, currentUserName.value)
@@ -726,9 +756,9 @@ async function handleDeleteEmployee(id: number) {
     :current-user-id="currentUserId"
     :is-admin="isAdmin"
     :is-root-admin="isRootAdminUser"
-    :approval-pending-count="items.filter(i => i.status === '대기중').length"
-    :daepyo-pending-count="items.filter(i => i.status === '부서장승인').length"
-    :gyeongyu-pending-count="items.filter(i => !i.gyeongyuBy).length"
+    :approval-pending-count="approvalPendingCount"
+    :daepyo-pending-count="daepyoPendingCount"
+    :gyeongyu-pending-count="gyeongyuPendingCount"
     :loading="loading"
     :form-visible="formVisible"
     :form-loading="formLoading"

@@ -25,6 +25,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   printReport: (options) => ipcRenderer.invoke('print-report', options),
+
+  /**
+   * HTML 문자열을 임시 파일로 저장 후 기본 브라우저(크롬)로 열기
+   * @param {{ filename?: string, html: string }} options
+   */
+  openHtmlReport: (options) => ipcRenderer.invoke('open-html-report', options),
   getPrinters: () => ipcRenderer.invoke('get-printers'),
   clearCacheAndReload: () => ipcRenderer.invoke('clear-cache-and-reload'),
 

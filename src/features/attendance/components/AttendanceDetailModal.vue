@@ -7,6 +7,7 @@ const GYEONGYU_DISPLAY_NAME = '이지형'
 import type { AttendanceRequest, Employee } from '../types/attendance'
 import type { SignatureInfo } from '../services/attendance.service'
 import { formatAttendanceReasonText } from '../utils/attendanceReason'
+import { isFinalApprovalPending, isGyeongyuPending } from '../utils/attendanceApprover'
 
 const props = defineProps<{
   item: AttendanceRequest
@@ -112,6 +113,8 @@ const statusClass = computed(() => {
 })
 
 const statusLabel = computed(() => {
+  if (isGyeongyuPending(props.item)) return '경유 대기'
+  if (isFinalApprovalPending(props.item)) return '최종 승인 대기'
   if (props.item.status === '부서장승인') return '부서장 승인'
   return props.item.status
 })

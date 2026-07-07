@@ -2,6 +2,7 @@
 
 const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, Notification } = require('electron')
 const path = require('path')
+const fs = require('fs')
 const { autoUpdater } = require('electron-updater')
 const supabaseListener = require('./supabase-listener.cjs')
 
@@ -221,6 +222,15 @@ ipcMain.handle('get-printers', async () => {
     status: printer.status || 0,
     isDefault: Boolean(printer.isDefault),
   }))
+})
+
+// HTML 문자열을 임시 파일로 저장한 뒤 기본 브라우저로 연다
+ipcMain.handle('open-html-report', async (_, payload = {}) => {
+  const safeName = String(payload.filename || 'report.html').replace(/[^\w.-]/g, '_')
+  const filePath = path.join(app.getPath('temp'), safeName)
+  fs.writeFileSync(filePath, String(payload.html ?? ''), 'utf8')
+  const openError = await shell.openPath(filePath)
+  return { success: !openError, error: openError || undefined, filePath }
 })
 
 ipcMain.handle('clear-cache-and-reload', async (event) => {

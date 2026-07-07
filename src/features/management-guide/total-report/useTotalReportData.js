@@ -1,12 +1,15 @@
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { supabase } from '@/lib/supabase'
 
 const PRODUCT_LIST_TABLE = 'product_list'
 const SALES_WEEKLY_TABLE = 'sales_weekly_entries'
 const METRIC_ENTRIES_TABLE = 'department_metric_entries'
+const COMPANY_LIST_TABLE = 'company_list'
 const OPERATIONS_DEPARTMENT_CODE = 'operations'
 const INVENTORY_PERIOD_TYPE = 'weekly'
 const LEGACY_INVENTORY_PERIOD_TYPE = 'monthly'
+// 영업부 보고서와 동일한 수주 집계 시작 기준
+const ORDER_BASELINE_START = '2026-01-01'
 const METRIC_KEYS = {
   received: 'monthly_received_ton',
   used: 'monthly_used_ton',
@@ -31,6 +34,18 @@ const isProductionCompleted = (row) =>
   isCompletedStatus(row?.worker_main) ||
   isCompletedStatus(row?.worker_welding)
 
+const hasShippedStatus = (value) => normalizeText(value).includes('출하완료')
+const isShipped = (row) =>
+  Boolean(row?.shipment) ||
+  hasShippedStatus(row?.worker_t) ||
+  hasShippedStatus(row?.worker_nasa) ||
+  hasShippedStatus(row?.worker_main) ||
+  hasShippedStatus(row?.worker_welding)
+
+// 작업은 끝났지만 출하되지 않아 매출로 못 잡힌 물량 (보류 제외)
+const isUnshippedCompleted = (row) =>
+  !Boolean(row?.hold) && isProductionCompleted(row) && !isShipped(row)
+
 const parseFlexibleDate = (value, fallbackYear = new Date().getFullYear()) => {
   const raw = normalizeText(value)
   if (!raw) return null
@@ -53,26 +68,37 @@ const parseFlexibleDate = (value, fallbackYear = new Date().getFullYear()) => {
   return Number.isNaN(native.getTime()) ? null : native
 }
 
-// 당월은 진행 중이라 제외하고, 완료된 최근 N개월만 분석 대상으로 사용한다.
-export const buildLastCompletedMonths = (count = 3, now = new Date()) => {
-  const reportYear = now.getFullYear()
-  const reportMonthIndex = now.getMonth()
-  return Array.from({ length: count }, (_, i) => {
-    const d = new Date(reportYear, reportMonthIndex - (count - i), 1)
-    const y = d.getFullYear()
-    const m = d.getMonth()
-    const monthKey = `${y}-${String(m + 1).padStart(2, '0')}`
-    const lastDay = new Date(y, m + 1, 0).getDate()
-    return {
-      key: monthKey,
-      label: `${m + 1}월`,
-      year: y,
-      monthIndex: m,
-      monthValue: `${monthKey}-01`,
-      monthEndValue: `${monthKey}-${String(lastDay).padStart(2, '0')}`,
-    }
-  })
+const buildMonthDescriptor = (year, monthIndex) => {
+  const monthKey = `${year}-${String(monthIndex + 1).padStart(2, '0')}`
+  const lastDay = new Date(year, monthIndex + 1, 0).getDate()
+  return {
+    key: monthKey,
+    label: `${monthIndex + 1}월`,
+    year,
+    monthIndex,
+    monthValue: `${monthKey}-01`,
+    monthEndValue: `${monthKey}-${String(lastDay).padStart(2, '0')}`,
+  }
 }
+
+// 분기(1~4)에 속한 3개월 목록
+export const buildQuarterMonths = (year, quarter) => {
+  const startMonthIndex = (quarter - 1) * 3
+  return Array.from({ length: 3 }, (_, i) => buildMonthDescriptor(year, startMonthIndex + i))
+}
+
+// 마지막으로 완료된 달이 속한 분기 = 조회 가능한 최신 분기
+export const getLatestReportQuarter = (now = new Date()) => {
+  const lastCompleted = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+  return {
+    year: lastCompleted.getFullYear(),
+    quarter: Math.floor(lastCompleted.getMonth() / 3) + 1,
+  }
+}
+
+const isCompletedMonth = (month, now = new Date()) =>
+  month.year < now.getFullYear() ||
+  (month.year === now.getFullYear() && month.monthIndex < now.getMonth())
 
 // 전월 대비 증감용: 당월 1일 ~ 오늘까지 부분 집계
 export const buildCurrentMonthToDate = (now = new Date()) => {
@@ -92,18 +118,34 @@ export const buildCurrentMonthToDate = (now = new Date()) => {
   }
 }
 
+const PRODUCT_COLUMNS_WITH_INCH =
+  'id,work_type,head,inch,test_date,drawing_date,complete,shipment,hold,worker_t,worker_main,worker_nasa,worker_welding'
+const PRODUCT_COLUMNS_LEGACY =
+  'id,work_type,head,test_date,drawing_date,complete,shipment,hold,worker_t,worker_main,worker_nasa,worker_welding'
+
 const fetchAllProductRows = async () => {
   const batchSize = 1000
   let from = 0
   let hasMore = true
+  let columns = PRODUCT_COLUMNS_WITH_INCH
   const allRows = []
 
   while (hasMore) {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from(PRODUCT_LIST_TABLE)
-      .select('id,work_type,head,test_date,drawing_date,complete,shipment,worker_t,worker_main,worker_nasa,worker_welding')
+      .select(columns)
       .order('id', { ascending: false })
       .range(from, from + batchSize - 1)
+
+    // inch 컬럼이 아직 없는 DB 대응
+    if (error && String(error.message ?? '').includes('inch')) {
+      columns = PRODUCT_COLUMNS_LEGACY
+      ;({ data, error } = await supabase
+        .from(PRODUCT_LIST_TABLE)
+        .select(columns)
+        .order('id', { ascending: false })
+        .range(from, from + batchSize - 1))
+    }
 
     if (error) throw new Error(error.message ?? '생산 데이터를 불러오지 못했습니다.')
     const nextRows = data ?? []
@@ -122,6 +164,16 @@ const fetchSalesByMonths = async (months) => {
     .in('target_month', months.map((month) => month.monthValue))
 
   if (error) throw new Error(error.message ?? '영업부 매출 데이터를 불러오지 못했습니다.')
+  return data ?? []
+}
+
+const fetchCompanyOrderRows = async () => {
+  const { data, error } = await supabase
+    .from(COMPANY_LIST_TABLE)
+    .select('id,registration_month,order_confirmed,total_head_count')
+    .not('registration_month', 'is', null)
+
+  if (error) throw new Error(error.message ?? '영업부 수주 데이터를 불러오지 못했습니다.')
   return data ?? []
 }
 
@@ -169,9 +221,13 @@ const sumSalesForMonth = (salesRows, month) =>
   salesRows
     .filter((row) => normalizeText(row?.target_month) === month.monthValue)
     .reduce(
-      (sum, row) =>
-        sum + toNumber(row?.sales_amount_head) + toNumber(row?.sales_amount_screw) + toNumber(row?.sales_amount_supipe),
-      0,
+      (accumulator, row) => {
+        const headAmount = toNumber(row?.sales_amount_head)
+        accumulator.total += headAmount + toNumber(row?.sales_amount_screw) + toNumber(row?.sales_amount_supipe)
+        accumulator.head += headAmount
+        return accumulator
+      },
+      { total: 0, head: 0 },
     )
 
 const sumInventoryForMonth = ({ weeklyRows, legacyRows }, month) => {
@@ -205,10 +261,37 @@ const isRowInMonth = (date, month) => {
   return true
 }
 
+// 인치가 기록된 현장은 헤드 대신 인치로 작업량을 적은 것이므로,
+// 작업량 계산에서는 해당 행의 헤드를 제외해 이중 계산을 막는다.
+// totalHeadQty는 인치와 무관하게 실제 헤드 수 전체 합계(표시용)다.
+const sumWorkQuantities = (rows) =>
+  rows.reduce(
+    (accumulator, row) => {
+      const inch = toNumber(row?.inch)
+      const head = toNumber(row?.head)
+      accumulator.totalHeadQty += head
+      if (inch > 0) accumulator.inchQty += inch
+      else accumulator.headQty += head
+      return accumulator
+    },
+    { headQty: 0, inchQty: 0, totalHeadQty: 0 },
+  )
+
 const sumProductionForMonth = (productRows, month) =>
-  productRows
-    .filter((row) => isProductionCompleted(row) && isRowInMonth(parseFlexibleDate(row?.test_date), month))
-    .reduce((sum, row) => sum + toNumber(row?.head), 0)
+  sumWorkQuantities(
+    productRows.filter(
+      (row) => isProductionCompleted(row) && isRowInMonth(parseFlexibleDate(row?.test_date), month),
+    ),
+  )
+
+// 현재 시점 스냅샷: 작업완료 후 미출하 물량 전체
+const buildUnshippedBacklog = (productRows) => {
+  const targetRows = productRows.filter((row) => isUnshippedCompleted(row))
+  return {
+    ...sumWorkQuantities(targetRows),
+    count: targetRows.length,
+  }
+}
 
 const sumDrawingForMonth = (productRows, month) => {
   const targetRows = productRows.filter((row) => {
@@ -218,66 +301,160 @@ const sumDrawingForMonth = (productRows, month) => {
     return isRowInMonth(drawingDate, month)
   })
   return {
-    headQty: targetRows.reduce((sum, row) => sum + toNumber(row?.head), 0),
+    ...sumWorkQuantities(targetRows),
     count: targetRows.length,
   }
 }
 
-const buildMonthMetrics = (month, productRows, salesRows, inventoryEntries) => {
+// 확정 수주: 해당 월에 등록된 order_confirmed 물량 (헤드 기준)
+// 헤드수 미입력 건은 0으로 합산되므로 건수를 따로 집계해 과소평가를 표시한다.
+const sumOrdersForMonth = (orderRows, month) => {
+  const targetRows = orderRows.filter(
+    (row) => Boolean(row?.order_confirmed) && normalizeText(row?.registration_month).slice(0, 7) === month.key,
+  )
+  return {
+    headQty: targetRows.reduce((sum, row) => sum + toNumber(row?.total_head_count), 0),
+    noHeadCount: targetRows.filter((row) => toNumber(row?.total_head_count) <= 0).length,
+  }
+}
+
+// 수주 예정: 아직 미확정인 물량 전체 (등록월 = 예정 시점)
+const buildExpectedOrders = (orderRows, now = new Date()) => {
+  const rows = orderRows.filter(
+    (row) => !row?.order_confirmed && normalizeText(row?.registration_month) >= ORDER_BASELINE_START,
+  )
+
+  const byMonthMap = new Map()
+  for (const row of rows) {
+    const key = normalizeText(row.registration_month).slice(0, 7)
+    const entry = byMonthMap.get(key) ?? { key, headQty: 0, count: 0 }
+    entry.headQty += toNumber(row.total_head_count)
+    entry.count += 1
+    byMonthMap.set(key, entry)
+  }
+
+  const byMonth = [...byMonthMap.values()]
+    .sort((a, b) => a.key.localeCompare(b.key))
+    .map((entry) => {
+      const [year, month] = entry.key.split('-')
+      const label = Number(year) === now.getFullYear() ? `${Number(month)}월` : `${year}년 ${Number(month)}월`
+      return { ...entry, label }
+    })
+
+  return {
+    totalHeadQty: rows.reduce((sum, row) => sum + toNumber(row.total_head_count), 0),
+    count: rows.length,
+    byMonth,
+  }
+}
+
+const buildMonthMetrics = (month, productRows, salesRows, inventoryEntries, orderRows) => {
   const inventory = sumInventoryForMonth(inventoryEntries, month)
   const drawing = sumDrawingForMonth(productRows, month)
+  const production = sumProductionForMonth(productRows, month)
+  const sales = sumSalesForMonth(salesRows, month)
+  const orders = sumOrdersForMonth(orderRows, month)
   return {
     ...month,
-    salesAmount: sumSalesForMonth(salesRows, month),
+    salesAmount: sales.total,
+    salesAmountHead: sales.head,
+    orderHeadQty: orders.headQty,
+    orderNoHeadCount: orders.noHeadCount,
     drawingHeadQty: drawing.headQty,
+    drawingInchQty: drawing.inchQty,
+    drawingTotalHeadQty: drawing.totalHeadQty,
     drawingCount: drawing.count,
     receivedTon: inventory.received,
     usedTon: inventory.used,
-    productionHeadQty: sumProductionForMonth(productRows, month),
+    productionHeadQty: production.headQty,
+    productionInchQty: production.inchQty,
+    productionTotalHeadQty: production.totalHeadQty,
   }
 }
 
 export const useTotalReportData = () => {
   const loading = ref(false)
   const errorMessage = ref('')
-  const months = ref(buildLastCompletedMonths())
+  const latestQuarter = getLatestReportQuarter()
+  const selectedQuarter = ref({ ...latestQuarter })
+  const months = ref([])
   const monthlyMetrics = ref([])
   const currentMonthMetrics = ref(null)
+  const expectedOrders = ref(null)
+  const unshippedBacklog = ref(null)
   const totalBalanceTon = ref(0)
+
+  const quarterIndexOf = ({ year, quarter }) => year * 4 + (quarter - 1)
+  const isLatestQuarter = computed(() => quarterIndexOf(selectedQuarter.value) >= quarterIndexOf(latestQuarter))
+  const canGoNextQuarter = computed(() => quarterIndexOf(selectedQuarter.value) < quarterIndexOf(latestQuarter))
+  const quarterLabel = computed(() => `${selectedQuarter.value.year}년 ${selectedQuarter.value.quarter}분기`)
 
   const fetchTotalReportData = async () => {
     loading.value = true
     errorMessage.value = ''
 
     try {
-      const targetMonths = buildLastCompletedMonths()
-      const currentMonth = buildCurrentMonthToDate()
+      const { year, quarter } = selectedQuarter.value
+      const quarterMonths = buildQuarterMonths(year, quarter)
+      const targetMonths = quarterMonths.filter((month) => isCompletedMonth(month))
       months.value = targetMonths
 
-      const inventoryFetchMonths = targetMonths.length > 0
-        ? [{ ...targetMonths[0] }, { ...currentMonth }]
-        : [{ ...currentMonth }]
+      const currentMonth = isLatestQuarter.value ? buildCurrentMonthToDate() : null
 
-      const [productRows, salesRows, inventoryEntries, balanceTon] = await Promise.all([
+      if (targetMonths.length === 0) {
+        monthlyMetrics.value = []
+        currentMonthMetrics.value = null
+        expectedOrders.value = null
+        unshippedBacklog.value = null
+        totalBalanceTon.value = 0
+        return
+      }
+
+      const salesFetchMonths = currentMonth ? [...targetMonths, currentMonth] : targetMonths
+      const inventoryFetchMonths = currentMonth
+        ? [{ ...targetMonths[0] }, { ...currentMonth }]
+        : [{ ...targetMonths[0] }, { ...targetMonths[targetMonths.length - 1] }]
+
+      const [productRows, salesRows, inventoryEntries, balanceTon, orderRows] = await Promise.all([
         fetchAllProductRows(),
-        fetchSalesByMonths([...targetMonths, currentMonth]),
+        fetchSalesByMonths(salesFetchMonths),
         fetchInventoryEntries(inventoryFetchMonths),
         fetchTotalBalance(),
+        fetchCompanyOrderRows(),
       ])
 
       totalBalanceTon.value = balanceTon
+      expectedOrders.value = buildExpectedOrders(orderRows)
+      unshippedBacklog.value = buildUnshippedBacklog(productRows)
       monthlyMetrics.value = targetMonths.map((month) =>
-        buildMonthMetrics(month, productRows, salesRows, inventoryEntries),
+        buildMonthMetrics(month, productRows, salesRows, inventoryEntries, orderRows),
       )
-      currentMonthMetrics.value = buildMonthMetrics(currentMonth, productRows, salesRows, inventoryEntries)
+      currentMonthMetrics.value = currentMonth
+        ? buildMonthMetrics(currentMonth, productRows, salesRows, inventoryEntries, orderRows)
+        : null
     } catch (error) {
       errorMessage.value = error?.message ?? '총보고서 데이터를 불러오지 못했습니다.'
       monthlyMetrics.value = []
       currentMonthMetrics.value = null
+      expectedOrders.value = null
+      unshippedBacklog.value = null
       totalBalanceTon.value = 0
     } finally {
       loading.value = false
     }
+  }
+
+  const moveQuarter = async (delta) => {
+    if (loading.value) return
+    const { year, quarter } = selectedQuarter.value
+    const nextIndex = quarterIndexOf({ year, quarter }) + delta
+    if (nextIndex > quarterIndexOf(latestQuarter)) return
+
+    selectedQuarter.value = {
+      year: Math.floor(nextIndex / 4),
+      quarter: (nextIndex % 4) + 1,
+    }
+    await fetchTotalReportData()
   }
 
   return {
@@ -286,7 +463,13 @@ export const useTotalReportData = () => {
     months,
     monthlyMetrics,
     currentMonthMetrics,
+    expectedOrders,
+    unshippedBacklog,
     totalBalanceTon,
+    quarterLabel,
+    isLatestQuarter,
+    canGoNextQuarter,
+    moveQuarter,
     fetchTotalReportData,
   }
 }

@@ -5,8 +5,15 @@ import Button from '@/components/ui/button/Button.vue'
 import ReportPrintSettingsDialog from './ReportPrintSettingsDialog.vue'
 import { printManagementReport } from './reportPrint'
 import { useDialog } from '@/composables/useDialog'
+import { useHalfYearReportExport } from '@/features/production-half-year/useHalfYearReportExport'
 
 const { confirm, alert } = useDialog()
+const { isExporting: isHalfYearExporting, exportError: halfYearExportError, openHalfYearReport } = useHalfYearReportExport()
+
+const openHalfYearReportSafely = async () => {
+  await openHalfYearReport()
+  if (halfYearExportError.value) await alert(halfYearExportError.value)
+}
 
 const PRODUCT_LIST_TABLE = 'product_list'
 const PRODUCTION_REPAIR_HISTORY_TABLE = 'production_repair_history'
@@ -101,6 +108,8 @@ const isWeekProductionInProgress = (row) =>
   !isWeekCompletedOrShipped(row) &&
   (isInProgressStatus(row?.worker_t) || isInProgressStatus(row?.worker_nasa) || isInProgressStatus(row?.worker_main))
 const formatCount = (value, unit = '개') => `${Number(value || 0).toLocaleString('ko-KR')}${unit}`
+const formatCountWithWeldHead = (value, weldHead) =>
+  `${formatCount(value)}(${Number(weldHead || 0).toLocaleString('ko-KR')})`
 const formatCurrency = (value) => `${Number(value || 0).toLocaleString('ko-KR')}원`
 const formatRatio = (value) => `${Number(value || 0).toFixed(2)}%`
 const formatRepairCost = (row) => (Boolean(row?.is_warranty) ? '무상' : formatCurrency(row?.cost))
@@ -355,8 +364,11 @@ const buildCategoryCounts = (targetRows) => {
   const nasa = targetRows
     .filter((row) => normalizeText(row?.work_type) === '나사')
     .reduce((sum, row) => sum + toNumber(row?.head), 0)
+  const weldHead = targetRows
+    .filter((row) => normalizeText(row?.work_type) === '용접/무용접')
+    .reduce((sum, row) => sum + toNumber(row?.head), 0)
 
-  return { head, hole, groove, nasa }
+  return { head, hole, groove, nasa, weldHead }
 }
 
 const twoMonthsAgoCounts = computed(() => buildCategoryCounts(twoMonthsAgoRows.value))
@@ -370,13 +382,18 @@ const twoYearsAgoYearCounts = computed(() => buildCategoryCounts(twoYearsAgoYear
 const currentWeekTotalCounts = computed(() => buildCategoryCounts(currentWeekTargetRows.value))
 const currentWeekCounts = computed(() => buildCategoryCounts(currentWeekRows.value))
 const currentWeekInProgressCounts = computed(() => buildCategoryCounts(currentWeekInProgressRows.value))
-const currentMonthTotal = computed(() => Object.values(currentCounts.value).reduce((sum, value) => sum + toNumber(value), 0))
+const currentMonthTotal = computed(() =>
+  categoryMeta.reduce((sum, item) => sum + toNumber(currentCounts.value[item.key]), 0),
+)
 const currentWeekSummaryRows = computed(() =>
   categoryMeta.map((item) => ({
     ...item,
     totalValue: currentWeekTotalCounts.value[item.key],
+    totalWeldHead: currentWeekTotalCounts.value.weldHead,
     inProgressValue: currentWeekInProgressCounts.value[item.key],
+    inProgressWeldHead: currentWeekInProgressCounts.value.weldHead,
     completedValue: currentWeekCounts.value[item.key],
+    completedWeldHead: currentWeekCounts.value.weldHead,
   })),
 )
 const currentYearSummaryRows = computed(() =>
@@ -652,6 +669,14 @@ onMounted(async () => {
         >
           수리내역 등록
         </button>
+        <button
+          type="button"
+          class="rounded-xl bg-indigo-100 px-4 py-2.5 text-[13px] font-bold text-indigo-700 transition hover:bg-indigo-200 disabled:cursor-not-allowed disabled:opacity-50"
+          :disabled="isHalfYearExporting"
+          @click="openHalfYearReportSafely"
+        >
+          {{ isHalfYearExporting ? '생성 중...' : '반기 결산' }}
+        </button>
       </div>
     </header>
 
@@ -705,15 +730,33 @@ onMounted(async () => {
                     </div>
                     <div class="border-r border-slate-200 pr-3 text-center">
                       <p class="text-[10px] font-bold text-slate-500">총수량</p>
-                      <p class="text-lg font-extrabold leading-tight text-slate-900">{{ formatCount(item.totalValue) }}</p>
+                      <p class="text-lg font-extrabold leading-tight text-slate-900">
+                        {{
+                          item.key === 'nasa'
+                            ? formatCountWithWeldHead(item.totalValue, item.totalWeldHead)
+                            : formatCount(item.totalValue)
+                        }}
+                      </p>
                     </div>
                     <div class="border-r border-slate-200 pr-3 text-center">
                       <p class="text-[10px] font-bold text-amber-600">작업중</p>
-                      <p class="text-lg font-extrabold leading-tight text-amber-700">{{ formatCount(item.inProgressValue) }}</p>
+                      <p class="text-lg font-extrabold leading-tight text-amber-700">
+                        {{
+                          item.key === 'nasa'
+                            ? formatCountWithWeldHead(item.inProgressValue, item.inProgressWeldHead)
+                            : formatCount(item.inProgressValue)
+                        }}
+                      </p>
                     </div>
                     <div class="text-center">
                       <p class="text-[10px] font-bold text-emerald-600">완료/출하</p>
-                      <p class="text-lg font-extrabold leading-tight text-emerald-700">{{ formatCount(item.completedValue) }}</p>
+                      <p class="text-lg font-extrabold leading-tight text-emerald-700">
+                        {{
+                          item.key === 'nasa'
+                            ? formatCountWithWeldHead(item.completedValue, item.completedWeldHead)
+                            : formatCount(item.completedValue)
+                        }}
+                      </p>
                     </div>
                   </div>
                 </div>

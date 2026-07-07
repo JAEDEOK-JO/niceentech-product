@@ -24,6 +24,7 @@ import SalesExecutiveReportExamplePage from '@/pages/SalesExecutiveReportExample
 import SalesExecutiveAsItemDetailPage from '@/pages/SalesExecutiveAsItemDetailPage.vue'
 import OperationsExecutiveReportExamplePage from '@/pages/OperationsExecutiveReportExamplePage.vue'
 import ProductionExecutiveReportExamplePage from '@/pages/ProductionExecutiveReportExamplePage.vue'
+import ProductionHalfYearPage from '@/pages/ProductionHalfYearPage.vue'
 import AdminSalesDashboardPage from '@/pages/AdminSalesDashboardPage.vue'
 import AdminDesignDashboardPage from '@/pages/AdminDesignDashboardPage.vue'
 import AdminOperationsDashboardPage from '@/pages/AdminOperationsDashboardPage.vue'
@@ -224,6 +225,12 @@ const routes = [
     path: '/reports/production',
     name: 'production-report',
     component: ProductionExecutiveReportExamplePage,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/reports/production/half-year',
+    name: 'production-half-year',
+    component: ProductionHalfYearPage,
     meta: { requiresAuth: true },
   },
   {

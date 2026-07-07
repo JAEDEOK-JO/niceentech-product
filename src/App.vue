@@ -7,10 +7,14 @@ import AppDialog from '@/components/ui/AppDialog.vue'
 import { supabase } from '@/lib/supabase'
 import { isDesktopBrowser } from '@/utils/device'
 import { useCncOnlyPwa } from '@/composables/useCncOnlyPwa'
+import { useAuth } from '@/composables/useAuth'
+import { useFcmPush } from '@/features/push/composables/useFcmPush'
 import packageJson from '../package.json'
 
 const route = useRoute()
 const router = useRouter()
+const { session } = useAuth()
+useFcmPush(session)
 useCncOnlyPwa()
 const showGlobalAppBar = computed(() => route.meta.requiresAuth === true && route.meta.standalone !== true)
 

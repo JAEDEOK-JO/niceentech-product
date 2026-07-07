@@ -21,7 +21,7 @@ import AttendancePasswordKeypad from './AttendancePasswordKeypad.vue'
 import DailyWorkHoursInputDialog from './DailyWorkHoursInputDialog.vue'
 import DailyWorkHoursPanel from './DailyWorkHoursPanel.vue'
 import type { DailyWorkHour } from '../types/attendance'
-import { getFinalApproverDisplayName } from '../utils/attendanceApprover'
+import { getFinalApproverDisplayName, isDeptHeadPending, isFinalApprovalPending, isGyeongyuPending } from '../utils/attendanceApprover'
 
 const props = defineProps<{
   items: AttendanceRequest[]
@@ -196,6 +196,9 @@ const pagedRequestItems = computed(() => {
   const start = (requestsPage.value - 1) * REQUESTS_PER_PAGE
   return props.items.slice(start, start + REQUESTS_PER_PAGE)
 })
+const deptHeadPendingItems = computed(() => props.items.filter(isDeptHeadPending))
+const gyeongyuPendingItems = computed(() => props.items.filter(isGyeongyuPending))
+const finalApprovalPendingItems = computed(() => props.items.filter(isFinalApprovalPending))
 const canGoPrevPage = computed(() => requestsPage.value > 1)
 const canGoNextPage = computed(() => requestsPage.value < totalRequestPages.value)
 const moveRequestPage = (delta: number) => {
@@ -275,18 +278,6 @@ watch(
         <button
           type="button"
           class="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-bold transition-colors"
-          :class="activeTab === 'daepyo' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-800'"
-          @click="activeTab = 'daepyo'"
-        >
-          최종승인 대기
-          <span
-            v-if="daepyoPendingCount > 0"
-            class="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-purple-500 px-1 text-[10px] font-extrabold text-white"
-          >{{ daepyoPendingCount }}</span>
-        </button>
-        <button
-          type="button"
-          class="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-bold transition-colors"
           :class="activeTab === 'gyeongyu' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-800'"
           @click="activeTab = 'gyeongyu'"
         >
@@ -295,6 +286,18 @@ watch(
             v-if="gyeongyuPendingCount > 0"
             class="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-extrabold text-white"
           >{{ gyeongyuPendingCount }}</span>
+        </button>
+        <button
+          type="button"
+          class="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-bold transition-colors"
+          :class="activeTab === 'daepyo' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-800'"
+          @click="activeTab = 'daepyo'"
+        >
+          최종승인 대기
+          <span
+            v-if="daepyoPendingCount > 0"
+            class="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-purple-500 px-1 text-[10px] font-extrabold text-white"
+          >{{ daepyoPendingCount }}</span>
         </button>
         <button
           type="button"
@@ -368,12 +371,12 @@ watch(
       <!-- ═══ 부서장 대기 탭 ═══ -->
       <template v-if="isAdmin && activeTab === 'approval'">
         <div class="space-y-2">
-          <div v-if="items.filter(i => i.status === '대기중').length === 0"
+          <div v-if="deptHeadPendingItems.length === 0"
             class="rounded-xl border border-dashed border-slate-200 bg-white py-14 text-center text-sm text-slate-400">
             승인 대기 중인 신청이 없습니다.
           </div>
           <div
-            v-for="item in items.filter(i => i.status === '대기중')"
+            v-for="item in deptHeadPendingItems"
             :key="item.id"
             class="cursor-pointer rounded-xl border border-l-4 border-amber-300 bg-white px-4 py-3 transition-shadow hover:shadow-sm"
           >
@@ -399,15 +402,44 @@ watch(
         </div>
       </template>
 
+      <!-- ═══ 경유 대기 탭 ═══ -->
+      <template v-if="isAdmin && activeTab === 'gyeongyu'">
+        <div class="space-y-2">
+          <div v-if="gyeongyuPendingItems.length === 0"
+            class="rounded-xl border border-dashed border-slate-200 bg-white py-14 text-center text-sm text-slate-400">
+            경유 대기 중인 신청이 없습니다.
+          </div>
+          <div
+            v-for="item in gyeongyuPendingItems"
+            :key="item.id"
+            class="cursor-pointer rounded-xl border border-l-4 border-blue-300 bg-white px-4 py-3 transition-shadow hover:shadow-sm"
+          >
+            <div class="flex flex-wrap items-start justify-between gap-2">
+              <div class="flex flex-wrap items-center gap-2" @click="emit('openDetail', item)">
+                <span class="font-bold text-slate-900">{{ item.userName }}</span>
+                <span class="text-xs text-slate-400">({{ item.department || '-' }})</span>
+                <span class="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-bold text-blue-700">{{ item.leaveType }}</span>
+                <span class="text-xs font-bold text-slate-700">{{ item.daysCount }}일</span>
+                <span v-if="item.approvedBy" class="text-xs text-slate-400">부서장: {{ item.approvedBy }}</span>
+              </div>
+              <button type="button"
+                class="rounded-lg bg-blue-600 px-3 py-1 text-xs font-bold text-white hover:bg-blue-500"
+                @click="emit('gyeongyu', item)">경유</button>
+            </div>
+            <p class="mt-1 text-xs text-slate-400" @click="emit('openDetail', item)">{{ item.reason || '-' }}</p>
+          </div>
+        </div>
+      </template>
+
       <!-- ═══ 최종승인 대기 탭 ═══ -->
       <template v-if="isAdmin && activeTab === 'daepyo'">
         <div class="space-y-2">
-          <div v-if="items.filter(i => i.status === '부서장승인').length === 0"
+          <div v-if="finalApprovalPendingItems.length === 0"
             class="rounded-xl border border-dashed border-slate-200 bg-white py-14 text-center text-sm text-slate-400">
             최종 승인 대기 중인 신청이 없습니다.
           </div>
           <div
-            v-for="item in items.filter(i => i.status === '부서장승인')"
+            v-for="item in finalApprovalPendingItems"
             :key="item.id"
             class="cursor-pointer rounded-xl border border-l-4 border-purple-300 bg-white px-4 py-3 transition-shadow hover:shadow-sm"
           >
@@ -418,6 +450,7 @@ watch(
                 <span class="rounded-full bg-purple-100 px-2 py-0.5 text-[11px] font-bold text-purple-700">{{ item.leaveType }}</span>
                 <span class="text-xs font-bold text-slate-700">{{ item.daysCount }}일</span>
                 <span v-if="item.approvedBy" class="text-xs text-slate-400">부서장: {{ item.approvedBy }}</span>
+                <span v-if="item.gyeongyuBy" class="text-xs text-slate-400">경유: {{ item.gyeongyuBy }}</span>
               </div>
               <div class="flex items-center gap-1.5">
                 <button type="button"
@@ -427,38 +460,6 @@ watch(
                   class="rounded-lg bg-red-500 px-3 py-1 text-xs font-bold text-white hover:bg-red-400"
                   @click="emit('openReject', item)">반려</button>
               </div>
-            </div>
-            <p class="mt-1 text-xs text-slate-400" @click="emit('openDetail', item)">{{ item.reason || '-' }}</p>
-          </div>
-        </div>
-      </template>
-
-      <!-- ═══ 경유 대기 탭 ═══ -->
-      <template v-if="isAdmin && activeTab === 'gyeongyu'">
-        <div class="space-y-2">
-          <div v-if="items.filter(i => !i.gyeongyuBy).length === 0"
-            class="rounded-xl border border-dashed border-slate-200 bg-white py-14 text-center text-sm text-slate-400">
-            경유 대기 중인 신청이 없습니다.
-          </div>
-          <div
-            v-for="item in items.filter(i => !i.gyeongyuBy)"
-            :key="item.id"
-            class="cursor-pointer rounded-xl border border-l-4 border-blue-300 bg-white px-4 py-3 transition-shadow hover:shadow-sm"
-          >
-            <div class="flex flex-wrap items-start justify-between gap-2">
-              <div class="flex flex-wrap items-center gap-2" @click="emit('openDetail', item)">
-                <span class="font-bold text-slate-900">{{ item.userName }}</span>
-                <span class="text-xs text-slate-400">({{ item.department || '-' }})</span>
-                <span class="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-bold text-blue-700">{{ item.leaveType }}</span>
-                <span class="text-xs font-bold text-slate-700">{{ item.daysCount }}일</span>
-                <span class="rounded-full px-2 py-0.5 text-[11px] font-bold"
-                  :class="item.status === '승인' ? 'bg-emerald-100 text-emerald-700' : item.status === '반려' ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-700'">
-                  {{ item.status }}
-                </span>
-              </div>
-              <button type="button"
-                class="rounded-lg bg-blue-600 px-3 py-1 text-xs font-bold text-white hover:bg-blue-500"
-                @click="emit('gyeongyu', item)">경유</button>
             </div>
             <p class="mt-1 text-xs text-slate-400" @click="emit('openDetail', item)">{{ item.reason || '-' }}</p>
           </div>

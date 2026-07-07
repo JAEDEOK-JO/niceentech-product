@@ -97,6 +97,12 @@ const currentView = computed(() => {
     background: #fff !important;
   }
 
+  .management-report-root > main {
+    max-width: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
   .management-report-shell {
     border: 0 !important;
     background: transparent !important;
@@ -115,6 +121,18 @@ const currentView = computed(() => {
 
   .management-report-tabs {
     display: none !important;
+  }
+
+  /* 내부 보고서의 폭 제한·패딩도 해제해 인쇄 폭을 최대로 쓴다 */
+  .management-report-panel :deep(.report-root) {
+    background: #fff !important;
+    min-height: auto !important;
+  }
+
+  .management-report-panel :deep(.report-root > main) {
+    max-width: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
   }
 }
 </style>

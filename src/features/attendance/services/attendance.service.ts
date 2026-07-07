@@ -212,6 +212,8 @@ export async function gyeongyuAttendanceRequest(
       gyeongyu_at: new Date().toISOString(),
     })
     .eq('id', id)
+    .eq('status', '부서장승인')
+    .is('gyeongyu_by', null)
 
   if (error) throw error
 }
@@ -254,6 +256,8 @@ export async function daepyoApproveAttendanceRequest(
       daepyo_at: new Date().toISOString(),
     })
     .eq('id', id)
+    .eq('status', '부서장승인')
+    .not('gyeongyu_by', 'is', null)
 
   if (error) throw error
 
