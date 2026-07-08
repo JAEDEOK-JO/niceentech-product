@@ -1,4 +1,11 @@
-const formatDaysLabel = (daysCount: number) => {
+import { formatLeaveDaysCountLabel } from './attendanceLeaveType'
+
+const formatDaysLabel = (daysCount: number, leaveType?: string) => {
+  if (leaveType) {
+    const label = formatLeaveDaysCountLabel(leaveType, daysCount)
+    if (label) return label
+  }
+
   const safe = Number(daysCount ?? 0)
   if (!Number.isFinite(safe) || safe <= 0) return ''
   return Number.isInteger(safe) ? `${safe}일` : `${safe.toFixed(1)}일`
@@ -22,7 +29,7 @@ export const formatAttendanceReasonText = ({
   daysCount: number
   reason: string
 }) => {
-  const daysLabel = formatDaysLabel(daysCount)
+  const daysLabel = formatDaysLabel(daysCount, leaveType)
   const reasonBody = buildReasonBody(reason)
   const leaveLabel = String(leaveType ?? '').trim() || '휴가'
 

@@ -240,6 +240,89 @@ ipcMain.handle('clear-cache-and-reload', async (event) => {
   })
 })
 
+ipcMain.handle('print-html-document', async (_, payload = {}) => {
+  const html = String(payload.html ?? '')
+  if (!html.trim()) {
+    return { success: false, errorType: 'Empty HTML' }
+  }
+
+  const printWindow = new BrowserWindow({
+    show: false,
+    width: 820,
+    height: 1160,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: false,
+    },
+  })
+
+  const tempPath = path.join(app.getPath('temp'), `niceentech-print-${Date.now()}.html`)
+
+  try {
+    fs.writeFileSync(tempPath, html, 'utf8')
+    await printWindow.loadFile(tempPath)
+
+    await printWindow.webContents.executeJavaScript(`
+      Promise.all(Array.from(document.images).map((img) => {
+        if (img.complete) return Promise.resolve()
+        return new Promise((resolve) => {
+          img.addEventListener('load', resolve, { once: true })
+          img.addEventListener('error', resolve, { once: true })
+        })
+      }))
+    `)
+
+    const scaleFactor = Number(payload.scaleFactor)
+    const copies = Number(payload.copies)
+    const silent = payload.silent === true
+    const deviceName = String(payload.deviceName || '').trim()
+    const pageRanges = Array.isArray(payload.pageRanges)
+      ? payload.pageRanges
+        .map((range) => ({
+          from: Number(range?.from),
+          to: Number(range?.to),
+        }))
+        .filter((range) => (
+          Number.isInteger(range.from) &&
+          Number.isInteger(range.to) &&
+          range.from >= 0 &&
+          range.to >= range.from
+        ))
+      : []
+
+    const printOptions = {
+      silent,
+      printBackground: true,
+      color: true,
+      landscape: payload.landscape === true,
+      ...(silent ? { pageSize: payload.pageSize || 'A4' } : {}),
+      ...(silent && Number.isFinite(scaleFactor) ? { scaleFactor: Math.max(10, Math.min(200, scaleFactor)) } : {}),
+      ...(silent && Number.isFinite(copies) ? { copies: Math.max(1, Math.min(999, Math.round(copies))) } : {}),
+      ...(silent && pageRanges.length ? { pageRanges } : {}),
+      ...(silent && deviceName ? { deviceName } : {}),
+    }
+
+    return await new Promise((resolve) => {
+      printWindow.webContents.print(printOptions, (success, errorType) => {
+        resolve({ success, errorType: errorType || '' })
+      })
+    })
+  } catch (error) {
+    return {
+      success: false,
+      errorType: error instanceof Error ? error.message : 'Print failed',
+    }
+  } finally {
+    if (!printWindow.isDestroyed()) printWindow.close()
+    try {
+      if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath)
+    } catch {
+      // ignore cleanup errors
+    }
+  }
+})
+
 ipcMain.handle('print-report', async (_, requestedOptions = {}) => {
   const window = getPrimaryWindow()
   if (!window || window.isDestroyed()) {

@@ -21,7 +21,9 @@ import AttendancePasswordKeypad from './AttendancePasswordKeypad.vue'
 import DailyWorkHoursInputDialog from './DailyWorkHoursInputDialog.vue'
 import DailyWorkHoursPanel from './DailyWorkHoursPanel.vue'
 import type { DailyWorkHour } from '../types/attendance'
-import { getFinalApproverDisplayName, isDeptHeadPending, isFinalApprovalPending, isGyeongyuPending } from '../utils/attendanceApprover'
+import { isDeptHeadPending, isFinalApprovalPending, isGyeongyuPending } from '../utils/attendanceApprover'
+import { formatWorkflowPendingDetail } from '../utils/attendanceDateTime'
+import { isHalfDayLeaveType, LEAVE_TYPE_ABSENCE, LEAVE_TYPE_OUTING } from '../utils/attendanceLeaveType'
 
 const props = defineProps<{
   items: AttendanceRequest[]
@@ -66,6 +68,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'update:filters', value: AttendanceFilters): void
+  (e: 'printAllApproved'): void
   (e: 'update:summaryYear', value: number): void
   (e: 'update:summaryMonth', value: number): void
   (e: 'update:formData', value: AttendanceFormState): void
@@ -82,6 +85,7 @@ const emit = defineEmits<{
   (e: 'openReject', item: AttendanceRequest): void
   (e: 'adminEdit', item: AttendanceRequest): void
   (e: 'adminDelete', item: AttendanceRequest): void
+  (e: 'print', item: AttendanceRequest): void
   (e: 'openDetail', item: AttendanceRequest): void
   (e: 'closeDetail'): void
   (e: 'closeReject'): void
@@ -177,7 +181,9 @@ const statusBadge = (status: string) => {
 }
 
 const leaveTypeBadge = (type: string) => {
-  if (type.startsWith('반차')) return 'bg-blue-100 text-blue-700'
+  if (isHalfDayLeaveType(type)) return 'bg-blue-100 text-blue-700'
+  if (type === LEAVE_TYPE_OUTING) return 'bg-cyan-100 text-cyan-700'
+  if (type === LEAVE_TYPE_ABSENCE) return 'bg-rose-100 text-rose-700'
   if (type === '병가') return 'bg-purple-100 text-purple-700'
   if (type === '연차') return 'bg-slate-100 text-slate-700'
   return 'bg-slate-100 text-slate-500'
@@ -401,7 +407,9 @@ watch(
                   @click="emit('openReject', item)">반려</button>
               </div>
             </div>
-            <p class="mt-1 text-xs text-slate-400" @click="emit('openDetail', item)">{{ item.reason || '-' }}</p>
+            <p class="mt-1 text-xs font-medium text-slate-700" @click="emit('openDetail', item)">
+              {{ formatWorkflowPendingDetail(item.reason, item.createdAt, '신청시간') }}
+            </p>
           </div>
         </div>
       </template>
@@ -424,13 +432,14 @@ watch(
                 <span class="text-xs text-slate-400">({{ item.department || '-' }})</span>
                 <span class="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-bold text-blue-700">{{ item.leaveType }}</span>
                 <span class="text-xs font-bold text-slate-700">{{ item.daysCount }}일</span>
-                <span v-if="item.approvedBy" class="text-xs text-slate-400">부서장: {{ item.approvedBy }}</span>
               </div>
               <button type="button"
                 class="rounded-lg bg-blue-600 px-3 py-1 text-xs font-bold text-white hover:bg-blue-500"
                 @click="emit('gyeongyu', item)">경유</button>
             </div>
-            <p class="mt-1 text-xs text-slate-400" @click="emit('openDetail', item)">{{ item.reason || '-' }}</p>
+            <p class="mt-1 text-xs font-medium text-slate-700" @click="emit('openDetail', item)">
+              {{ formatWorkflowPendingDetail(item.reason, item.approvedAt, '부서장 승인시간') }}
+            </p>
           </div>
         </div>
       </template>
@@ -453,8 +462,6 @@ watch(
                 <span class="text-xs text-slate-400">({{ item.department || '-' }})</span>
                 <span class="rounded-full bg-purple-100 px-2 py-0.5 text-[11px] font-bold text-purple-700">{{ item.leaveType }}</span>
                 <span class="text-xs font-bold text-slate-700">{{ item.daysCount }}일</span>
-                <span v-if="item.approvedBy" class="text-xs text-slate-400">부서장: {{ item.approvedBy }}</span>
-                <span v-if="item.gyeongyuBy" class="text-xs text-slate-400">경유: {{ item.gyeongyuBy }}</span>
               </div>
               <div class="flex items-center gap-1.5">
                 <button type="button"
@@ -465,7 +472,9 @@ watch(
                   @click="emit('openReject', item)">반려</button>
               </div>
             </div>
-            <p class="mt-1 text-xs text-slate-400" @click="emit('openDetail', item)">{{ item.reason || '-' }}</p>
+            <p class="mt-1 text-xs font-medium text-slate-700" @click="emit('openDetail', item)">
+              {{ formatWorkflowPendingDetail(item.reason, item.gyeongyuAt, '경유 승인시간') }}
+            </p>
           </div>
         </div>
       </template>
@@ -564,6 +573,7 @@ watch(
             :departments="departments"
             :is-admin="isAdmin"
             @update:filters="emit('update:filters', $event)"
+            @print-all-approved="emit('printAllApproved')"
           />
         </div>
 
@@ -606,15 +616,20 @@ watch(
                         <button type="button" class="rounded border border-slate-200 px-2 py-1 text-xs font-bold text-slate-600 hover:bg-slate-50" @click="emit('adminEdit', item)">수정</button>
                         <button type="button" class="rounded border border-red-200 px-2 py-1 text-xs font-bold text-red-500 hover:bg-red-50" @click="emit('adminDelete', item)">삭제</button>
                       </template>
-                      <template v-else-if="isRootAdmin">
-                        <button type="button" class="rounded border border-red-300 bg-red-50 px-2 py-1 text-xs font-bold text-red-600 hover:bg-red-100" @click="emit('adminDelete', item)">삭제</button>
+                      <template v-else-if="item.status === '승인'">
+                        <button type="button" class="rounded border border-slate-200 px-2 py-1 text-xs font-bold text-slate-600 hover:bg-slate-50" @click="emit('print', item)">인쇄</button>
+                        <button
+                          v-if="isRootAdmin"
+                          type="button"
+                          class="rounded border border-red-300 bg-red-50 px-2 py-1 text-xs font-bold text-red-600 hover:bg-red-100"
+                          @click="emit('adminDelete', item)"
+                        >삭제</button>
                       </template>
                     </div>
                   </div>
                   <div class="mt-1.5 flex flex-wrap items-center gap-3 text-xs text-slate-500" @click="emit('openDetail', item)">
                     <span>{{ formatPeriod(item) }}</span>
-                    <span v-if="getFinalApproverDisplayName(item)" class="text-slate-400">승인: {{ getFinalApproverDisplayName(item) }}</span>
-                    <span v-else-if="item.status === '반려' && item.rejectReason" class="text-red-500">반려: {{ item.rejectReason }}</span>
+                    <span v-if="item.status === '반려' && item.rejectReason" class="text-red-500">반려: {{ item.rejectReason }}</span>
                     <span class="truncate">{{ item.reason || '-' }}</span>
                   </div>
                 </div>

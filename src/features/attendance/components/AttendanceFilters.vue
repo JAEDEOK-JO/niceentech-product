@@ -10,6 +10,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'update:filters', value: AttendanceFilters): void
+  (e: 'printAllApproved'): void
 }>()
 
 const currentYear = new Date().getFullYear()
@@ -83,5 +84,14 @@ const update = <K extends keyof AttendanceFilters>(key: K, value: AttendanceFilt
       class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none"
       @input="update('searchQuery', ($event.target as HTMLInputElement).value)"
     />
+
+    <button
+      v-if="isAdmin"
+      type="button"
+      class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
+      @click="emit('printAllApproved')"
+    >
+      전체인쇄
+    </button>
   </div>
 </template>

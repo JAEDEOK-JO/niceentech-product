@@ -39,6 +39,7 @@ builder-debug.yml
 *.sw?
 
 VERSION.md
+RELEASE.md
 
 # Claude Code worktrees
 .claude/worktrees/

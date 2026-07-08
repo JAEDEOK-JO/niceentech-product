@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { LEAVE_TYPES, LEAVE_REASONS, type AttendanceFormState, type LeaveType, type Employee } from '../types/attendance'
+import { LEAVE_REASONS, LEAVE_TYPES, type AttendanceFormState, type LeaveType, type Employee } from '../types/attendance'
+import {
+  deductsAnnualLeave,
+  getFixedLeaveDaysCount,
+  getLeaveDurationHint,
+  isSingleDayLeaveType,
+} from '../utils/attendanceLeaveType'
 
 const props = defineProps<{
   modelValue: AttendanceFormState
@@ -45,6 +51,9 @@ const selectedEmployee = computed(() =>
 
 const remainingAfter = computed(() => {
   if (!selectedEmployee.value) return null
+  if (!deductsAnnualLeave(form.value.leaveType)) {
+    return selectedEmployee.value.remainingAnnualLeaveCount
+  }
   return Math.max(
     0,
     selectedEmployee.value.remainingAnnualLeaveCount - (Number(form.value.daysCount) || 0),
@@ -67,9 +76,9 @@ function onNameChange(name: string) {
 }
 
 // 휴가 종류 선택
-const isHalfDay = computed(
-  () => form.value.leaveType === '반차(오전)' || form.value.leaveType === '반차(오후)',
-)
+const isSingleDay = computed(() => isSingleDayLeaveType(form.value.leaveType))
+
+const durationHint = computed(() => getLeaveDurationHint(form.value.leaveType))
 
 function calcDays(start: string, end: string): number {
   if (!start || !end) return 1
@@ -80,24 +89,25 @@ function calcDays(start: string, end: string): number {
 }
 
 function selectType(type: LeaveType) {
-  const half = type === '반차(오전)' || type === '반차(오후)'
+  const fixedDays = getFixedLeaveDaysCount(type)
   emitUpdate({
     ...form.value,
     leaveType: type,
-    daysCount: half ? 0.5 : calcDays(form.value.startDate, form.value.endDate),
-    endDate: half ? form.value.startDate : form.value.endDate,
+    daysCount: fixedDays ?? calcDays(form.value.startDate, form.value.endDate),
+    endDate: isSingleDayLeaveType(type) ? form.value.startDate : form.value.endDate,
   })
 }
 
 function onStartDateChange(date: string) {
-  const endDate = isHalfDay.value
+  const fixedDays = getFixedLeaveDaysCount(form.value.leaveType)
+  const endDate = isSingleDay.value
     ? date
     : form.value.endDate < date ? date : form.value.endDate
   emitUpdate({
     ...form.value,
     startDate: date,
     endDate,
-    daysCount: isHalfDay.value ? 0.5 : calcDays(date, endDate),
+    daysCount: fixedDays ?? calcDays(date, endDate),
   })
 }
 
@@ -221,7 +231,7 @@ function onEndDateChange(date: string) {
           :value="form.endDate"
           type="date"
           :min="form.startDate"
-          :disabled="isHalfDay"
+          :disabled="isSingleDay"
           class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400 disabled:bg-slate-50 disabled:text-slate-400"
           @change="onEndDateChange(($event.target as HTMLInputElement).value)"
         />
@@ -235,7 +245,7 @@ function onEndDateChange(date: string) {
         <span class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-bold text-slate-800">
           {{ form.daysCount }}일
         </span>
-        <span v-if="isHalfDay" class="text-xs text-slate-400">반차: 0.5일 고정</span>
+        <span v-if="durationHint" class="text-xs text-slate-400">{{ durationHint }}</span>
       </div>
     </div>
 

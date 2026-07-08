@@ -1,0 +1,325 @@
+.attendance-leave-document {
+  color: #0f172a;
+}
+
+.attendance-leave-document .doc-body {
+  width: 100%;
+}
+
+.attendance-leave-document .doc-title {
+  margin: 0 0 24px;
+  text-align: center;
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+}
+
+.attendance-leave-document .approval-tables {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.attendance-leave-document .gyeongyu-table,
+.attendance-leave-document .signer-table,
+.attendance-leave-document .content-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.attendance-leave-document .gyeongyu-table {
+  width: 80px;
+  flex-shrink: 0;
+}
+
+.attendance-leave-document .signer-table {
+  width: auto;
+}
+
+.attendance-leave-document .gyeongyu-table th,
+.attendance-leave-document .signer-table th,
+.attendance-leave-document .content-table th {
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  padding: 6px 8px;
+  text-align: center;
+  font-weight: 700;
+  color: #475569;
+}
+
+.attendance-leave-document .gyeongyu-table td,
+.attendance-leave-document .signer-table td,
+.attendance-leave-document .content-table th,
+.attendance-leave-document .content-table td {
+  border: 1px solid #cbd5e1;
+  padding: 8px 12px;
+}
+
+.attendance-leave-document .content-table th {
+  text-align: left;
+  width: 88px;
+}
+
+.attendance-leave-document .stamp-cell {
+  width: 92px;
+  height: 64px;
+  padding: 2px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.attendance-leave-document .date-cell {
+  padding: 4px 8px;
+  text-align: center;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.attendance-leave-document .stamp-wrap {
+  display: flex;
+  height: 58px;
+  width: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.attendance-leave-document .stamp-img {
+  display: block;
+  height: 42px;
+  width: 100%;
+  object-fit: contain;
+}
+
+.attendance-leave-document .stamp-name {
+  font-size: 10px;
+  line-height: 1;
+  font-weight: 700;
+  color: #334155;
+}
+
+.attendance-leave-document .bold {
+  font-weight: 700;
+}
+
+.attendance-leave-document .status-badge {
+  display: inline-block;
+  border: 1px solid;
+  border-radius: 9999px;
+  padding: 2px 12px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.attendance-leave-document .meta-text {
+  margin-left: 8px;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.attendance-leave-document .reject-text {
+  margin-left: 8px;
+  font-size: 12px;
+  color: #ef4444;
+}
+
+.attendance-leave-document .signature-footer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.attendance-leave-document .footer-note {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.attendance-leave-document .footer-date {
+  margin: 0;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.attendance-leave-document .signature-box-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.attendance-leave-document .signature-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.attendance-leave-document .signature-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.attendance-leave-document .signature-box {
+  display: flex;
+  height: 64px;
+  width: 128px;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.attendance-leave-document .signature-img {
+  max-height: 100%;
+  max-width: 100%;
+  object-fit: contain;
+}
+
+.attendance-leave-document .signature-empty {
+  font-size: 12px;
+  color: #cbd5e1;
+}
+
+.attendance-leave-document .doc-brand-footer {
+  display: none;
+}
+
+.attendance-leave-document--print {
+  min-height: 255mm;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 8mm 0 0;
+}
+
+.attendance-leave-document--print .doc-title {
+  margin-bottom: 28px;
+  font-size: 34px;
+  letter-spacing: 0.28em;
+}
+
+.attendance-leave-document--print .approval-tables {
+  margin-bottom: 32px;
+  gap: 16px;
+}
+
+.attendance-leave-document--print .gyeongyu-table,
+.attendance-leave-document--print .signer-table,
+.attendance-leave-document--print .content-table {
+  font-size: 15px;
+}
+
+.attendance-leave-document--print .gyeongyu-table {
+  width: 96px;
+}
+
+.attendance-leave-document--print .gyeongyu-table th,
+.attendance-leave-document--print .signer-table th,
+.attendance-leave-document--print .content-table th {
+  padding: 10px 12px;
+  font-size: 14px;
+}
+
+.attendance-leave-document--print .gyeongyu-table td,
+.attendance-leave-document--print .signer-table td,
+.attendance-leave-document--print .content-table td {
+  padding: 14px 16px;
+}
+
+.attendance-leave-document--print .content-table th {
+  width: 108px;
+  font-size: 14px;
+}
+
+.attendance-leave-document--print .stamp-cell {
+  width: 108px;
+  height: 88px;
+}
+
+.attendance-leave-document--print .stamp-wrap {
+  height: 80px;
+}
+
+.attendance-leave-document--print .stamp-img {
+  height: 56px;
+}
+
+.attendance-leave-document--print .stamp-name {
+  font-size: 11px;
+}
+
+.attendance-leave-document--print .content-table .reason-cell {
+  min-height: 88px;
+  vertical-align: top;
+  line-height: 1.7;
+}
+
+.attendance-leave-document--print .signature-footer {
+  margin-top: 36px;
+  padding-top: 28px;
+  gap: 16px;
+}
+
+.attendance-leave-document--print .footer-note {
+  font-size: 16px;
+}
+
+.attendance-leave-document--print .footer-date {
+  font-size: 15px;
+}
+
+.attendance-leave-document--print .signature-box {
+  height: 88px;
+  width: 168px;
+}
+
+.attendance-leave-document--print .signature-name {
+  font-size: 16px;
+}
+
+.attendance-leave-document--print .doc-brand-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: auto;
+  padding-top: 24px;
+}
+
+.attendance-leave-document--print .brand-logo {
+  display: block;
+  width: 38px;
+  height: 38px;
+  object-fit: contain;
+}
+
+.attendance-leave-document--print .brand-name {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  color: #0f766e;
+}
+
+.attendance-leave-document .text-emerald-600 { color: #059669; }
+.attendance-leave-document .border-emerald-400 { border-color: #34d399; }
+.attendance-leave-document .text-purple-600 { color: #9333ea; }
+.attendance-leave-document .border-purple-400 { border-color: #c084fc; }
+.attendance-leave-document .text-blue-600 { color: #2563eb; }
+.attendance-leave-document .border-blue-400 { border-color: #60a5fa; }
+.attendance-leave-document .text-red-500 { color: #ef4444; }
+.attendance-leave-document .border-red-400 { border-color: #f87171; }
+.attendance-leave-document .text-amber-600 { color: #d97706; }
+.attendance-leave-document .border-amber-400 { border-color: #fbbf24; }

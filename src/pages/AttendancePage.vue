@@ -57,6 +57,7 @@ import {
   type Employee,
 } from '@/features/attendance/types/attendance'
 import AttendanceView from '@/features/attendance/components/AttendanceView.vue'
+import { printAttendanceLeaveApplication, printAllApprovedAttendanceLeaveApplications } from '@/features/attendance/utils/attendanceLeavePrint'
 import { isDeptHeadPending, isFinalApprovalPending, isGyeongyuPending } from '@/features/attendance/utils/attendanceApprover'
 import {
   ATTENDANCE_APPROVAL_DENIED_MESSAGE,
@@ -618,6 +619,28 @@ async function handleAdminDelete(item: AttendanceRequest) {
   }
 }
 
+async function handlePrint(item: AttendanceRequest) {
+  if (item.status !== '승인') return
+  try {
+    await printAttendanceLeaveApplication(item, employees.value)
+  } catch {
+    showToast('인쇄 준비 중 오류가 발생했습니다.', 'error')
+  }
+}
+
+async function handlePrintAllApproved() {
+  if (!isAdmin.value) return
+  try {
+    const approvedItems = await fetchAttendanceRequests({
+      ...filters,
+      status: '승인',
+    })
+    await printAllApprovedAttendanceLeaveApplications(approvedItems, employees.value)
+  } catch {
+    showToast('전체 인쇄 준비 중 오류가 발생했습니다.', 'error')
+  }
+}
+
 async function ensureApprovalAccess(allowed: boolean): Promise<boolean> {
   if (allowed) return true
   await alert(ATTENDANCE_APPROVAL_DENIED_MESSAGE)
@@ -791,6 +814,8 @@ async function handleDeleteEmployee(id: number) {
     @submit-reject="submitReject"
     @admin-edit="handleAdminEdit"
     @admin-delete="handleAdminDelete"
+    @print="handlePrint"
+    @print-all-approved="handlePrintAllApproved"
     :signature-request-visible="signatureRequestVisible"
     @signature-confirm="handleSignatureConfirm"
     @signature-cancel="handleSignatureCancel"

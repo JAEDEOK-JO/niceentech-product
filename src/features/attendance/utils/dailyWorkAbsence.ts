@@ -1,8 +1,10 @@
 import type { AttendanceRequest, Employee } from '../types/attendance'
 import { formatHomeLeaveLabel, isEmployeeOnHomeLeave } from './homeLeave'
+import { isDeptHeadApproved } from './attendanceApprover'
+import { LEAVE_TYPE_ABSENCE, LEAVE_TYPE_OUTING } from './attendanceLeaveType'
 
 export interface DailyWorkAbsence {
-  type: 'home-leave' | 'annual-leave' | 'half-day'
+  type: 'home-leave' | 'annual-leave' | 'half-day' | 'outing' | 'absence'
   label: string
 }
 
@@ -15,15 +17,23 @@ const isWithinPeriod = (workDate: string, startDate: string, endDate: string) =>
   return !end || target <= end
 }
 
-import { isDeptHeadApproved } from './attendanceApprover'
-
 const isDepartmentApproved = (request: AttendanceRequest) => isDeptHeadApproved(request)
 
 const formatLeaveLabel = (leaveType: string) => {
   if (leaveType === '연차') return '연차휴가'
   if (leaveType === '반차(오전)') return '반차(오전)'
   if (leaveType === '반차(오후)') return '반차(오후)'
+  if (leaveType === LEAVE_TYPE_OUTING) return '외출(2시간)'
+  if (leaveType === LEAVE_TYPE_ABSENCE) return '결근'
   return ''
+}
+
+const resolveAbsenceType = (leaveType: string): DailyWorkAbsence['type'] | null => {
+  if (leaveType === '연차') return 'annual-leave'
+  if (leaveType === LEAVE_TYPE_ABSENCE) return 'absence'
+  if (leaveType === LEAVE_TYPE_OUTING) return 'outing'
+  if (leaveType === '반차(오전)' || leaveType === '반차(오후)') return 'half-day'
+  return null
 }
 
 export function getDailyWorkAbsence(
@@ -39,14 +49,12 @@ export function getDailyWorkAbsence(
     if (request.userName !== employee.name) return false
     if (!isDepartmentApproved(request)) return false
     if (!isWithinPeriod(workDate, request.startDate, request.endDate)) return false
-    return request.leaveType === '연차' || request.leaveType === '반차(오전)' || request.leaveType === '반차(오후)'
+    return Boolean(resolveAbsenceType(request.leaveType))
   })
 
   if (!leave) return null
   const label = formatLeaveLabel(leave.leaveType)
-  if (!label) return null
-  return {
-    type: leave.leaveType === '연차' ? 'annual-leave' : 'half-day',
-    label,
-  }
+  const type = resolveAbsenceType(leave.leaveType)
+  if (!label || !type) return null
+  return { type, label }
 }
