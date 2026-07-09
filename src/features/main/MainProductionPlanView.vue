@@ -12,6 +12,7 @@ import { WELDING_INSPECTORS, getWeldingInspectorClass } from '@/utils/production
 import { sanitizeDecimalOne } from '@/features/main/productionPlanNumbers'
 import { WELDING_SCHEDULE_PERMISSION_ERROR } from '@/features/welding-schedule/utils/weldingSchedulePermission'
 import CncPlanRegisterDialog from '@/features/cnc/components/CncPlanRegisterDialog.vue'
+import { vVirtualKeyboard } from '@/features/virtual-keyboard/directives/vVirtualKeyboard'
 
 const { confirm, alert } = useDialog()
 
@@ -1021,6 +1022,7 @@ const selectDrawingFile = (file) => {
                   <path d="m20 20-3.5-3.5" />
                 </svg>
                 <Input
+                  v-virtual-keyboard
                   class="h-8 border-slate-200 pl-9 pr-3 text-xs md:text-sm"
                   :model-value="localSearchText"
                   :placeholder="searchPlaceholder"
@@ -1125,6 +1127,7 @@ const selectDrawingFile = (file) => {
           </div>
           <div class="mt-4 space-y-3">
             <Input
+              v-virtual-keyboard
               class="h-11 w-1/2 border-slate-200 text-sm"
               :model-value="localSearchText"
               :placeholder="searchPlaceholder"

@@ -8,11 +8,20 @@ import EmployeeAccountRegisterPanel from '@/features/settings/components/Employe
 import EmployeeOptionSettingsPanel from '@/features/settings/components/EmployeeOptionSettingsPanel.vue'
 import InventoryMaterialSettingsPanel from '@/features/settings/components/InventoryMaterialSettingsPanel.vue'
 import { clearCacheAndReload } from '@/features/settings/services/cacheRefresh.service'
+import { useVirtualKeyboardSetting } from '@/features/virtual-keyboard/composables/useVirtualKeyboardSetting'
 import packageJson from '../../package.json'
 
 const appVersion = packageJson.version
 const { session } = useAuth()
 const { profile } = useProfile(session)
+const {
+  enabled: virtualKeyboardEnabled,
+  loading: virtualKeyboardLoading,
+  saving: virtualKeyboardSaving,
+  setEnabled: setVirtualKeyboardEnabled,
+  isWebHost,
+} = useVirtualKeyboardSetting()
+const showVirtualKeyboardSetting = isWebHost()
 
 const isRootAdmin = computed(() => profile.value?.role === 'admin')
 const activePanel = ref('app-info')
@@ -55,6 +64,16 @@ const handleCacheRefresh = async () => {
     isRefreshingCache.value = false
     showSnack(error?.message || '캐시 새로고침에 실패했습니다.')
   }
+}
+
+const handleVirtualKeyboardToggle = async (event) => {
+  const next = Boolean(event?.target?.checked)
+  const result = await setVirtualKeyboardEnabled(next)
+  if (!result.ok) {
+    showSnack(result.message || '가상키보드 설정 저장에 실패했습니다.')
+    return
+  }
+  showSnack(next ? '가상키보드 온' : '가상키보드 오프')
 }
 
 </script>
@@ -135,6 +154,29 @@ const handleCacheRefresh = async () => {
               >
                 {{ isRefreshingCache ? '새로고침 중...' : '캐시 새로고침' }}
               </button>
+            </div>
+          </article>
+
+          <article
+            v-if="showVirtualKeyboardSetting"
+            class="rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4"
+          >
+            <div class="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <p class="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">가상키보드</p>
+              </div>
+              <label class="inline-flex items-center gap-3">
+                <span class="text-sm font-bold text-slate-700">
+                  {{ virtualKeyboardEnabled ? '온' : '오프' }}
+                </span>
+                <input
+                  type="checkbox"
+                  class="h-5 w-5 rounded border-slate-300 text-slate-900 focus:ring-slate-400"
+                  :checked="virtualKeyboardEnabled"
+                  :disabled="virtualKeyboardLoading || virtualKeyboardSaving"
+                  @change="handleVirtualKeyboardToggle"
+                />
+              </label>
             </div>
           </article>
 

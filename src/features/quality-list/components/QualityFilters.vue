@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { vVirtualKeyboard } from '@/features/virtual-keyboard/directives/vVirtualKeyboard'
 
 defineProps<{
   searchQuery: string
@@ -77,6 +78,7 @@ function openCalendar() {
       <button type="button" class="ghost-button quality-notice-button" @click="emit('noticeUpload')">통보서</button>
       <div class="quality-search-row">
         <input
+          v-virtual-keyboard
           :value="searchQuery"
           type="text"
           class="search-input"

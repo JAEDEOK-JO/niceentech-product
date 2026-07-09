@@ -4,6 +4,8 @@ import { RouterView, useRoute, useRouter } from 'vue-router'
 import GlobalAppBar from '@/components/layout/GlobalAppBar.vue'
 import DesktopInstallGate from '@/components/desktop/DesktopInstallGate.vue'
 import AppDialog from '@/components/ui/AppDialog.vue'
+import VirtualKeyboardPanel from '@/features/virtual-keyboard/components/VirtualKeyboardPanel.vue'
+import { bootstrapVirtualKeyboardSetting } from '@/features/virtual-keyboard/composables/useVirtualKeyboardSetting'
 import { supabase } from '@/lib/supabase'
 import { isDesktopBrowser } from '@/utils/device'
 import { useCncOnlyPwa } from '@/composables/useCncOnlyPwa'
@@ -68,6 +70,11 @@ const bannerMessage = computed(() => {
 
 const updatePercent = computed(() => Math.round(Number(updateStatus.value.percent || 0)))
 const updateBusy = computed(() => ['checking', 'available', 'downloading', 'installing'].includes(updateStatus.value.phase))
+const updateButtonLabel = computed(() => {
+  if (updateStatus.value.phase === 'ready') return '지금 설치'
+  if (updateBusy.value) return '업데이트 중...'
+  return '지금 업데이트'
+})
 const updateStatusMessage = computed(() => updateStatus.value.message || '업데이트를 준비하고 있습니다.')
 const updateDetailMessage = computed(() => {
   const { phase, transferred, total, bytesPerSecond } = updateStatus.value
@@ -92,25 +99,34 @@ const setupSettingRealtime = () => {
     .channel('pwa-update-version-gate')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'setting' }, async () => {
       await fetchSetting()
-      if (isElectron) {
-        window.electronAPI?.checkForUpdate?.()
-      }
     })
     .subscribe()
 }
 
 const handleUpdate = () => {
-  if (isElectron && typeof window.electronAPI?.checkForUpdate === 'function') {
-    updateStatus.value = {
-      phase: 'checking',
-      message: '업데이트를 확인하고 있습니다.',
-      percent: 0,
-      transferred: 0,
-      total: 0,
-      bytesPerSecond: 0,
+  if (isElectron) {
+    if (updateStatus.value.phase === 'ready' && typeof window.electronAPI?.installUpdate === 'function') {
+      updateStatus.value = {
+        ...updateStatus.value,
+        phase: 'installing',
+        message: '업데이트를 설치합니다.',
+        percent: 100,
+      }
+      window.electronAPI.installUpdate()
+      return
     }
-    window.electronAPI.checkForUpdate()
-    return
+    if (typeof window.electronAPI?.checkForUpdate === 'function') {
+      updateStatus.value = {
+        phase: 'checking',
+        message: '업데이트를 확인하고 있습니다.',
+        percent: 0,
+        transferred: 0,
+        total: 0,
+        bytesPerSecond: 0,
+      }
+      window.electronAPI.checkForUpdate()
+      return
+    }
   }
   window.location.reload()
 }
@@ -138,6 +154,7 @@ const blockClose = (e) => {
 onMounted(async () => {
   await fetchSetting()
   setupSettingRealtime()
+  bootstrapVirtualKeyboardSetting()
   window.addEventListener('beforeunload', blockClose)
   removeUpdateStatusListener = window.electronAPI?.onUpdateStatus?.((status) => {
     updateStatus.value = {
@@ -180,6 +197,7 @@ onBeforeUnmount(() => {
     <div :class="showGlobalAppBar ? 'app-with-bar pt-[56px] md:pt-[72px]' : ''">
       <RouterView />
     </div>
+    <VirtualKeyboardPanel />
 
     <Transition name="fade">
       <div
@@ -225,7 +243,7 @@ onBeforeUnmount(() => {
             :disabled="updateBusy"
             @click="handleUpdate"
           >
-            지금 업데이트
+            {{ updateButtonLabel }}
           </button>
         </section>
       </div>

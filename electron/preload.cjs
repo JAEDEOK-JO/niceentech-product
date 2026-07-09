@@ -57,9 +57,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.send('auth-user-id', userId || null)
   },
 
-  /** 업데이트 체크 수동 트리거 (Supabase setting.version 변경 감지 시 호출) */
+  /** 업데이트 체크/다운로드 후, 준비되면 설치 (버튼 클릭 시에만 호출) */
   checkForUpdate: () => {
     ipcRenderer.send('check-for-update')
+  },
+
+  /** 다운로드된 업데이트 설치 (버튼 클릭 시에만 호출) */
+  installUpdate: () => {
+    ipcRenderer.send('install-update')
   },
 
   /**

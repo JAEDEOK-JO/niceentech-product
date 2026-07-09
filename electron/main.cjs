@@ -106,15 +106,15 @@ function createWindow() {
   mainWindow = window
 
   window.once('ready-to-show', () => window.show())
+  window.on('close', (event) => {
+    if (app.isQuitting || isKiosk || !tray) return
+    event.preventDefault()
+    window.hide()
+    window.setSkipTaskbar(true)
+  })
   window.on('closed', () => {
-    destroyTray()
     appWindows = appWindows.filter((item) => item !== window)
     mainWindow = getOpenWindows()[getOpenWindows().length - 1] || null
-    if (getOpenWindows().length === 0) {
-      destroyTray()
-      app.isQuitting = true
-      app.quit()
-    }
   })
   window.on('focus', () => {
     mainWindow = window
@@ -164,6 +164,9 @@ function showWindow(targetWindow = getPrimaryWindow()) {
 function quitApp() {
   app.isQuitting = true
   destroyTray()
+  for (const window of getOpenWindows()) {
+    if (!window.isDestroyed()) window.destroy()
+  }
   app.quit()
 }
 
@@ -373,12 +376,45 @@ ipcMain.on('auth-user-id', (_, userId) => {
   }
 })
 
+let updateDownloaded = false
+let installRequested = false
+
+function installDownloadedUpdate() {
+  if (isDev || !updateDownloaded) return false
+  app.isQuitting = true
+  autoUpdater.quitAndInstall(true, true)
+  return true
+}
+
 ipcMain.on('check-for-update', () => {
   if (isDev) return
+  installRequested = true
+  if (updateDownloaded) {
+    sendUpdateStatus({ phase: 'installing', message: '업데이트를 설치합니다.', percent: 100 })
+    installDownloadedUpdate()
+    return
+  }
   sendUpdateStatus({ phase: 'checking', message: '업데이트를 확인하고 있습니다.', percent: 0 })
   autoUpdater.checkForUpdates().catch((err) => {
+    installRequested = false
     sendUpdateStatus({ phase: 'error', message: err?.message || '업데이트 확인에 실패했습니다.', percent: 0 })
     console.warn('[AutoUpdater] manual check failed:', err?.message || err)
+  })
+})
+
+ipcMain.on('install-update', () => {
+  if (isDev) return
+  installRequested = true
+  if (updateDownloaded) {
+    sendUpdateStatus({ phase: 'installing', message: '업데이트를 설치합니다.', percent: 100 })
+    installDownloadedUpdate()
+    return
+  }
+  sendUpdateStatus({ phase: 'checking', message: '업데이트를 확인하고 있습니다.', percent: 0 })
+  autoUpdater.checkForUpdates().catch((err) => {
+    installRequested = false
+    sendUpdateStatus({ phase: 'error', message: err?.message || '업데이트 확인에 실패했습니다.', percent: 0 })
+    console.warn('[AutoUpdater] install check failed:', err?.message || err)
   })
 })
 
@@ -408,7 +444,7 @@ function setupAutoUpdater() {
   if (isDev) return
 
   autoUpdater.autoDownload = true
-  autoUpdater.autoInstallOnAppQuit = true
+  autoUpdater.autoInstallOnAppQuit = false
 
   autoUpdater.on('checking-for-update', () => {
     sendUpdateStatus({ phase: 'checking', message: '업데이트를 확인하고 있습니다.', percent: 0 })
@@ -422,6 +458,7 @@ function setupAutoUpdater() {
     })
   })
   autoUpdater.on('update-not-available', () => {
+    installRequested = false
     sendUpdateStatus({ phase: 'not-available', message: '현재 최신 버전입니다.', percent: 0 })
   })
   autoUpdater.on('download-progress', (progress) => {
@@ -439,6 +476,7 @@ function setupAutoUpdater() {
     })
   })
   autoUpdater.on('error', (err) => {
+    installRequested = false
     if (process.platform === 'win32') {
       for (const window of getOpenWindows()) window.setProgressBar(-1)
     }
@@ -446,24 +484,28 @@ function setupAutoUpdater() {
     console.error('[AutoUpdater]', err?.message || err)
   })
   autoUpdater.on('update-downloaded', (info) => {
+    updateDownloaded = true
     if (process.platform === 'win32') {
       for (const window of getOpenWindows()) window.setProgressBar(-1)
     }
+
+    if (installRequested) {
+      sendUpdateStatus({
+        phase: 'installing',
+        message: `${info?.version || ''} 버전 설치를 시작합니다.`,
+        percent: 100,
+        version: info?.version || '',
+      })
+      installDownloadedUpdate()
+      return
+    }
+
     sendUpdateStatus({
-      phase: 'installing',
-      message: `${info?.version || ''} 버전 다운로드가 완료되었습니다. 자동으로 설치합니다.`,
+      phase: 'ready',
+      message: `${info?.version || ''} 버전 다운로드가 완료되었습니다. 지금 업데이트를 눌러 설치하세요.`,
       percent: 100,
       version: info?.version || '',
     })
-    setTimeout(() => {
-      app.isQuitting = true
-      autoUpdater.quitAndInstall(true, true)
-    }, 1500)
-  })
-
-  autoUpdater.checkForUpdates().catch((err) => {
-    sendUpdateStatus({ phase: 'error', message: err?.message || '업데이트 확인에 실패했습니다.', percent: 0 })
-    console.warn('[AutoUpdater] check failed:', err?.message || err)
   })
 }
 
@@ -493,9 +535,11 @@ if (gotSingleInstanceLock) {
 }
 
 app.on('window-all-closed', () => {
-  destroyTray()
-  app.isQuitting = true
-  app.quit()
+  if (app.isQuitting || isKiosk || !tray) {
+    destroyTray()
+    app.isQuitting = true
+    app.quit()
+  }
 })
 app.on('before-quit', () => {
   app.isQuitting = true

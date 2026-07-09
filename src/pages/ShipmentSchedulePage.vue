@@ -5,6 +5,7 @@ import PrintSettingsDialog from '@/features/printing/PrintSettingsDialog.vue'
 import { printCurrentPage } from '@/features/printing/pagePrint'
 import { useAuth } from '@/composables/useAuth'
 import { supabase } from '@/lib/supabase'
+import { vVirtualKeyboard } from '@/features/virtual-keyboard/directives/vVirtualKeyboard'
 
 const SHIPMENT_SCHEDULE_TABLE = 'shipment_schedule'
 const COMPANY_LIST_TABLE = 'company_list'
@@ -690,6 +691,7 @@ onMounted(async () => {
             </div>
             <input
               v-model="listSearchText"
+              v-virtual-keyboard
               type="text"
               class="h-10 w-full min-w-[240px] rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-700 md:w-[280px]"
               placeholder="담당자, 회사명, 현장명, 구역 검색"
@@ -762,6 +764,7 @@ onMounted(async () => {
           <div class="flex flex-wrap items-center gap-2">
             <input
               v-model="pendingSearchText"
+              v-virtual-keyboard
               type="text"
               class="h-10 w-full min-w-[240px] rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-700 md:w-[320px]"
               placeholder="회사명, 현장명, 구역, 도번, 담당자 검색"
