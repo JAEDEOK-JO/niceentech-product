@@ -7,7 +7,6 @@ export const LEAVE_TYPES = [
   '반차(오후)',
   LEAVE_TYPE_OUTING,
   LEAVE_TYPE_ABSENCE,
-  '기타',
 ] as const
 
 export type LeaveType = (typeof LEAVE_TYPES)[number]
@@ -45,7 +44,7 @@ export function formatLeaveDaysCountLabel(leaveType: string, daysCount: number):
 
 export function getLeaveDurationHint(leaveType: string): string {
   if (isHalfDayLeaveType(leaveType)) return '반차: 0.5일 (4시간) 고정'
-  if (leaveType === LEAVE_TYPE_OUTING) return '외출: 0.25일 (2시간) 고정'
+  if (leaveType === LEAVE_TYPE_OUTING) return '외출: 2시간 고정'
   if (leaveType === LEAVE_TYPE_ABSENCE) return '결근: 1일 단위'
   return ''
 }

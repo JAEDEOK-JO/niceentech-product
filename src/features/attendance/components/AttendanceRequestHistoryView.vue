@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { AttendanceRequest } from '../types/attendance'
 import { getFinalApproverDisplayName, isDeptHeadApproved } from '../utils/attendanceApprover'
+import { formatLeaveDaysCountLabel } from '../utils/attendanceLeaveType'
 
 defineProps<{
   userName: string
@@ -86,7 +87,7 @@ const formatPeriod = (item: AttendanceRequest) =>
               <span class="rounded-full px-2 py-0.5 text-[11px] font-bold" :class="leaveTypeBadge(item.leaveType)">
                 {{ item.leaveType }}
               </span>
-              <span class="text-xs font-bold text-slate-700">{{ item.daysCount }}일</span>
+              <span class="text-xs font-bold text-slate-700">{{ formatLeaveDaysCountLabel(item.leaveType, item.daysCount) }}</span>
               <span class="text-xs text-slate-400">{{ formatPeriod(item) }}</span>
             </div>
             <span class="rounded-full px-2 py-0.5 text-[11px] font-bold" :class="statusBadge(item.status)">

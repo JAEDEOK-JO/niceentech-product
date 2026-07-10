@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import type { AttendanceRequest } from '../types/attendance'
 import { getFinalApproverDisplayName } from '../utils/attendanceApprover'
+import { formatLeaveDaysCountLabel } from '../utils/attendanceLeaveType'
 
 const props = defineProps<{
   items: AttendanceRequest[]
@@ -92,7 +93,7 @@ const formatDate = (dateStr: string) => {
 
           <!-- 일수 -->
           <td class="whitespace-nowrap px-4 py-3 text-center font-bold text-slate-800">
-            {{ item.daysCount }}일
+            {{ formatLeaveDaysCountLabel(item.leaveType, item.daysCount) }}
           </td>
 
           <!-- 사유 -->

@@ -450,7 +450,7 @@ async function fetchRows() {
     return
   }
 
-  const columns = 'id,work_type,head,hole,worker_t,worker_t_time,worker_main,worker_main_time,marking_weld_a_started_on,main_started_on'
+  const columns = 'id,company,place,area,work_type,head,hole,worker_t,worker_t_time,worker_main,worker_main_time,marking_weld_a_started_on,main_started_on'
   const { data, error: queryError } = await supabase
     .from(PRODUCT_LIST_TABLE)
     .select(columns)
@@ -517,11 +517,54 @@ const dailyMainRows = computed(() =>
   })),
 )
 
+function getLineQty(row, lineType) {
+  return Math.max(0, Math.floor(toNumber(lineType === 'branch_head' ? row?.head : row?.hole)))
+}
+
+function getLineStartDate(row, lineType) {
+  return lineType === 'branch_head' ? getBranchHeadStartDate(row) : getMainHoleStartDate(row)
+}
+
+function isStageInProgress(row, lineType) {
+  if (isStageCompletedByStatus(row, lineType)) return false
+  if (getLineQty(row, lineType) <= 0) return false
+  return Boolean(getLineStartDate(row, lineType))
+}
+
+function buildInProgressRows(lineType) {
+  const today = startOfDay(new Date())
+  return rows.value
+    .filter((row) => isStageInProgress(row, lineType))
+    .map((row) => {
+      const startedDate = getLineStartDate(row, lineType)
+      const elapsedDays =
+        today.getTime() >= startedDate.getTime() ? getInclusiveDayCount(startedDate, today) : 1
+      return {
+        id: row.id,
+        siteLabel: [row.company, row.place, row.area]
+          .map((value) => String(value ?? '').trim())
+          .filter(Boolean)
+          .join(' '),
+        qty: getLineQty(row, lineType),
+        startedLabel: formatDayLabel(startedDate),
+        elapsedDays,
+      }
+    })
+    .sort((left, right) => right.elapsedDays - left.elapsedDays)
+}
+
+const inProgressByLine = computed(() => ({
+  branch_head: buildInProgressRows('branch_head'),
+  main_hole: buildInProgressRows('main_hole'),
+}))
+
 const lineCards = computed(() => {
   const branchTotalQty = sumHead(rows.value)
   const branchCompletedQty = sumHead(rows.value.filter((row) => isStageCompletedForStats(row, 'branch_head')))
   const mainTotalQty = sumHole(rows.value)
   const mainCompletedQty = sumHole(rows.value.filter((row) => isStageCompletedForStats(row, 'main_hole')))
+  const branchInProgress = inProgressByLine.value.branch_head
+  const mainInProgress = inProgressByLine.value.main_hole
 
   return [
     {
@@ -532,6 +575,8 @@ const lineCards = computed(() => {
       completedQty: branchCompletedQty,
       remainingQty: Math.max(0, branchTotalQty - branchCompletedQty),
       unitText: `${setting.value.weldingHeadTimeSec}초/개`,
+      inProgressRows: branchInProgress,
+      inProgressQty: branchInProgress.reduce((sum, row) => sum + row.qty, 0),
     },
     {
       key: 'main_hole',
@@ -541,6 +586,8 @@ const lineCards = computed(() => {
       completedQty: mainCompletedQty,
       remainingQty: Math.max(0, mainTotalQty - mainCompletedQty),
       unitText: `${setting.value.holeTimeSec}초/개`,
+      inProgressRows: mainInProgress,
+      inProgressQty: mainInProgress.reduce((sum, row) => sum + row.qty, 0),
     },
   ]
 })
@@ -881,6 +928,28 @@ watch(
               <p class='text-xs font-semibold text-slate-500'>검수분 남은</p>
               <p class='mt-1 text-2xl font-extrabold text-slate-900'>{{ card.remainingQty.toLocaleString('ko-KR') }}</p>
             </div>
+          </div>
+
+          <div class='mt-3 rounded-2xl bg-slate-50 p-4'>
+            <div class='flex items-center justify-between gap-3'>
+              <p class='text-xs font-semibold text-slate-500'>진행중</p>
+              <span class='rounded-full px-2.5 py-0.5 text-xs font-bold' :class='badgeClass(card.accent)'>
+                {{ card.inProgressRows.length }}건 · {{ card.inProgressQty.toLocaleString('ko-KR') }}개
+              </span>
+            </div>
+            <ul v-if='card.inProgressRows.length > 0' class='mt-3 space-y-2'>
+              <li
+                v-for='item in card.inProgressRows'
+                :key='item.id'
+                class='flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white px-3 py-2'
+              >
+                <span class='min-w-0 truncate text-sm font-semibold text-slate-800'>{{ item.siteLabel || '-' }}</span>
+                <span class='shrink-0 text-xs font-semibold text-slate-500'>
+                  {{ item.qty.toLocaleString('ko-KR') }}개 · {{ item.startedLabel }} 시작
+                  <span :class='item.elapsedDays >= 3 ? "font-bold text-red-600" : ""'>{{ item.elapsedDays }}일째</span>
+                </span>
+              </li>
+            </ul>
           </div>
         </article>
       </section>

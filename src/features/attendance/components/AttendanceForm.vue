@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { LEAVE_REASONS, LEAVE_TYPES, type AttendanceFormState, type LeaveType, type Employee } from '../types/attendance'
 import {
   deductsAnnualLeave,
+  formatLeaveDaysCountLabel,
   getFixedLeaveDaysCount,
   getLeaveDurationHint,
   isSingleDayLeaveType,
@@ -80,6 +81,10 @@ const isSingleDay = computed(() => isSingleDayLeaveType(form.value.leaveType))
 
 const durationHint = computed(() => getLeaveDurationHint(form.value.leaveType))
 
+const daysCountLabel = computed(() =>
+  formatLeaveDaysCountLabel(form.value.leaveType, form.value.daysCount),
+)
+
 function calcDays(start: string, end: string): number {
   if (!start || !end) return 1
   const s = new Date(start)
@@ -139,7 +144,7 @@ function onEndDateChange(date: string) {
       <div class="mt-3 grid grid-cols-2 gap-2 border-t border-emerald-200 pt-3 text-center text-xs">
         <div>
           <p class="font-bold text-emerald-600">신청 일수</p>
-          <p class="mt-0.5 text-base font-extrabold text-slate-800">{{ form.daysCount }}일</p>
+          <p class="mt-0.5 text-base font-extrabold text-slate-800">{{ daysCountLabel }}</p>
         </div>
         <div>
           <p class="font-bold text-emerald-600">신청 후 잔여</p>
@@ -243,7 +248,7 @@ function onEndDateChange(date: string) {
       <label class="mb-1.5 block text-sm font-bold text-slate-700">신청 일수</label>
       <div class="flex items-center gap-2">
         <span class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-bold text-slate-800">
-          {{ form.daysCount }}일
+          {{ daysCountLabel }}
         </span>
         <span v-if="durationHint" class="text-xs text-slate-400">{{ durationHint }}</span>
       </div>

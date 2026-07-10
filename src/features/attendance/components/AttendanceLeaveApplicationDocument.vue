@@ -103,9 +103,17 @@ const reasonText = computed(() =>
   }),
 )
 
-const today = new Date().toLocaleDateString('ko-KR', {
-  year: 'numeric', month: 'long', day: 'numeric',
-})
+const formatApplicationDate = (value: string) => {
+  const raw = String(value ?? '').trim()
+  if (!raw) return '-'
+  const date = new Date(raw)
+  if (Number.isNaN(date.getTime())) return raw.slice(0, 10)
+  return date.toLocaleDateString('ko-KR', {
+    year: 'numeric', month: 'long', day: 'numeric',
+  })
+}
+
+const applicationDate = computed(() => formatApplicationDate(props.item.createdAt))
 
 const statusClass = computed(() => {
   if (props.item.status === ATTENDANCE_WORKFLOW_STATUS.APPROVED) return 'text-emerald-600 border-emerald-400'
@@ -223,7 +231,7 @@ const statusLabel = computed(() => {
 
     <div class="signature-footer">
       <p class="footer-note">위와 같이 휴가를 신청합니다.</p>
-      <p class="footer-date">{{ today }}</p>
+      <p class="footer-date">{{ applicationDate }}</p>
       <div class="signature-box-wrap">
         <span class="signature-label">신청인</span>
         <div class="signature-box">

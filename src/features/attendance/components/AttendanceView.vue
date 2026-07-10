@@ -23,7 +23,7 @@ import DailyWorkHoursPanel from './DailyWorkHoursPanel.vue'
 import type { DailyWorkHour } from '../types/attendance'
 import { isDeptHeadPending, isFinalApprovalPending, isGyeongyuPending } from '../utils/attendanceApprover'
 import { formatWorkflowPendingDetail } from '../utils/attendanceDateTime'
-import { isHalfDayLeaveType, LEAVE_TYPE_ABSENCE, LEAVE_TYPE_OUTING } from '../utils/attendanceLeaveType'
+import { formatLeaveDaysCountLabel, isHalfDayLeaveType, LEAVE_TYPE_ABSENCE, LEAVE_TYPE_OUTING } from '../utils/attendanceLeaveType'
 
 const props = defineProps<{
   items: AttendanceRequest[]
@@ -395,7 +395,7 @@ watch(
                 <span class="font-bold text-slate-900">{{ item.userName }}</span>
                 <span class="text-xs text-slate-400">({{ item.department || '-' }})</span>
                 <span class="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-700">{{ item.leaveType }}</span>
-                <span class="text-xs font-bold text-slate-700">{{ item.daysCount }}일</span>
+                <span class="text-xs font-bold text-slate-700">{{ formatLeaveDaysCountLabel(item.leaveType, item.daysCount) }}</span>
                 <span class="text-xs text-slate-400">{{ item.startDate.slice(0,10) }}</span>
               </div>
               <div class="flex items-center gap-1.5">
@@ -431,7 +431,7 @@ watch(
                 <span class="font-bold text-slate-900">{{ item.userName }}</span>
                 <span class="text-xs text-slate-400">({{ item.department || '-' }})</span>
                 <span class="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-bold text-blue-700">{{ item.leaveType }}</span>
-                <span class="text-xs font-bold text-slate-700">{{ item.daysCount }}일</span>
+                <span class="text-xs font-bold text-slate-700">{{ formatLeaveDaysCountLabel(item.leaveType, item.daysCount) }}</span>
               </div>
               <button type="button"
                 class="rounded-lg bg-blue-600 px-3 py-1 text-xs font-bold text-white hover:bg-blue-500"
@@ -461,7 +461,7 @@ watch(
                 <span class="font-bold text-slate-900">{{ item.userName }}</span>
                 <span class="text-xs text-slate-400">({{ item.department || '-' }})</span>
                 <span class="rounded-full bg-purple-100 px-2 py-0.5 text-[11px] font-bold text-purple-700">{{ item.leaveType }}</span>
-                <span class="text-xs font-bold text-slate-700">{{ item.daysCount }}일</span>
+                <span class="text-xs font-bold text-slate-700">{{ formatLeaveDaysCountLabel(item.leaveType, item.daysCount) }}</span>
               </div>
               <div class="flex items-center gap-1.5">
                 <button type="button"
@@ -606,7 +606,7 @@ watch(
                       <span class="rounded-full px-2 py-0.5 text-[11px] font-bold" :class="leaveTypeBadge(item.leaveType)">
                         {{ item.leaveType }}
                       </span>
-                      <span class="text-xs font-bold text-slate-700">{{ item.daysCount }}일</span>
+                      <span class="text-xs font-bold text-slate-700">{{ formatLeaveDaysCountLabel(item.leaveType, item.daysCount) }}</span>
                     </div>
                     <div class="flex items-center gap-2" @click.stop>
                       <span class="rounded-full px-2 py-0.5 text-[11px] font-bold" :class="statusBadge(item.status)">
@@ -696,7 +696,7 @@ watch(
         <div class="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
           <h2 class="mb-1 text-lg font-extrabold text-slate-900">반려 사유</h2>
           <p v-if="rejectTarget" class="mb-4 text-sm text-slate-500">
-            {{ rejectTarget.userName }} · {{ rejectTarget.leaveType }} · {{ rejectTarget.daysCount }}일
+            {{ rejectTarget.userName }} · {{ rejectTarget.leaveType }} · {{ formatLeaveDaysCountLabel(rejectTarget.leaveType, rejectTarget.daysCount) }}
           </p>
           <textarea
             :value="rejectReason"

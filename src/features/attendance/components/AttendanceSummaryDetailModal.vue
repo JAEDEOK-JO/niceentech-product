@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { AttendanceRequest } from '../types/attendance'
+import { formatLeaveDaysCountLabel } from '../utils/attendanceLeaveType'
 
 const props = defineProps<{
   visible: boolean
@@ -58,7 +59,7 @@ const leaveTypeBadge = (type: string) => {
                   {{ item.leaveType }}
                 </span>
                 <span class="text-sm font-bold text-slate-900">{{ formatPeriod(item) }}</span>
-                <span class="text-sm text-slate-500">{{ item.daysCount }}일</span>
+                <span class="text-sm text-slate-500">{{ formatLeaveDaysCountLabel(item.leaveType, item.daysCount) }}</span>
               </div>
               <span class="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-700">{{ item.status }}</span>
             </div>
