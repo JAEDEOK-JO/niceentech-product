@@ -7,8 +7,10 @@ import AttendanceEmployeeMappingPanel from '@/features/attendance/components/Att
 import EmployeeAccountRegisterPanel from '@/features/settings/components/EmployeeAccountRegisterPanel.vue'
 import EmployeeOptionSettingsPanel from '@/features/settings/components/EmployeeOptionSettingsPanel.vue'
 import InventoryMaterialSettingsPanel from '@/features/settings/components/InventoryMaterialSettingsPanel.vue'
+import PushRecipientSettingsPanel from '@/features/settings/components/PushRecipientSettingsPanel.vue'
 import { clearCacheAndReload } from '@/features/settings/services/cacheRefresh.service'
 import { useVirtualKeyboardSetting } from '@/features/virtual-keyboard/composables/useVirtualKeyboardSetting'
+import { isAdminRole } from '@/utils/adminAccess'
 import packageJson from '../../package.json'
 
 const appVersion = packageJson.version
@@ -24,6 +26,7 @@ const {
 const showVirtualKeyboardSetting = isWebHost()
 
 const isRootAdmin = computed(() => profile.value?.role === 'admin')
+const isAdmin = computed(() => isAdminRole(profile.value?.role))
 const activePanel = ref('app-info')
 
 const employees = ref([])
@@ -42,6 +45,13 @@ watch(
       return
     }
     if (activePanel.value === 'employee-register' || activePanel.value === 'employee-options' || activePanel.value === 'inventory-materials') activePanel.value = 'app-info'
+  },
+  { immediate: true },
+)
+watch(
+  isAdmin,
+  (v) => {
+    if (!v && activePanel.value === 'push-recipients') activePanel.value = 'app-info'
   },
   { immediate: true },
 )
@@ -121,6 +131,15 @@ const handleVirtualKeyboardToggle = async (event) => {
             @click="activePanel = 'inventory-materials'"
           >
             자재 품목
+          </button>
+          <button
+            v-if="isAdmin"
+            type="button"
+            class="rounded-xl px-4 py-3 text-left text-sm font-extrabold transition-colors"
+            :class="activePanel === 'push-recipients' ? 'bg-slate-900 text-white' : 'bg-slate-50 text-slate-700 hover:bg-slate-100'"
+            @click="activePanel = 'push-recipients'"
+          >
+            알림 수신
           </button>
         </nav>
       </aside>
@@ -203,6 +222,10 @@ const handleVirtualKeyboardToggle = async (event) => {
 
         <InventoryMaterialSettingsPanel
           v-else-if="isRootAdmin && activePanel === 'inventory-materials'"
+        />
+
+        <PushRecipientSettingsPanel
+          v-else-if="isAdmin && activePanel === 'push-recipients'"
         />
       </section>
     </div>

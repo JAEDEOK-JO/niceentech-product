@@ -13,63 +13,113 @@ import type { AttendanceRequestNotification } from '../types/attendanceNotificat
 type SessionRef = Ref<{ user?: { id?: string } } | null>
 type ProfileRef = Ref<{ role?: string } | null>
 
-export function useAttendanceNotifications(session: SessionRef, profile: ProfileRef) {
-  const notifications = ref<AttendanceRequestNotification[]>([])
-  const unreadCount = ref(0)
-  const loading = ref(false)
-  let channel: ReturnType<typeof subscribeAttendanceNotifications> | null = null
+/** 모듈 싱글톤 — AppBar / AttendancePage가 동일 unreadCount를 공유 */
+const notifications = ref<AttendanceRequestNotification[]>([])
+const unreadCount = ref(0)
+const loading = ref(false)
 
-  const isAdmin = () => isAdminRole(profile.value?.role)
-  const currentUserId = () => session.value?.user?.id ?? ''
+let channel: ReturnType<typeof subscribeAttendanceNotifications> | null = null
+let trackedUserId = ''
+let trackedIsAdmin = false
+let subscriberCount = 0
+let refreshPromise: Promise<void> | null = null
 
-  const refresh = async () => {
-    const userId = currentUserId()
-    if (!userId || !isAdmin()) {
-      notifications.value = []
-      unreadCount.value = 0
-      return
-    }
+const clearState = () => {
+  notifications.value = []
+  unreadCount.value = 0
+  loading.value = false
+}
 
-    loading.value = true
+const refresh = async () => {
+  if (!trackedUserId || !trackedIsAdmin) {
+    clearState()
+    return
+  }
+
+  if (refreshPromise) return refreshPromise
+
+  loading.value = true
+  const requestUserId = trackedUserId
+  refreshPromise = (async () => {
     try {
       const [items, count] = await Promise.all([
-        fetchAttendanceNotifications(userId),
-        fetchUnreadAttendanceNotificationCount(userId),
+        fetchAttendanceNotifications(requestUserId),
+        fetchUnreadAttendanceNotificationCount(requestUserId),
       ])
+      if (trackedUserId !== requestUserId) return
       notifications.value = items
       unreadCount.value = count
     } catch {
+      if (trackedUserId !== requestUserId) return
       notifications.value = []
       unreadCount.value = 0
     } finally {
       loading.value = false
+      refreshPromise = null
     }
+  })()
+
+  return refreshPromise
+}
+
+const stopTracking = () => {
+  if (channel) {
+    unsubscribeAttendanceNotifications(channel)
+    channel = null
+  }
+  trackedUserId = ''
+  trackedIsAdmin = false
+  clearState()
+}
+
+const startTracking = async (userId: string, role: string) => {
+  const normalizedUserId = String(userId ?? '').trim()
+  const isAdmin = isAdminRole(role)
+
+  if (!normalizedUserId || !isAdmin) {
+    stopTracking()
+    return
   }
 
-  const stop = () => {
-    if (channel) {
-      unsubscribeAttendanceNotifications(channel)
-      channel = null
-    }
-  }
+  trackedIsAdmin = true
 
-  const start = async () => {
-    stop()
-    const userId = currentUserId()
-    if (!userId || !isAdmin()) {
-      notifications.value = []
-      unreadCount.value = 0
-      return
-    }
-
+  if (trackedUserId === normalizedUserId && channel) {
     await refresh()
-    channel = subscribeAttendanceNotifications(userId, () => {
-      void refresh()
-    })
+    return
   }
+
+  if (channel) {
+    unsubscribeAttendanceNotifications(channel)
+    channel = null
+  }
+
+  trackedUserId = normalizedUserId
+  await refresh()
+  channel = subscribeAttendanceNotifications(normalizedUserId, () => {
+    void refresh()
+  })
+}
+
+export function useAttendanceNotifications(session: SessionRef, profile: ProfileRef) {
+  subscriberCount += 1
+
+  watch(
+    () => [session.value?.user?.id ?? '', profile.value?.role ?? ''] as const,
+    ([userId, role]) => {
+      void startTracking(userId, role)
+    },
+    { immediate: true },
+  )
+
+  onUnmounted(() => {
+    subscriberCount = Math.max(0, subscriberCount - 1)
+    if (subscriberCount === 0) {
+      stopTracking()
+    }
+  })
 
   const markAsRead = async (notificationId: number) => {
-    const userId = currentUserId()
+    const userId = trackedUserId || session.value?.user?.id || ''
     if (!userId || !notificationId) return
 
     await markAttendanceNotificationRead(notificationId, userId)
@@ -82,7 +132,7 @@ export function useAttendanceNotifications(session: SessionRef, profile: Profile
   }
 
   const markAllAsRead = async () => {
-    const userId = currentUserId()
+    const userId = trackedUserId || session.value?.user?.id || ''
     if (!userId) return
 
     await markAllAttendanceNotificationsRead(userId)
@@ -94,16 +144,6 @@ export function useAttendanceNotifications(session: SessionRef, profile: Profile
     }))
     unreadCount.value = 0
   }
-
-  watch(
-    () => [currentUserId(), profile.value?.role ?? ''] as const,
-    () => {
-      void start()
-    },
-    { immediate: true },
-  )
-
-  onUnmounted(stop)
 
   return {
     notifications,
