@@ -1,9 +1,8 @@
 import { ref } from 'vue'
 import { useProductionHalfYearData } from './useProductionHalfYearData'
-import { buildSummaryCards, buildReview, buildOutlook } from './productionHalfYearAnalysis'
+import { buildSummaryCards } from './productionHalfYearAnalysis'
 import { buildHalfYearReportHtml } from './halfYearReportHtml'
 
-// 반기 결산 데이터를 모아 독립형 HTML로 만들어 브라우저(크롬)로 연다
 export const useHalfYearReportExport = () => {
   const isExporting = ref(false)
   const exportError = ref('')
@@ -21,29 +20,8 @@ export const useHalfYearReportExport = () => {
       const html = buildHalfYearReportHtml({
         periodLabel: data.periodLabel.value,
         summary: data.summary.value,
-        summaryCards: buildSummaryCards({
-          summary: data.summary.value,
-          shipmentSummary: data.shipmentSummary.value,
-          drawingSummary: data.drawingSummary.value,
-        }),
-        review: buildReview({
-          summary: data.summary.value,
-          monthlyProduction: data.monthlyProduction.value,
-          shipmentSummary: data.shipmentSummary.value,
-          drawingSummary: data.drawingSummary.value,
-          periodLabel: data.periodLabel.value,
-        }),
-        outlook: buildOutlook({
-          summary: data.summary.value,
-          shipmentSummary: data.shipmentSummary.value,
-          year: data.year.value,
-          half: data.half.value,
-        }),
-        monthlyProduction: data.monthlyProduction.value,
-        workTypeBreakdown: data.workTypeBreakdown.value,
-        processMetrics: data.processMetrics.value,
-        shipmentSummary: data.shipmentSummary.value,
-        drawingSummary: data.drawingSummary.value,
+        summaryCards: buildSummaryCards({ summary: data.summary.value }),
+        monthlyRows: data.monthlyRows.value,
       })
 
       const filename = `production-half-year-${data.year.value}-H${data.half.value}.html`

@@ -68,12 +68,17 @@ const mobileDayRefs = new Map<string, HTMLElement>()
 const employeeById = computed(() => new Map(props.employees.map((employee) => [employee.id, employee] as const)))
 const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'] as const
 
-function getDepartmentTotal(department: string, workDate: string) {
+function getDepartmentTotal(department: string, _workDate: string) {
   return props.employees.filter(
-    (employee) =>
-      normalizeDailyWorkDepartment(employee.assignedDepartment) === department &&
-      !getDailyWorkAbsence(employee, workDate, props.requests),
+    (employee) => normalizeDailyWorkDepartment(employee.assignedDepartment) === department,
   ).length
+}
+
+function getDepartmentLeaveCount(department: string, workDate: string) {
+  return props.employees.filter((employee) => {
+    if (normalizeDailyWorkDepartment(employee.assignedDepartment) !== department) return false
+    return Boolean(getDailyWorkAbsence(employee, workDate, props.requests))
+  }).length
 }
 
 const rows = computed<WorkHourRow[]>(() => {
@@ -144,7 +149,10 @@ function badgeClass(department: string) {
 
 function badgeText(group: BadgeGroup) {
   const time = labelOfTime(group.endTime)
-  if (group.total > 0 && group.count === group.total) return `${group.department} ${time}`
+  const hasLeave = getDepartmentLeaveCount(group.department, group.workDate) > 0
+  if (!hasLeave && group.total > 0 && group.count === group.total) {
+    return `${group.department} ${time}`
+  }
   return `${group.department} ${group.count}명 ${time}`
 }
 

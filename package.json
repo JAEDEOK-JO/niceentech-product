@@ -3,7 +3,7 @@
   "description": "NICEENTECH 생산관리 시스템",
   "author": "NICEENTECH",
   "private": true,
-  "version": "1.3.39",
+  "version": "1.3.40",
   "type": "module",
   "main": "electron/main.cjs",
   "repository": {
