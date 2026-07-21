@@ -1,20 +1,22 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { RouterView, useRoute, useRouter } from 'vue-router'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { RouterView, useRoute } from 'vue-router'
 import GlobalAppBar from '@/components/layout/GlobalAppBar.vue'
-import DesktopInstallGate from '@/components/desktop/DesktopInstallGate.vue'
 import AppDialog from '@/components/ui/AppDialog.vue'
 import VirtualKeyboardPanel from '@/features/virtual-keyboard/components/VirtualKeyboardPanel.vue'
 import { bootstrapVirtualKeyboardSetting } from '@/features/virtual-keyboard/composables/useVirtualKeyboardSetting'
 import { supabase } from '@/lib/supabase'
-import { isDesktopBrowser } from '@/utils/device'
 import { useCncOnlyPwa } from '@/composables/useCncOnlyPwa'
 import { useAuth } from '@/composables/useAuth'
 import { useFcmPush } from '@/features/push/composables/useFcmPush'
+import {
+  clearWebForceUpdateMarker,
+  forceWebAppUpdateIfNeeded,
+  setupServiceWorkerAutoReload,
+} from '@/utils/webAppForceUpdate'
 import packageJson from '../package.json'
 
 const route = useRoute()
-const router = useRouter()
 const { session } = useAuth()
 useFcmPush(session)
 useCncOnlyPwa()
@@ -34,6 +36,7 @@ const updateStatus = ref({
 let settingsChannel = null
 let authSubscription = null
 let removeUpdateStatusListener = null
+let stopServiceWorkerAutoReload = null
 
 const normalizeVersion = (value) => {
   const raw = String(value ?? '').trim()
@@ -53,8 +56,6 @@ const compareVersion = (left, right) => {
 }
 
 const isElectron = typeof window !== 'undefined' && Boolean(window.electronAPI?.isElectron)
-
-const desktopInstallGateVisible = ref(isDesktopBrowser())
 
 const hasNewVersion = computed(() => {
   if (!isElectron) return false
@@ -87,6 +88,22 @@ const fetchSetting = async () => {
   remoteVersion.value = normalizeVersion(data?.version)
   updateMessage.value = String(data?.update_message ?? '').trim()
 }
+
+const applyWebForceUpdate = async () => {
+  if (isElectron) return
+  if (!remoteVersion.value) return
+
+  if (compareVersion(remoteVersion.value, currentVersion) === 0) {
+    clearWebForceUpdateMarker()
+    return
+  }
+
+  await forceWebAppUpdateIfNeeded(remoteVersion.value, currentVersion)
+}
+
+watch(remoteVersion, () => {
+  void applyWebForceUpdate()
+})
 
 const stopSettingRealtime = () => {
   settingsChannel?.unsubscribe()
@@ -139,11 +156,6 @@ const formatBytes = (value) => {
   return `${(bytes / (1024 ** idx)).toFixed(idx === 0 ? 0 : 1)} ${units[idx]}`
 }
 
-const handleDesktopGateUnlocked = () => {
-  desktopInstallGateVisible.value = false
-  router.push({ name: 'main' })
-}
-
 // 뒤로가기/닫기 시도 차단
 const blockClose = (e) => {
   if (!hasNewVersion.value) return
@@ -152,7 +164,9 @@ const blockClose = (e) => {
 }
 
 onMounted(async () => {
+  stopServiceWorkerAutoReload = setupServiceWorkerAutoReload()
   await fetchSetting()
+  await applyWebForceUpdate()
   setupSettingRealtime()
   bootstrapVirtualKeyboardSetting()
   window.addEventListener('beforeunload', blockClose)
@@ -183,6 +197,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   stopSettingRealtime()
+  stopServiceWorkerAutoReload?.()
   window.removeEventListener('beforeunload', blockClose)
   removeUpdateStatusListener?.()
   authSubscription?.unsubscribe()
@@ -192,7 +207,6 @@ onBeforeUnmount(() => {
 <template>
   <div class="min-h-screen bg-white">
     <AppDialog />
-    <DesktopInstallGate v-if="desktopInstallGateVisible" @unlocked="handleDesktopGateUnlocked" />
     <GlobalAppBar v-if="showGlobalAppBar" />
     <div :class="showGlobalAppBar ? 'app-with-bar pt-[56px] md:pt-[72px]' : ''">
       <RouterView />

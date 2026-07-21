@@ -1,6 +1,10 @@
 import { cleanupOutdatedCaches, precacheAndRoute } from 'workbox-precaching'
+import { clientsClaim } from 'workbox-core'
 import { initializeApp } from 'firebase/app'
 import { getMessaging, onBackgroundMessage } from 'firebase/messaging/sw'
+
+self.skipWaiting()
+clientsClaim()
 
 precacheAndRoute(self.__WB_MANIFEST)
 cleanupOutdatedCaches()

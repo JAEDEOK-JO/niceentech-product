@@ -11,7 +11,10 @@ import {
   isFinalApprovalPending,
   isGyeongyuPending,
 } from '../utils/attendanceApprover'
-import { formatLeaveDaysCountLabel } from '../utils/attendanceLeaveType'
+import {
+  formatLeaveDaysCountLabel,
+  getLeaveApplicationDocumentTitle,
+} from '../utils/attendanceLeaveType'
 
 const GYEONGYU_DISPLAY_NAME = '이지형'
 const BUSEOJANG_PROFILE_NAME = 'duko777@niceentech.kr'
@@ -95,11 +98,15 @@ const period = computed(() => {
   return s === e ? s : `${s} ~ ${e}`
 })
 
+const documentTitle = computed(() => getLeaveApplicationDocumentTitle(props.item.leaveType))
+
 const reasonText = computed(() =>
   formatAttendanceReasonText({
     leaveType: props.item.leaveType,
     daysCount: props.item.daysCount,
     reason: props.item.reason,
+    startDate: props.item.startDate,
+    endDate: props.item.endDate,
   }),
 )
 
@@ -135,7 +142,7 @@ const statusLabel = computed(() => {
 <template>
   <div class="attendance-leave-document" :class="{ 'attendance-leave-document--print': printMode }">
     <div class="doc-body">
-      <h1 class="doc-title">휴&nbsp;가&nbsp;신&nbsp;청&nbsp;서</h1>
+      <h1 class="doc-title">{{ documentTitle }}</h1>
 
       <div class="approval-tables">
       <table class="gyeongyu-table">
@@ -203,7 +210,7 @@ const statusLabel = computed(() => {
           <th>휴가종류</th>
           <td>{{ item.leaveType }}</td>
           <th>신청일수</th>
-          <td class="bold">{{ formatLeaveDaysCountLabel(item.leaveType, item.daysCount) }}</td>
+          <td class="bold">{{ formatLeaveDaysCountLabel(item.leaveType, item.daysCount, item.reason) }}</td>
         </tr>
         <tr>
           <th>휴가기간</th>

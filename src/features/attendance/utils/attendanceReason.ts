@@ -1,4 +1,7 @@
-import { formatLeaveDaysCountLabel } from './attendanceLeaveType'
+import {
+  formatLeaveDaysCountLabel,
+  isHomeLeaveType,
+} from './attendanceLeaveType'
 
 const formatDaysLabel = (daysCount: number, leaveType?: string) => {
   if (leaveType) {
@@ -20,15 +23,41 @@ const buildReasonBody = (reason: string) => {
   return normalized ? `${normalized}(으)로 인하여` : '개인 사유로'
 }
 
+/** 2026-01-01 → 26년 1월 1일 */
+export function formatLeavePeriodKoreanDate(value: string): string {
+  const matched = String(value ?? '').trim().match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (!matched) return ''
+  const [, year, month, day] = matched
+  return `${year.slice(2)}년 ${Number(month)}월 ${Number(day)}일`
+}
+
+const formatHomeLeaveReasonText = (startDate: string, endDate: string) => {
+  const start = formatLeavePeriodKoreanDate(startDate)
+  const end = formatLeavePeriodKoreanDate(endDate || startDate)
+  if (!start) return '본국 귀국 휴가 요청을 드립니다.'
+  if (!end || start === end) {
+    return `${start} 본국 귀국 휴가 요청을 드립니다.`
+  }
+  return `${start} 부터 ${end} 까지 본국 귀국 휴가 요청을 드립니다.`
+}
+
 export const formatAttendanceReasonText = ({
   leaveType,
   daysCount,
   reason,
+  startDate,
+  endDate,
 }: {
   leaveType: string
   daysCount: number
   reason: string
+  startDate?: string
+  endDate?: string
 }) => {
+  if (isHomeLeaveType(leaveType)) {
+    return formatHomeLeaveReasonText(startDate ?? '', endDate ?? '')
+  }
+
   const daysLabel = formatDaysLabel(daysCount, leaveType)
   const reasonBody = buildReasonBody(reason)
   const leaveLabel = String(leaveType ?? '').trim() || '휴가'

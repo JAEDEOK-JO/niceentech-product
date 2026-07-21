@@ -2,6 +2,7 @@ import { createApp, h, nextTick } from 'vue'
 import AttendanceLeaveApplicationDocument from '../components/AttendanceLeaveApplicationDocument.vue'
 import documentCss from '../components/attendanceLeaveDocument.css?raw'
 import type { AttendanceRequest, Employee } from '../types/attendance'
+import { getLeaveApplicationDocumentTitle } from './attendanceLeaveType'
 
 type PrintResult = {
   success?: boolean
@@ -183,7 +184,8 @@ export async function printAttendanceLeaveApplication(
   if (typeof window === 'undefined') return
 
   const content = await renderLeaveApplicationContent(item, employees)
-  const html = buildPrintHtml([content], `휴가신청서_${item.userName}`)
+  const docTitle = getLeaveApplicationDocumentTitle(item.leaveType)
+  const html = buildPrintHtml([content], `${docTitle}_${item.userName}`)
   await invokeElectronPrint(html)
 }
 

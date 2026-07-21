@@ -15,6 +15,7 @@ import {
   type LeaveType,
 } from '../types/attendance'
 import { normalizeEmployeePassword } from '../utils/employeePassword'
+import { normalizeEvidenceUrls, removeAttendanceEvidenceUrls } from '../utils/attendanceEvidence'
 // 연차 차감 일수 계산 (연차/병가만 일수 차감)
 const DEDUCTED_LEAVE_TYPES: string[] = ['연차', '반차(오전)', '반차(오후)', '병가']
 const normalizeAttendanceApproverName = (value: string) => String(value ?? '').replace(/\(t\)/gi, '').trim()
@@ -85,6 +86,23 @@ export async function fetchEmployeeAttendanceRequests(
   return (data ?? []).map((row) => mapAttendanceRequest(row as Record<string, unknown>))
 }
 
+export async function fetchEmployeeHomeLeaveRequests(
+  userName: string,
+  department: string,
+): Promise<AttendanceRequest[]> {
+  const { data, error } = await supabase
+    .from('attendance_requests')
+    .select('*')
+    .eq('user_name', userName)
+    .eq('department', department)
+    .eq('leave_type', '귀국휴가')
+    .neq('status', '반려')
+    .order('start_date', { ascending: false })
+
+  if (error) throw error
+  return (data ?? []).map((row) => mapAttendanceRequest(row as Record<string, unknown>))
+}
+
 export async function fetchAttendanceRequestById(id: number): Promise<AttendanceRequest | null> {
   const { data, error } = await supabase
     .from('attendance_requests')
@@ -133,6 +151,7 @@ export async function createAttendanceRequest(
       days_count: form.daysCount,
       reason: form.reason,
       status: '대기중',
+      evidence_urls: form.evidenceUrls ?? [],
       ...(signatureUrl ? { signature_url: signatureUrl } : {}),
     })
     .select()
@@ -155,6 +174,7 @@ export async function updateAttendanceRequest(
       end_date: form.endDate,
       days_count: form.daysCount,
       reason: form.reason,
+      evidence_urls: form.evidenceUrls ?? [],
     })
     .eq('id', id)
     .eq('status', '대기중')
@@ -162,21 +182,45 @@ export async function updateAttendanceRequest(
   if (error) throw error
 }
 
+// ─── 삭제할 신청의 증빙 이미지 스토리지 정리 ──────────────────────────────────
+async function fetchEvidenceUrlsById(id: number): Promise<string[]> {
+  const { data } = await supabase
+    .from('attendance_requests')
+    .select('evidence_urls')
+    .eq('id', id)
+    .maybeSingle()
+  return normalizeEvidenceUrls(data?.evidence_urls)
+}
+
+async function cleanupEvidenceStorage(urls: string[]): Promise<void> {
+  try {
+    await removeAttendanceEvidenceUrls(urls)
+  } catch (err) {
+    // 스토리지 정리 실패는 신청 삭제 결과에 영향을 주지 않는다
+    console.error('[cleanupEvidenceStorage]', err)
+  }
+}
+
 // ─── 신청 취소/삭제 (본인, 대기중 상태만) ─────────────────────────────────────
 export async function deleteAttendanceRequest(id: number): Promise<void> {
-  const { error } = await supabase
+  const evidenceUrls = await fetchEvidenceUrlsById(id)
+  const { data, error } = await supabase
     .from('attendance_requests')
     .delete()
     .eq('id', id)
     .eq('status', '대기중')
+    .select('id')
 
   if (error) throw error
+  if ((data?.length ?? 0) > 0) await cleanupEvidenceStorage(evidenceUrls)
 }
 
 // ─── 신청 삭제 (관리자, 상태 무관) ────────────────────────────────────────────
 export async function adminDeleteAttendanceRequest(id: number): Promise<void> {
+  const evidenceUrls = await fetchEvidenceUrlsById(id)
   const { error } = await supabase.from('attendance_requests').delete().eq('id', id)
   if (error) throw error
+  await cleanupEvidenceStorage(evidenceUrls)
 }
 
 // ─── 신청 수정 (관리자, 상태 무관) ────────────────────────────────────────────
@@ -192,6 +236,7 @@ export async function adminUpdateAttendanceRequest(
       end_date: form.endDate,
       days_count: form.daysCount,
       reason: form.reason,
+      evidence_urls: form.evidenceUrls ?? [],
       user_name: form.selectedEmployeeName,
       department: form.selectedDepartment,
     })
@@ -287,6 +332,7 @@ export async function rejectAttendanceRequest(
   id: number,
   approverName: string,
   rejectReason: string,
+  evidenceUrls?: string[],
 ): Promise<void> {
   const { error } = await supabase
     .from('attendance_requests')
@@ -295,6 +341,7 @@ export async function rejectAttendanceRequest(
       approved_by: normalizeAttendanceApproverName(approverName),
       approved_at: new Date().toISOString(),
       reject_reason: rejectReason,
+      ...(evidenceUrls ? { evidence_urls: evidenceUrls } : {}),
     })
     .eq('id', id)
 

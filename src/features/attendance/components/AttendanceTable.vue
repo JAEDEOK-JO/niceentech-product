@@ -27,6 +27,7 @@ const leaveTypeClass = (type: string) => {
   if (type.startsWith('반차')) return 'bg-blue-100 text-blue-700'
   if (type === '병가') return 'bg-purple-100 text-purple-700'
   if (type === '연차') return 'bg-slate-100 text-slate-700'
+  if (type === '귀국휴가') return 'bg-indigo-100 text-indigo-700'
   return 'bg-slate-100 text-slate-600'
 }
 

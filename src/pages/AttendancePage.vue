@@ -41,6 +41,7 @@ import {
   fetchDailyWorkHoursRange,
   upsertDailyWorkHoursBulk,
   deleteDailyWorkHour,
+  fetchEmployeeHomeLeaveRequests,
   type EmployeeFormData,
   type SignatureInfo,
 } from '@/features/attendance/services/attendance.service'
@@ -48,14 +49,15 @@ import { useAttendanceNotifications } from '@/features/attendance/composables/us
 import {
   createEmptyForm,
   type AttendanceRequest,
-  type AttendanceFilters,
   type AttendanceFormState,
+  type AttendanceFilters,
   type AttendanceAnnualQuota,
-  type AttendanceDashboardStats,
   type AttendanceMonthlySummary,
-  type DailyWorkHour,
+  type AttendanceDashboardStats,
   type Employee,
+  type DailyWorkHour,
 } from '@/features/attendance/types/attendance'
+import { validateHomeLeaveForm } from '@/features/attendance/utils/homeLeavePolicy'
 import AttendanceView from '@/features/attendance/components/AttendanceView.vue'
 import { printAttendanceLeaveApplication, printAllApprovedAttendanceLeaveApplications } from '@/features/attendance/utils/attendanceLeavePrint'
 import { isDeptHeadPending, isFinalApprovalPending, isGyeongyuPending } from '@/features/attendance/utils/attendanceApprover'
@@ -64,6 +66,7 @@ import {
   canDeptHeadApprove,
   canFinalApprove,
   canGyeongyuApprove,
+  canManageAttendancePending,
   TEMP_FINAL_APPROVER_NAME,
   TEMP_GYEONGYU_APPROVER_NAME,
 } from '@/features/attendance/utils/attendanceApprovalAccess'
@@ -93,6 +96,7 @@ watch(
 )
 const { confirm, alert } = useDialog()
 const isRootAdminUser = computed(() => isRootAdmin(profile.value?.role))
+const canManagePending = computed(() => canManageAttendancePending(currentUserName.value))
 const router = useRouter()
 
 // ─── 필터 ──────────────────────────────────────────────────────────────────────
@@ -317,6 +321,7 @@ function closeDetail() {
 const rejectDialogVisible = ref(false)
 const rejectTarget = ref<AttendanceRequest | null>(null)
 const rejectReason = ref('')
+const rejectEvidenceUrls = ref<string[]>([])
 
 // ─── 토스트 ────────────────────────────────────────────────────────────────────
 const toast = reactive({ show: false, message: '', type: 'success' as 'success' | 'error' })
@@ -504,6 +509,7 @@ function openEditForm(item: AttendanceRequest) {
     endDate: item.endDate,
     daysCount: item.daysCount,
     reason: item.reason,
+    evidenceUrls: [...(item.evidenceUrls ?? [])],
   }
   isEditForm.value = true
   editTargetId.value = item.id
@@ -515,6 +521,37 @@ async function submitForm() {
   if (!formData.value.selectedEmployeeName) {
     showToast('직원을 선택해주세요.', 'error')
     return
+  }
+
+  if (formData.value.leaveType === '귀국휴가') {
+    const employee =
+      employees.value.find(
+        (e) =>
+          e.name === formData.value.selectedEmployeeName &&
+          e.department === formData.value.selectedDepartment,
+      ) ?? null
+    try {
+      const homeLeaveRequests = await fetchEmployeeHomeLeaveRequests(
+        formData.value.selectedEmployeeName,
+        formData.value.selectedDepartment,
+      )
+      const homeLeaveError = validateHomeLeaveForm({
+        leaveType: formData.value.leaveType,
+        reason: formData.value.reason,
+        startDate: formData.value.startDate,
+        endDate: formData.value.endDate,
+        employee,
+        requests: homeLeaveRequests,
+        excludeRequestId: editTargetId.value,
+      })
+      if (homeLeaveError) {
+        showToast(homeLeaveError, 'error')
+        return
+      }
+    } catch {
+      showToast('귀국휴가 조건을 확인하지 못했습니다.', 'error')
+      return
+    }
   }
 
   // 수정은 서명 없이 바로 처리
@@ -595,6 +632,7 @@ function handleAdminEdit(item: AttendanceRequest) {
     endDate: item.endDate,
     daysCount: item.daysCount,
     reason: item.reason,
+    evidenceUrls: [...(item.evidenceUrls ?? [])],
   }
   isEditForm.value = true
   editTargetId.value = item.id
@@ -701,6 +739,7 @@ async function handleApprove(item: AttendanceRequest) {
 function openRejectDialog(item: AttendanceRequest) {
   rejectTarget.value = item
   rejectReason.value = ''
+  rejectEvidenceUrls.value = [...(item.evidenceUrls ?? [])]
   rejectDialogVisible.value = true
 }
 
@@ -708,6 +747,7 @@ function closeRejectDialog() {
   rejectDialogVisible.value = false
   rejectTarget.value = null
   rejectReason.value = ''
+  rejectEvidenceUrls.value = []
 }
 
 async function submitReject() {
@@ -717,7 +757,12 @@ async function submitReject() {
     return
   }
   try {
-    await rejectAttendanceRequest(rejectTarget.value.id, currentUserName.value, rejectReason.value.trim())
+    await rejectAttendanceRequest(
+      rejectTarget.value.id,
+      currentUserName.value,
+      rejectReason.value.trim(),
+      rejectEvidenceUrls.value,
+    )
     markLocalAttendanceMutation()
     showToast('반려 처리되었습니다.')
     closeRejectDialog()
@@ -779,6 +824,7 @@ async function handleDeleteEmployee(id: number) {
     :current-user-id="currentUserId"
     :is-admin="isAdmin"
     :is-root-admin="isRootAdminUser"
+    :can-manage-pending="canManagePending"
     :approval-pending-count="approvalPendingCount"
     :daepyo-pending-count="daepyoPendingCount"
     :gyeongyu-pending-count="gyeongyuPendingCount"
@@ -788,15 +834,18 @@ async function handleDeleteEmployee(id: number) {
     :form-data="formData"
     :is-edit-form="isEditForm"
     :hide-form-employee-selector="hideFormEmployeeSelector"
+    :edit-request-id="editTargetId"
     :toast="toast"
     :reject-dialog-visible="rejectDialogVisible"
     :reject-target="rejectTarget"
     :reject-reason="rejectReason"
+    :reject-evidence-urls="rejectEvidenceUrls"
     @update:filters="Object.assign(filters, $event)"
     @update:summary-year="summaryYear = $event"
     @update:summary-month="summaryMonth = $event"
     @update:form-data="formData = $event"
     @update:reject-reason="rejectReason = $event"
+    @update:reject-evidence-urls="rejectEvidenceUrls = $event"
     @open-summary-detail="openSummaryDetail"
     @close-summary-detail="closeSummaryDetail"
     @open-summary-request-detail="openSummaryRequestDetail"

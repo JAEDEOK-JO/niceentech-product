@@ -20,10 +20,12 @@ import AttendanceRequestSignatureDialog from './AttendanceRequestSignatureDialog
 import AttendancePasswordKeypad from './AttendancePasswordKeypad.vue'
 import DailyWorkHoursInputDialog from './DailyWorkHoursInputDialog.vue'
 import DailyWorkHoursPanel from './DailyWorkHoursPanel.vue'
+import AttendanceEvidencePicker from './AttendanceEvidencePicker.vue'
+import AttendanceEvidenceGalleryDialog from './AttendanceEvidenceGalleryDialog.vue'
+import AttendanceRequestTable from './AttendanceRequestTable.vue'
 import type { DailyWorkHour } from '../types/attendance'
 import { isDeptHeadPending, isFinalApprovalPending, isGyeongyuPending } from '../utils/attendanceApprover'
-import { formatWorkflowPendingDetail } from '../utils/attendanceDateTime'
-import { formatLeaveDaysCountLabel, isHalfDayLeaveType, LEAVE_TYPE_ABSENCE, LEAVE_TYPE_OUTING } from '../utils/attendanceLeaveType'
+import { formatLeaveDaysCountLabel, isHalfDayLeaveType, LEAVE_TYPE_ABSENCE, LEAVE_TYPE_HOME, LEAVE_TYPE_OUTING } from '../utils/attendanceLeaveType'
 
 const props = defineProps<{
   items: AttendanceRequest[]
@@ -44,6 +46,7 @@ const props = defineProps<{
   currentUserId: string
   isAdmin: boolean
   isRootAdmin: boolean
+  canManagePending: boolean
   approvalPendingCount: number
   daepyoPendingCount: number
   gyeongyuPendingCount: number
@@ -53,10 +56,12 @@ const props = defineProps<{
   formData: AttendanceFormState
   isEditForm: boolean
   hideFormEmployeeSelector: boolean
+  editRequestId?: number | null
   toast: { show: boolean; message: string; type: 'success' | 'error' }
   rejectDialogVisible: boolean
   rejectTarget: AttendanceRequest | null
   rejectReason: string
+  rejectEvidenceUrls: string[]
   signatureRequestVisible: boolean
   detailItem: AttendanceRequest | null
   detailSignatures: import('../services/attendance.service').SignatureInfo[]
@@ -73,6 +78,7 @@ const emit = defineEmits<{
   (e: 'update:summaryMonth', value: number): void
   (e: 'update:formData', value: AttendanceFormState): void
   (e: 'update:rejectReason', value: string): void
+  (e: 'update:rejectEvidenceUrls', value: string[]): void
   (e: 'openSummaryDetail', summary: import('../types/attendance').AttendanceMonthlySummary): void
   (e: 'closeSummaryDetail'): void
   (e: 'openSummaryRequestDetail', item: AttendanceRequest): void
@@ -108,7 +114,19 @@ const emit = defineEmits<{
   (e: 'viewHistory', payload: { name: string; department: string }): void
 }>()
 
-// ─── 비밀번호 키패드 상태 ─────────────────────────────────────────────────────
+const evidenceGalleryVisible = ref(false)
+const evidenceGalleryUrls = ref<string[]>([])
+const evidenceGalleryIndex = ref(0)
+
+function openEvidenceGallery(urls: string[], index = 0) {
+  evidenceGalleryUrls.value = urls ?? []
+  evidenceGalleryIndex.value = index
+  evidenceGalleryVisible.value = true
+}
+
+function closeEvidenceGallery() {
+  evidenceGalleryVisible.value = false
+}
 const keypadEmployee = ref<Employee | null>(null)
 
 function openKeypad(emp: Employee) {
@@ -164,14 +182,6 @@ const directoryEmployees = computed(() =>
 )
 
 
-const statusBorder = (status: string) => {
-  if (status === '승인') return 'border-l-emerald-500'
-  if (status === '반려') return 'border-l-red-400'
-  if (status === '최종대기' || status === '부서장승인') return 'border-l-purple-400'
-  if (status === '경유대기') return 'border-l-blue-400'
-  return 'border-l-amber-400'
-}
-
 const statusBadge = (status: string) => {
   if (status === '승인') return 'bg-emerald-100 text-emerald-700'
   if (status === '반려') return 'bg-red-100 text-red-600'
@@ -184,17 +194,11 @@ const leaveTypeBadge = (type: string) => {
   if (isHalfDayLeaveType(type)) return 'bg-blue-100 text-blue-700'
   if (type === LEAVE_TYPE_OUTING) return 'bg-cyan-100 text-cyan-700'
   if (type === LEAVE_TYPE_ABSENCE) return 'bg-rose-100 text-rose-700'
+  if (type === LEAVE_TYPE_HOME) return 'bg-indigo-100 text-indigo-700'
   if (type === '병가') return 'bg-purple-100 text-purple-700'
   if (type === '연차') return 'bg-slate-100 text-slate-700'
   return 'bg-slate-100 text-slate-500'
 }
-
-const formatDate = (d: string) => (d ? d.slice(0, 10) : '-')
-
-const formatPeriod = (item: AttendanceRequest) =>
-  item.startDate === item.endDate
-    ? formatDate(item.startDate)
-    : `${formatDate(item.startDate)} ~ ${formatDate(item.endDate)}`
 
 const thisMonthLabel = computed(() => {
   const now = new Date()
@@ -380,103 +384,61 @@ watch(
 
       <!-- ═══ 부서장 대기 탭 ═══ -->
       <template v-if="isAdmin && activeTab === 'approval'">
-        <div class="space-y-2">
-          <div v-if="deptHeadPendingItems.length === 0"
-            class="rounded-xl border border-dashed border-slate-200 bg-white py-14 text-center text-sm text-slate-400">
-            승인 대기 중인 신청이 없습니다.
-          </div>
-          <div
-            v-for="item in deptHeadPendingItems"
-            :key="item.id"
-            class="cursor-pointer rounded-xl border border-l-4 border-amber-300 bg-white px-4 py-3 transition-shadow hover:shadow-sm"
-          >
-            <div class="flex flex-wrap items-start justify-between gap-2">
-              <div class="flex flex-wrap items-center gap-2" @click="emit('openDetail', item)">
-                <span class="font-bold text-slate-900">{{ item.userName }}</span>
-                <span class="text-xs text-slate-400">({{ item.department || '-' }})</span>
-                <span class="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-700">{{ item.leaveType }}</span>
-                <span class="text-xs font-bold text-slate-700">{{ formatLeaveDaysCountLabel(item.leaveType, item.daysCount) }}</span>
-                <span class="text-xs text-slate-400">{{ item.startDate.slice(0,10) }}</span>
-              </div>
-              <div class="flex items-center gap-1.5">
-                <button type="button"
-                  class="rounded-lg bg-emerald-600 px-3 py-1 text-xs font-bold text-white hover:bg-emerald-500"
-                  @click="emit('approve', item)">승인</button>
-                <button type="button"
-                  class="rounded-lg bg-red-500 px-3 py-1 text-xs font-bold text-white hover:bg-red-400"
-                  @click="emit('openReject', item)">반려</button>
-              </div>
-            </div>
-            <p class="mt-1 text-xs font-medium text-slate-700" @click="emit('openDetail', item)">
-              {{ formatWorkflowPendingDetail(item.reason, item.createdAt, '신청시간') }}
-            </p>
-          </div>
+        <div v-if="deptHeadPendingItems.length === 0"
+          class="rounded-xl border border-dashed border-slate-200 bg-white py-14 text-center text-sm text-slate-400">
+          승인 대기 중인 신청이 없습니다.
         </div>
+        <AttendanceRequestTable
+          v-else
+          :items="deptHeadPendingItems"
+          mode="approval"
+          :leave-badge-class="leaveTypeBadge"
+          @open-detail="emit('openDetail', $event)"
+          @open-evidence="openEvidenceGallery($event.urls, $event.index)"
+          @approve="emit('approve', $event)"
+          @reject="emit('openReject', $event)"
+        />
       </template>
 
       <!-- ═══ 경유 대기 탭 ═══ -->
       <template v-if="isAdmin && activeTab === 'gyeongyu'">
-        <div class="space-y-2">
-          <div v-if="gyeongyuPendingItems.length === 0"
-            class="rounded-xl border border-dashed border-slate-200 bg-white py-14 text-center text-sm text-slate-400">
-            경유 대기 중인 신청이 없습니다.
-          </div>
-          <div
-            v-for="item in gyeongyuPendingItems"
-            :key="item.id"
-            class="cursor-pointer rounded-xl border border-l-4 border-blue-300 bg-white px-4 py-3 transition-shadow hover:shadow-sm"
-          >
-            <div class="flex flex-wrap items-start justify-between gap-2">
-              <div class="flex flex-wrap items-center gap-2" @click="emit('openDetail', item)">
-                <span class="font-bold text-slate-900">{{ item.userName }}</span>
-                <span class="text-xs text-slate-400">({{ item.department || '-' }})</span>
-                <span class="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-bold text-blue-700">{{ item.leaveType }}</span>
-                <span class="text-xs font-bold text-slate-700">{{ formatLeaveDaysCountLabel(item.leaveType, item.daysCount) }}</span>
-              </div>
-              <button type="button"
-                class="rounded-lg bg-blue-600 px-3 py-1 text-xs font-bold text-white hover:bg-blue-500"
-                @click="emit('gyeongyu', item)">경유</button>
-            </div>
-            <p class="mt-1 text-xs font-medium text-slate-700" @click="emit('openDetail', item)">
-              {{ formatWorkflowPendingDetail(item.reason, item.approvedAt, '부서장 승인시간') }}
-            </p>
-          </div>
+        <div v-if="gyeongyuPendingItems.length === 0"
+          class="rounded-xl border border-dashed border-slate-200 bg-white py-14 text-center text-sm text-slate-400">
+          경유 대기 중인 신청이 없습니다.
         </div>
+        <AttendanceRequestTable
+          v-else
+          :items="gyeongyuPendingItems"
+          mode="gyeongyu"
+          :can-manage="canManagePending"
+          :leave-badge-class="leaveTypeBadge"
+          @open-detail="emit('openDetail', $event)"
+          @open-evidence="openEvidenceGallery($event.urls, $event.index)"
+          @gyeongyu="emit('gyeongyu', $event)"
+          @admin-edit="emit('adminEdit', $event)"
+          @admin-delete="emit('adminDelete', $event)"
+        />
       </template>
 
       <!-- ═══ 최종승인 대기 탭 ═══ -->
       <template v-if="isAdmin && activeTab === 'daepyo'">
-        <div class="space-y-2">
-          <div v-if="finalApprovalPendingItems.length === 0"
-            class="rounded-xl border border-dashed border-slate-200 bg-white py-14 text-center text-sm text-slate-400">
-            최종 승인 대기 중인 신청이 없습니다.
-          </div>
-          <div
-            v-for="item in finalApprovalPendingItems"
-            :key="item.id"
-            class="cursor-pointer rounded-xl border border-l-4 border-purple-300 bg-white px-4 py-3 transition-shadow hover:shadow-sm"
-          >
-            <div class="flex flex-wrap items-start justify-between gap-2">
-              <div class="flex flex-wrap items-center gap-2" @click="emit('openDetail', item)">
-                <span class="font-bold text-slate-900">{{ item.userName }}</span>
-                <span class="text-xs text-slate-400">({{ item.department || '-' }})</span>
-                <span class="rounded-full bg-purple-100 px-2 py-0.5 text-[11px] font-bold text-purple-700">{{ item.leaveType }}</span>
-                <span class="text-xs font-bold text-slate-700">{{ formatLeaveDaysCountLabel(item.leaveType, item.daysCount) }}</span>
-              </div>
-              <div class="flex items-center gap-1.5">
-                <button type="button"
-                  class="rounded-lg bg-purple-600 px-3 py-1 text-xs font-bold text-white hover:bg-purple-500"
-                  @click="emit('daepyoApprove', item)">최종 승인</button>
-                <button type="button"
-                  class="rounded-lg bg-red-500 px-3 py-1 text-xs font-bold text-white hover:bg-red-400"
-                  @click="emit('openReject', item)">반려</button>
-              </div>
-            </div>
-            <p class="mt-1 text-xs font-medium text-slate-700" @click="emit('openDetail', item)">
-              {{ formatWorkflowPendingDetail(item.reason, item.gyeongyuAt, '경유 승인시간') }}
-            </p>
-          </div>
+        <div v-if="finalApprovalPendingItems.length === 0"
+          class="rounded-xl border border-dashed border-slate-200 bg-white py-14 text-center text-sm text-slate-400">
+          최종 승인 대기 중인 신청이 없습니다.
         </div>
+        <AttendanceRequestTable
+          v-else
+          :items="finalApprovalPendingItems"
+          mode="daepyo"
+          :can-manage="canManagePending"
+          :leave-badge-class="leaveTypeBadge"
+          @open-detail="emit('openDetail', $event)"
+          @open-evidence="openEvidenceGallery($event.urls, $event.index)"
+          @daepyo-approve="emit('daepyoApprove', $event)"
+          @reject="emit('openReject', $event)"
+          @admin-edit="emit('adminEdit', $event)"
+          @admin-delete="emit('adminDelete', $event)"
+        />
       </template>
 
       <!-- ═══ 일반 사용자 뷰 ═══ -->
@@ -592,48 +554,20 @@ watch(
               <div v-if="items.length === 0" class="rounded-xl border border-dashed border-slate-200 bg-white py-14 text-center text-sm text-slate-400">
                 신청 내역이 없습니다.
               </div>
-              <div v-else class="space-y-2">
-                <div
-                  v-for="item in pagedRequestItems"
-                  :key="item.id"
-                  class="cursor-pointer rounded-xl border border-l-4 border-slate-200 bg-white px-4 py-3 transition-shadow hover:shadow-sm"
-                  :class="statusBorder(item.status)"
-                  @click.self="emit('openDetail', item)"
-                >
-                  <div class="flex flex-wrap items-start justify-between gap-2" @click="emit('openDetail', item)">
-                    <div class="min-w-0 flex flex-wrap items-center gap-2">
-                      <span class="font-bold text-slate-900">{{ item.userName }}</span>
-                      <span class="rounded-full px-2 py-0.5 text-[11px] font-bold" :class="leaveTypeBadge(item.leaveType)">
-                        {{ item.leaveType }}
-                      </span>
-                      <span class="text-xs font-bold text-slate-700">{{ formatLeaveDaysCountLabel(item.leaveType, item.daysCount) }}</span>
-                    </div>
-                    <div class="flex items-center gap-2" @click.stop>
-                      <span class="rounded-full px-2 py-0.5 text-[11px] font-bold" :class="statusBadge(item.status)">
-                        {{ item.status }}
-                      </span>
-                      <template v-if="item.status !== '승인'">
-                        <button type="button" class="rounded border border-slate-200 px-2 py-1 text-xs font-bold text-slate-600 hover:bg-slate-50" @click="emit('adminEdit', item)">수정</button>
-                        <button type="button" class="rounded border border-red-200 px-2 py-1 text-xs font-bold text-red-500 hover:bg-red-50" @click="emit('adminDelete', item)">삭제</button>
-                      </template>
-                      <template v-else-if="item.status === '승인'">
-                        <button type="button" class="rounded border border-slate-200 px-2 py-1 text-xs font-bold text-slate-600 hover:bg-slate-50" @click="emit('print', item)">인쇄</button>
-                        <button
-                          v-if="isRootAdmin"
-                          type="button"
-                          class="rounded border border-red-300 bg-red-50 px-2 py-1 text-xs font-bold text-red-600 hover:bg-red-100"
-                          @click="emit('adminDelete', item)"
-                        >삭제</button>
-                      </template>
-                    </div>
-                  </div>
-                  <div class="mt-1.5 flex flex-wrap items-center gap-3 text-xs text-slate-500" @click="emit('openDetail', item)">
-                    <span>{{ formatPeriod(item) }}</span>
-                    <span v-if="item.status === '반려' && item.rejectReason" class="text-red-500">반려: {{ item.rejectReason }}</span>
-                    <span class="truncate">{{ item.reason || '-' }}</span>
-                  </div>
-                </div>
-                <div class="flex items-center justify-center gap-2 pt-2">
+              <template v-else>
+                <AttendanceRequestTable
+                  :items="pagedRequestItems"
+                  mode="requests"
+                  :is-root-admin="isRootAdmin"
+                  :leave-badge-class="leaveTypeBadge"
+                  :status-badge-class="statusBadge"
+                  @open-detail="emit('openDetail', $event)"
+                  @open-evidence="openEvidenceGallery($event.urls, $event.index)"
+                  @admin-edit="emit('adminEdit', $event)"
+                  @admin-delete="emit('adminDelete', $event)"
+                  @print="emit('print', $event)"
+                />
+                <div class="flex items-center justify-center gap-2 pt-3">
                   <button
                     type="button"
                     class="rounded border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-40"
@@ -652,7 +586,7 @@ watch(
                     다음
                   </button>
                 </div>
-              </div>
+              </template>
             </div>
           </div>
 
@@ -677,6 +611,8 @@ watch(
             :is-edit="isEditForm"
             :employees="employees"
             :hide-employee-selector="hideFormEmployeeSelector"
+            :exclude-request-id="editRequestId"
+            :upload-user-id="currentUserId"
             @update:model-value="emit('update:formData', $event)"
             @submit="emit('submitForm')"
             @cancel="emit('closeForm')"
@@ -705,6 +641,13 @@ watch(
             class="w-full resize-none rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400"
             @input="emit('update:rejectReason', ($event.target as HTMLTextAreaElement).value)"
           />
+          <div class="mt-4">
+            <AttendanceEvidencePicker
+              :model-value="rejectEvidenceUrls"
+              :user-id="currentUserId"
+              @update:model-value="emit('update:rejectEvidenceUrls', $event)"
+            />
+          </div>
           <div class="mt-4 flex justify-end gap-3">
             <button type="button" class="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50" @click="emit('closeReject')">취소</button>
             <button type="button" class="rounded-xl bg-red-500 px-4 py-2 text-sm font-bold text-white hover:bg-red-400" @click="emit('submitReject')">반려 처리</button>
@@ -743,6 +686,14 @@ watch(
         @cancel="emit('signatureCancel')"
       />
     </Teleport>
+
+    <!-- 증빙 사진 갤러리 -->
+    <AttendanceEvidenceGalleryDialog
+      :visible="evidenceGalleryVisible"
+      :urls="evidenceGalleryUrls"
+      :start-index="evidenceGalleryIndex"
+      @close="closeEvidenceGallery"
+    />
 
     <!-- 토스트 -->
     <Teleport to="body">

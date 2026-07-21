@@ -1,4 +1,6 @@
-export const LEAVE_REASONS = ['병원', '출입국방문', '은행업무', '자동차수리'] as const
+export const LEAVE_REASONS = ['병원', '출입국방문', '은행업무', '자동차수리', '귀국휴가', '귀국휴가(결혼식)'] as const
+export const HOME_LEAVE_REASON = '귀국휴가' as const
+export const HOME_LEAVE_REASON_WEDDING = '귀국휴가(결혼식)' as const
 export { LEAVE_TYPES, type LeaveType } from '../utils/attendanceLeaveType'
 export const LEAVE_STATUSES = ['대기중', '경유대기', '최종대기', '부서장승인', '승인', '반려'] as const
 
@@ -19,6 +21,7 @@ export interface AttendanceRequest {
   approvedAt: string | null
   rejectReason: string | null
   signatureUrl: string | null
+  evidenceUrls: string[]
   gyeongyuBy: string | null
   gyeongyuAt: string | null
   daepyoBy: string | null
@@ -55,6 +58,7 @@ export interface AttendanceFormState {
   endDate: string
   daysCount: number
   reason: string
+  evidenceUrls: string[]
 }
 
 const toStr = (v: unknown) => String(v ?? '')
@@ -63,6 +67,10 @@ const toNum = (v: unknown) => {
   return Number.isFinite(n) ? n : 0
 }
 const normalizeApprovedBy = (value: unknown) => toStr(value).replace(/\(t\)/gi, '').trim()
+const toEvidenceUrls = (value: unknown): string[] => {
+  if (!Array.isArray(value)) return []
+  return value.map((item) => String(item ?? '').trim()).filter(Boolean).slice(0, 5)
+}
 
 export function mapAttendanceRequest(raw: Record<string, unknown>): AttendanceRequest {
   return {
@@ -80,6 +88,7 @@ export function mapAttendanceRequest(raw: Record<string, unknown>): AttendanceRe
     approvedAt: raw.approved_at != null ? toStr(raw.approved_at) : null,
     rejectReason: raw.reject_reason != null ? toStr(raw.reject_reason) : null,
     signatureUrl: raw.signature_url != null ? toStr(raw.signature_url) : null,
+    evidenceUrls: toEvidenceUrls(raw.evidence_urls),
     gyeongyuBy: raw.gyeongyu_by != null ? toStr(raw.gyeongyu_by) : null,
     gyeongyuAt: raw.gyeongyu_at != null ? toStr(raw.gyeongyu_at) : null,
     daepyoBy: raw.daepyo_by != null ? toStr(raw.daepyo_by) : null,
@@ -114,6 +123,7 @@ export function createEmptyForm(): AttendanceFormState {
     endDate: today,
     daysCount: 1,
     reason: '병원',
+    evidenceUrls: [],
   }
 }
 

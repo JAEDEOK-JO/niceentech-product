@@ -1,7 +1,10 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import type { AttendanceRequest, Employee } from '../types/attendance'
 import type { SignatureInfo } from '../services/attendance.service'
 import AttendanceLeaveApplicationDocument from './AttendanceLeaveApplicationDocument.vue'
+import AttendanceEvidenceThumb from './AttendanceEvidenceThumb.vue'
+import AttendanceEvidenceGalleryDialog from './AttendanceEvidenceGalleryDialog.vue'
 
 defineProps<{
   item: AttendanceRequest
@@ -12,6 +15,14 @@ defineProps<{
 const emit = defineEmits<{
   (e: 'close'): void
 }>()
+
+const galleryVisible = ref(false)
+const galleryIndex = ref(0)
+
+function openGallery(index = 0) {
+  galleryIndex.value = index
+  galleryVisible.value = true
+}
 </script>
 
 <template>
@@ -34,8 +45,22 @@ const emit = defineEmits<{
       </div>
 
       <div class="p-4 md:p-6">
+        <div v-if="item.evidenceUrls?.length" class="mb-4 flex items-center gap-2">
+          <AttendanceEvidenceThumb
+            :urls="item.evidenceUrls"
+            @open="openGallery"
+          />
+          <span class="text-xs font-bold text-slate-500">증빙 {{ item.evidenceUrls.length }}장</span>
+        </div>
         <AttendanceLeaveApplicationDocument :item="item" :employees="employees" />
       </div>
     </div>
+
+    <AttendanceEvidenceGalleryDialog
+      :visible="galleryVisible"
+      :urls="item.evidenceUrls"
+      :start-index="galleryIndex"
+      @close="galleryVisible = false"
+    />
   </div>
 </template>
