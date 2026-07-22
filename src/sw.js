@@ -2,6 +2,7 @@ import { cleanupOutdatedCaches, precacheAndRoute } from 'workbox-precaching'
 import { clientsClaim } from 'workbox-core'
 import { initializeApp } from 'firebase/app'
 import { getMessaging, onBackgroundMessage } from 'firebase/messaging/sw'
+import { buildPushNotificationOptions } from '@/features/push/utils/pushNotificationOptions'
 
 self.skipWaiting()
 clientsClaim()
@@ -28,11 +29,10 @@ if (hasFirebaseConfig) {
     const body = payload.notification?.body || payload.data?.body || ''
     const url = payload.data?.url || '/attendance'
 
-    self.registration.showNotification(title, {
-      body,
-      icon: '/icon-192.svg',
-      data: { url },
-    })
+    self.registration.showNotification(
+      title,
+      buildPushNotificationOptions({ body, url, tag: 'niceentech-push' }),
+    )
   })
 }
 

@@ -2,6 +2,7 @@ import { ref, watch, type Ref } from 'vue'
 import { getToken, getMessaging, isSupported, onMessage, type Messaging } from 'firebase/messaging'
 import { getFirebaseApp, getFirebaseVapidKey, isFirebaseConfigured } from '@/lib/firebase'
 import { deleteFcmToken, upsertFcmToken } from '../services/fcmToken.service'
+import { buildPushNotificationOptions } from '../utils/pushNotificationOptions'
 import { isElectronApp } from '@/utils/device'
 
 type SessionRef = Ref<{ user?: { id?: string } } | null>
@@ -98,11 +99,9 @@ export function useFcmPush(session: SessionRef) {
     onMessage(messagingInstance, (payload) => {
       const title = String(payload.notification?.title ?? payload.data?.title ?? '알림')
       const body = String(payload.notification?.body ?? payload.data?.body ?? '')
+      const url = String(payload.data?.url ?? '/attendance')
       if (!permissionGranted()) return
-      new Notification(title, {
-        body,
-        icon: '/icon-192.svg',
-      })
+      new Notification(title, buildPushNotificationOptions({ body, url }))
     })
   }
 

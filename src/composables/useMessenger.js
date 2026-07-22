@@ -1,5 +1,9 @@
 import { ref, computed } from 'vue'
 import { supabase } from '@/lib/supabase'
+import {
+  serializeProductionRequest,
+  PRODUCTION_REQUEST_FILE_TYPE,
+} from '@/features/messenger/utils/productionRequestMessage'
 
 export const useMessenger = (session) => {
   const rooms = ref([])
@@ -243,7 +247,7 @@ export const useMessenger = (session) => {
   }
 
   // 텍스트 + 다중 파일 일괄 전송
-  const sendMessages = async ({ roomId, content, files = [] }) => {
+  const sendMessages = async ({ roomId, content, files = [], mentionedUserIds = [] }) => {
     if (!content.trim() && files.length === 0) return { ok: false, reason: 'empty' }
     sending.value = true
 
@@ -254,21 +258,44 @@ export const useMessenger = (session) => {
       .eq('id', userId)
       .maybeSingle()
     const senderName = String(profile?.name ?? '').trim() || '알 수 없음'
+    const mentionIds = [...new Set((mentionedUserIds ?? []).filter(Boolean))]
 
     const insertRows = []
+    const hasText = Boolean(content.trim())
 
-    // 텍스트 메시지 (파일과 별개로)
-    if (content.trim()) {
-      insertRows.push({ room_id: roomId, sender_id: userId, sender_name: senderName, content: content.trim(), file_url: '', file_type: '' })
+    // 텍스트 메시지 (파일과 별개로) — 푸시는 텍스트 행에서만 (파일은 skip)
+    if (hasText) {
+      insertRows.push({
+        room_id: roomId,
+        sender_id: userId,
+        sender_name: senderName,
+        content: content.trim(),
+        file_url: '',
+        file_type: '',
+        mentioned_user_ids: mentionIds,
+        skip_push: false,
+      })
     }
 
     // 파일 업로드 순차 처리
     if (files.length > 0) {
       uploading.value = true
-      for (const file of files) {
+      for (let i = 0; i < files.length; i += 1) {
+        const file = files[i]
         const uploaded = await uploadMediaFile(file, roomId)
         if (!uploaded.ok) { uploading.value = false; sending.value = false; return { ok: false, reason: uploaded.reason } }
-        insertRows.push({ room_id: roomId, sender_id: userId, sender_name: senderName, content: '', file_url: uploaded.url, file_type: uploaded.fileType })
+        // 텍스트가 있으면 파일 푸시 생략, 파일만이면 첫 파일만 푸시
+        const skipPush = hasText || i > 0
+        insertRows.push({
+          room_id: roomId,
+          sender_id: userId,
+          sender_name: senderName,
+          content: '',
+          file_url: uploaded.url,
+          file_type: uploaded.fileType,
+          mentioned_user_ids: [],
+          skip_push: skipPush,
+        })
       }
       uploading.value = false
     }
@@ -277,6 +304,34 @@ export const useMessenger = (session) => {
     sending.value = false
     if (err) return { ok: false, reason: err.message }
 
+    return { ok: true }
+  }
+
+  const sendProductionRequest = async ({ roomId, payload }) => {
+    if (!roomId || !payload) return { ok: false, reason: 'invalid' }
+    sending.value = true
+
+    const userId = session.value?.user?.id
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('name')
+      .eq('id', userId)
+      .maybeSingle()
+    const senderName = String(profile?.name ?? '').trim() || '알 수 없음'
+
+    const { error: err } = await supabase.from('chat_messages').insert({
+      room_id: roomId,
+      sender_id: userId,
+      sender_name: senderName,
+      content: serializeProductionRequest(payload),
+      file_url: String(payload.drawingUrl ?? ''),
+      file_type: PRODUCTION_REQUEST_FILE_TYPE,
+      mentioned_user_ids: [],
+      skip_push: false,
+    })
+
+    sending.value = false
+    if (err) return { ok: false, reason: err.message }
     return { ok: true }
   }
 
@@ -302,6 +357,22 @@ export const useMessenger = (session) => {
         (payload) => {
           const exists = messages.value.some((m) => m.id === payload.new.id)
           if (!exists) messages.value = [...messages.value, payload.new]
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'chat_messages', filter: `room_id=eq.${roomId}` },
+        (payload) => {
+          const updated = payload.new
+          if (!updated?.id) return
+          const idx = messages.value.findIndex((m) => m.id === updated.id)
+          if (idx < 0) {
+            messages.value = [...messages.value, updated]
+            return
+          }
+          const next = [...messages.value]
+          next[idx] = { ...next[idx], ...updated }
+          messages.value = next
         },
       )
       .on(
@@ -399,6 +470,7 @@ export const useMessenger = (session) => {
     deleteRoom,
     sendMessage,
     sendMessages,
+    sendProductionRequest,
     deleteMessage,
     selectRoom,
     subscribeToRooms,

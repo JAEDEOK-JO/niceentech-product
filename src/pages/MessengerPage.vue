@@ -3,6 +3,31 @@ import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useAuth } from '@/composables/useAuth'
 import { useMessenger } from '@/composables/useMessenger'
 import { useMessengerUnread } from '@/composables/useMessengerUnread'
+import { useMentionInput } from '@/features/messenger/composables/useMentionInput'
+import { useRoomReadReceipts } from '@/features/messenger/composables/useRoomReadReceipts'
+import MentionMemberPicker from '@/features/messenger/components/MentionMemberPicker.vue'
+import ChatMentionText from '@/features/messenger/components/ChatMentionText.vue'
+import ChatReadCount from '@/features/messenger/components/ChatReadCount.vue'
+import MessengerDrawingSearchDialog from '@/features/messenger/components/MessengerDrawingSearchDialog.vue'
+import MessengerProductionRequestDialog from '@/features/messenger/components/MessengerProductionRequestDialog.vue'
+import MessengerProductionRequestCard from '@/features/messenger/components/MessengerProductionRequestCard.vue'
+import MessengerProductionConfirmCard from '@/features/messenger/components/MessengerProductionConfirmCard.vue'
+import MessengerProductionRecheckCard from '@/features/messenger/components/MessengerProductionRecheckCard.vue'
+import MessengerRoomViewTabs from '@/features/messenger/components/MessengerRoomViewTabs.vue'
+import MessengerWorkBoardPanel from '@/features/messenger/components/MessengerWorkBoardPanel.vue'
+import {
+  buildProductionRequestPayload,
+  fetchProductDrawingFiles,
+} from '@/features/messenger/services/productDrawingSearch.service'
+import { confirmProductionRequestMessage, processDueScheduledMessages } from '@/features/messenger/services/productionConfirm.service'
+import {
+  isProductionRequestMessage,
+  isProductionConfirmMessage,
+  isProductionRecheckMessage,
+  parseProductionRequest,
+  parseProductionConfirm,
+  parseProductionRecheck,
+} from '@/features/messenger/utils/productionRequestMessage'
 import { supabase } from '@/lib/supabase'
 
 const { session } = useAuth()
@@ -25,6 +50,7 @@ const {
   createRoom,
   deleteRoom,
   sendMessages,
+  sendProductionRequest,
   deleteMessage,
   selectRoom,
   subscribeToRooms,
@@ -39,6 +65,7 @@ const ACCEPTED = 'image/*,video/*,application/pdf,.pdf,.jpg,.jpeg,.png,.gif,.web
 
 const messageListRef = ref(null)
 const fileInputRef = ref(null)
+const textareaRef = ref(null)
 const messageInput = ref('')
 
 // 다중 파일 상태
@@ -63,6 +90,89 @@ const isImageDragging = ref(false)
 const imageDragStart = ref({ x: 0, y: 0 })
 const imageDragOrigin = ref({ x: 0, y: 0 })
 const currentImageViewerUrl = computed(() => imageViewerUrls.value[imageViewerIndex.value] ?? '')
+const drawingSearchOpen = ref(false)
+const productionRequestOpen = ref(false)
+const productionRequestProduct = ref(null)
+const productionRequestSubmitting = ref(false)
+
+const openProductionRequest = (item) => {
+  drawingSearchOpen.value = false
+  productionRequestProduct.value = item
+  productionRequestOpen.value = true
+}
+
+const closeProductionRequest = () => {
+  if (productionRequestSubmitting.value) return
+  productionRequestOpen.value = false
+  productionRequestProduct.value = null
+}
+
+const handleProductionRequestSubmit = async ({ requestType, requestTypeLabel, requestText, recipients }) => {
+  if (!activeRoomId.value || !productionRequestProduct.value) return
+  productionRequestSubmitting.value = true
+
+  let drawings = []
+  let drawingUrl = ''
+  if (productionRequestProduct.value.hasDrawing) {
+    const drawingResult = await fetchProductDrawingFiles(productionRequestProduct.value.id)
+    drawings = drawingResult.files
+    drawingUrl = drawings[0]?.viewUrl ?? ''
+  }
+
+  const payload = buildProductionRequestPayload({
+    product: productionRequestProduct.value,
+    requestType,
+    requestTypeLabel,
+    requestText,
+    recipients,
+    drawingUrl,
+    drawings,
+  })
+
+  const result = await sendProductionRequest({
+    roomId: activeRoomId.value,
+    payload,
+  })
+
+  productionRequestSubmitting.value = false
+  if (!result.ok) {
+    showSnack('전송 실패')
+    return
+  }
+
+  productionRequestOpen.value = false
+  productionRequestProduct.value = null
+  if (roomViewTab.value === 'open') {
+    await workBoardPanelRef.value?.refresh?.()
+  }
+}
+
+const getProductionRequestPayload = (msg) => parseProductionRequest(msg?.content)
+const getProductionConfirmPayload = (msg) => parseProductionConfirm(msg?.content)
+const getProductionRecheckPayload = (msg) => parseProductionRecheck(msg?.content)
+const confirmingMessageId = ref('')
+const roomViewTab = ref('chat') // chat | open | done
+const workBoardPanelRef = ref(null)
+let scheduleTimer = null
+
+const handleWorkConfirm = async ({ messageId, optionId }) => {
+  if (!messageId || confirmingMessageId.value) return
+  confirmingMessageId.value = messageId
+  const result = await confirmProductionRequestMessage({ messageId, optionId })
+  confirmingMessageId.value = ''
+  if (!result.ok) {
+    const reason = String(result.reason ?? '')
+    if (reason.includes('already_confirmed') || reason.includes('already_closed')) {
+      showSnack('이미 확인됨')
+    } else {
+      showSnack('확인 실패')
+    }
+    return
+  }
+  if (roomViewTab.value !== 'chat') {
+    await workBoardPanelRef.value?.refresh?.()
+  }
+}
 // 멤버 관리 패널
 const memberPanelOpen = ref(false)
 const members = ref([])
@@ -70,6 +180,39 @@ const membersLoading = ref(false)
 const allProfiles = ref([])
 const profilesLoading = ref(false)
 const inviting = ref(false)
+
+const {
+  mentionOpen,
+  mentionIndex,
+  filteredMembers,
+  syncMentionFromCaret,
+  selectMention,
+  handleMentionKeydown,
+  closeMention,
+  resetSelectedMentions,
+  getMentionedUserIdsForSend,
+} = useMentionInput({
+  messageInput,
+  members,
+  myUserId: myId,
+  textareaRef,
+})
+
+const { getMessageUnreadCount, applyUserRead, refreshReads } = useRoomReadReceipts({
+  roomId: activeRoomId,
+  members,
+  myUserId: myId,
+})
+
+const loadRoomMembers = async (roomId) => {
+  if (!roomId) {
+    members.value = []
+    return
+  }
+  membersLoading.value = true
+  members.value = await fetchMembers(roomId)
+  membersLoading.value = false
+}
 
 const openMemberPanel = async () => {
   if (!activeRoomId.value) return
@@ -86,8 +229,14 @@ const openMemberPanel = async () => {
   profilesLoading.value = false
 }
 
-watch(activeRoomId, () => {
-  if (memberPanelOpen.value) openMemberPanel()
+watch(activeRoomId, async (roomId) => {
+  closeMention()
+  resetSelectedMentions()
+  messageInput.value = ''
+  roomViewTab.value = 'chat'
+  if (!roomId && isMobileViewport.value) sidebarOpen.value = true
+  await loadRoomMembers(roomId)
+  if (memberPanelOpen.value && roomId) await openMemberPanel()
 })
 
 const isMember = (profileId) => members.value.some((m) => m.user_id === profileId)
@@ -226,7 +375,11 @@ const clearPendingFiles = () => {
 
 const handleSelectRoom = async (room) => {
   await selectRoom(room.id)
-  await markRoomAsRead(room.id)
+  const result = await markRoomAsRead(room.id)
+  if (result?.ok) {
+    applyUserRead(myId.value, result.lastReadAt)
+  }
+  void refreshReads()
   if (isMobileViewport.value) {
     sidebarOpen.value = false
   }
@@ -259,11 +412,14 @@ const handleSend = async () => {
   if (!messageInput.value.trim() && pendingFiles.value.length === 0) return
 
   const content = messageInput.value
+  const mentionedUserIds = getMentionedUserIdsForSend(content)
   const files = pendingFiles.value.map((p) => p.file)
   messageInput.value = ''
   clearPendingFiles()
+  closeMention()
+  resetSelectedMentions()
 
-  const result = await sendMessages({ roomId: activeRoomId.value, content, files })
+  const result = await sendMessages({ roomId: activeRoomId.value, content, files, mentionedUserIds })
   if (!result.ok) {
     showSnack('전송 실패')
     messageInput.value = content
@@ -271,6 +427,7 @@ const handleSend = async () => {
 }
 
 const handleKeydown = (e) => {
+  if (handleMentionKeydown(e)) return
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
 }
 
@@ -385,13 +542,22 @@ const syncMobileViewport = () => {
   if (typeof window === 'undefined') return
   const nextIsMobile = window.matchMedia('(max-width: 767px)').matches
   isMobileViewport.value = nextIsMobile
-  if (!nextIsMobile && !sidebarOpen.value) sidebarOpen.value = true
+  // 데스크톱: Electron처럼 목록 항상 표시 / 모바일: 방 미선택이면 목록 표시
+  if (!nextIsMobile) {
+    sidebarOpen.value = true
+    return
+  }
+  if (!activeRoomId.value) sidebarOpen.value = true
 }
 
 const syncActiveRoomReadState = async () => {
   if (!activeRoomId.value) return
   if (document.visibilityState === 'hidden') return
-  await markRoomAsRead(activeRoomId.value)
+  const result = await markRoomAsRead(activeRoomId.value)
+  if (result?.ok) {
+    applyUserRead(myId.value, result.lastReadAt)
+  }
+  void refreshReads()
 }
 
 const handleVisibilityChange = () => {
@@ -426,10 +592,15 @@ onMounted(() => {
   window.addEventListener('resize', syncMobileViewport)
   window.addEventListener('keydown', handleViewerKeydown)
   document.addEventListener('visibilitychange', handleVisibilityChange)
+  void processDueScheduledMessages()
+  scheduleTimer = setInterval(() => {
+    void processDueScheduledMessages()
+  }, 60000)
 })
 onBeforeUnmount(() => {
   clearPendingFiles()
   unsubscribeAll()
+  if (scheduleTimer) clearInterval(scheduleTimer)
   window.removeEventListener('resize', syncMobileViewport)
   window.removeEventListener('keydown', handleViewerKeydown)
   document.removeEventListener('visibilitychange', handleVisibilityChange)
@@ -439,13 +610,25 @@ onBeforeUnmount(() => {
 <template>
   <section class="relative flex h-[calc(100dvh-56px)] overflow-hidden bg-slate-50 md:h-[calc(100vh-72px)]">
 
-    <!-- 사이드바 -->
+    <!-- 사이드바: 데스크톱 항상 표시, 모바일은 토글 -->
     <aside
-      class="absolute inset-0 z-20 flex shrink-0 flex-col overflow-hidden border-r border-slate-200 bg-white transition-all duration-200 md:relative md:inset-auto md:z-auto"
-      :class="sidebarOpen ? 'w-full md:w-72' : 'w-0'"
+      class="z-20 flex shrink-0 flex-col overflow-hidden border-r border-slate-200 bg-white md:relative md:inset-auto md:w-72"
+      :class="sidebarOpen ? 'absolute inset-0 w-full' : 'hidden md:flex'"
     >
       <div class="flex items-center justify-between border-b border-slate-100 px-4 py-3.5">
-        <h2 class="text-base font-extrabold text-slate-900">채팅방</h2>
+        <div class="flex min-w-0 items-center gap-2">
+          <button
+            v-if="activeRoomId && isMobileViewport"
+            type="button"
+            class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 md:hidden"
+            @click="sidebarOpen = false"
+          >
+            <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M15 18l-6-6 6-6" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
+          <h2 class="text-base font-extrabold text-slate-900">채팅방</h2>
+        </div>
         <button
           type="button"
           class="min-h-10 rounded-xl bg-indigo-600 px-4 text-sm font-extrabold text-white transition hover:bg-indigo-700 active:scale-95"
@@ -502,8 +685,8 @@ onBeforeUnmount(() => {
       <div class="flex min-h-[60px] items-center gap-3 border-b border-slate-200 bg-white px-3 py-2.5 md:px-4 md:py-3.5">
         <button
           type="button"
-          class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50"
-          @click="sidebarOpen = !sidebarOpen"
+          class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 md:hidden"
+          @click="sidebarOpen = true"
         >
           <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M3 12h18M3 6h18M3 18h18" />
@@ -514,6 +697,10 @@ onBeforeUnmount(() => {
           <p v-if="activeRoom.description" class="truncate text-xs text-slate-400">{{ activeRoom.description }}</p>
         </div>
         <p v-else class="flex-1 text-sm text-slate-400">채팅방을 선택해주세요</p>
+        <MessengerRoomViewTabs
+          v-if="activeRoom"
+          v-model="roomViewTab"
+        />
         <!-- 멤버 관리 버튼 -->
         <button
           v-if="activeRoom"
@@ -530,8 +717,18 @@ onBeforeUnmount(() => {
         </button>
       </div>
 
+      <!-- 작업 보드 (카드 목록) -->
+      <MessengerWorkBoardPanel
+        v-if="activeRoomId && roomViewTab !== 'chat'"
+        ref="workBoardPanelRef"
+        :room-id="activeRoomId"
+        :tab="roomViewTab"
+        :confirming-message-id="confirmingMessageId"
+        @confirm="handleWorkConfirm"
+      />
+
       <!-- 메시지 목록 -->
-      <div ref="messageListRef" class="flex-1 overflow-y-auto px-3 py-4 md:px-4">
+      <div v-else ref="messageListRef" class="flex-1 overflow-y-auto px-3 py-4 md:px-4">
         <div v-if="!activeRoomId" class="flex h-full items-center justify-center">
           <div class="text-center text-slate-400">
             <svg viewBox="0 0 24 24" class="mx-auto mb-3 h-12 w-12 opacity-30" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -561,117 +758,269 @@ onBeforeUnmount(() => {
               <!-- 아바타 (상대방) -->
               <div
                 v-if="(item.type === 'message' ? item.msg.sender_id : item.sender_id) !== myId"
-                class="mb-4 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-200 text-xs font-bold text-slate-600"
+                class="mb-4 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold"
+                :class="
+                  String(item.type === 'message' ? item.msg.sender_name : item.sender_name ?? '') === '시스템'
+                    ? 'bg-sky-100 text-sky-700'
+                    : 'bg-slate-200 text-slate-600'
+                "
               >
                 {{ String(item.type === 'message' ? item.msg.sender_name : item.sender_name ?? '?').charAt(0) }}
               </div>
 
               <div
-                class="flex max-w-[84%] flex-col gap-1 md:max-w-[70%]"
+                class="flex max-w-[min(420px,calc(100vw-96px))] flex-col gap-1 md:max-w-[420px]"
                 :class="(item.type === 'message' ? item.msg.sender_id : item.sender_id) === myId ? 'items-end' : 'items-start'"
               >
                 <!-- 이름 (상대방) -->
                 <p
                   v-if="(item.type === 'message' ? item.msg.sender_id : item.sender_id) !== myId"
-                  class="text-[11px] font-semibold text-slate-500"
+                  class="text-[11px] font-semibold"
+                  :class="
+                    String(item.type === 'message' ? item.msg.sender_name : item.sender_name ?? '') === '시스템'
+                      ? 'text-sky-600'
+                      : 'text-slate-500'
+                  "
                 >
                   {{ item.type === 'message' ? item.msg.sender_name : item.sender_name }}
                 </p>
 
                 <div
                   v-if="item.type === 'image-group'"
-                  class="grid max-w-[calc(100vw-96px)] gap-1.5 rounded-2xl md:max-w-[520px]"
-                  :class="item.sender_id === myId ? 'rounded-br-sm' : 'rounded-bl-sm'"
-                  :style="getImageGroupGridStyle(item.messages.length)"
+                  class="flex items-end gap-1"
+                  :class="item.sender_id === myId ? 'flex-row-reverse' : ''"
                 >
-                  <button
-                    v-for="(imageMsg, imageIndex) in item.messages"
-                    :key="imageMsg.id"
-                    type="button"
-                    class="group/image relative overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
-                    :class="item.sender_id === myId && imageIndex === item.messages.length - 1 ? 'rounded-br-sm' : item.sender_id !== myId && imageIndex === item.messages.length - 1 ? 'rounded-bl-sm' : ''"
-                    @click="openImageViewer(imageMsg.file_url, item.messages.map((msg) => msg.file_url))"
+                  <div
+                    class="grid max-w-[calc(100vw-96px)] gap-1.5 rounded-2xl md:max-w-[520px]"
+                    :class="item.sender_id === myId ? 'rounded-br-sm' : 'rounded-bl-sm'"
+                    :style="getImageGroupGridStyle(item.messages.length)"
                   >
-                    <img
-                      :src="imageMsg.file_url"
-                      class="h-[96px] w-[96px] object-cover transition hover:opacity-90 sm:h-[120px] sm:w-[120px]"
-                      :alt="`chat-image-${imageMsg.id}`"
-                    />
                     <button
-                      v-if="item.sender_id === myId"
+                      v-for="(imageMsg, imageIndex) in item.messages"
+                      :key="imageMsg.id"
                       type="button"
-                      class="absolute right-1.5 top-1.5 hidden h-6 w-6 items-center justify-center rounded-full bg-black/65 text-white group-hover/image:flex hover:bg-red-500"
-                      @click.stop="handleDeleteMessage(imageMsg)"
+                      class="group/image relative overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
+                      :class="item.sender_id === myId && imageIndex === item.messages.length - 1 ? 'rounded-br-sm' : item.sender_id !== myId && imageIndex === item.messages.length - 1 ? 'rounded-bl-sm' : ''"
+                      @click="openImageViewer(imageMsg.file_url, item.messages.map((msg) => msg.file_url))"
                     >
-                      <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M18 6L6 18M6 6l12 12" />
-                      </svg>
+                      <img
+                        :src="imageMsg.file_url"
+                        class="h-[96px] w-[96px] object-cover transition hover:opacity-90 sm:h-[120px] sm:w-[120px]"
+                        :alt="`chat-image-${imageMsg.id}`"
+                      />
+                      <button
+                        v-if="item.sender_id === myId"
+                        type="button"
+                        class="absolute right-1.5 top-1.5 hidden h-6 w-6 items-center justify-center rounded-full bg-black/65 text-white group-hover/image:flex hover:bg-red-500"
+                        @click.stop="handleDeleteMessage(imageMsg)"
+                      >
+                        <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2">
+                          <path d="M18 6L6 18M6 6l12 12" />
+                        </svg>
+                      </button>
                     </button>
-                  </button>
+                  </div>
+                  <div
+                    class="flex flex-col gap-0.5"
+                    :class="item.sender_id === myId ? 'items-end' : 'items-start'"
+                  >
+                    <ChatReadCount
+                      :count="getMessageUnreadCount(item.messages[item.messages.length - 1])"
+                    />
+                    <span class="text-[10px] text-slate-400">{{ formatTime(item.messages[item.messages.length - 1]?.created_at) }}</span>
+                  </div>
+                </div>
+
+                <!-- 생산확인 요청 카드 -->
+                <div
+                  v-else-if="item.type === 'message' && isProductionRequestMessage(item.msg)"
+                  class="flex items-end gap-1"
+                  :class="item.msg.sender_id === myId ? 'flex-row-reverse' : ''"
+                >
+                  <MessengerProductionRequestCard
+                    v-if="getProductionRequestPayload(item.msg)"
+                    :payload="getProductionRequestPayload(item.msg)"
+                    :message-id="item.msg.id"
+                    :sender-name="item.msg.sender_name"
+                    :confirming="confirmingMessageId === item.msg.id"
+                    @confirm="handleWorkConfirm"
+                  />
+                  <div
+                    class="flex flex-col gap-0.5"
+                    :class="item.msg.sender_id === myId ? 'items-end' : 'items-start'"
+                  >
+                    <ChatReadCount :count="getMessageUnreadCount(item.msg)" />
+                    <div class="flex items-center gap-1.5">
+                      <span class="text-[10px] text-slate-400">{{ formatTime(item.msg.created_at) }}</span>
+                      <button
+                        v-if="item.msg.sender_id === myId"
+                        type="button"
+                        class="hidden rounded p-0.5 text-slate-300 hover:text-red-400 group-hover:block"
+                        @click="handleDeleteMessage(item.msg)"
+                      >
+                        <svg viewBox="0 0 24 24" class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2">
+                          <path d="M18 6L6 18M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 작업확인 완료 카드 -->
+                <div
+                  v-else-if="item.type === 'message' && isProductionConfirmMessage(item.msg)"
+                  class="flex items-end gap-1"
+                  :class="item.msg.sender_id === myId ? 'flex-row-reverse' : ''"
+                >
+                  <MessengerProductionConfirmCard
+                    v-if="getProductionConfirmPayload(item.msg)"
+                    :payload="getProductionConfirmPayload(item.msg)"
+                    :message-id="item.msg.id"
+                    :sender-name="item.msg.sender_name"
+                    :confirming="confirmingMessageId === item.msg.id"
+                    @confirm="handleWorkConfirm"
+                  />
+                  <div
+                    class="flex flex-col gap-0.5"
+                    :class="item.msg.sender_id === myId ? 'items-end' : 'items-start'"
+                  >
+                    <ChatReadCount :count="getMessageUnreadCount(item.msg)" />
+                    <span class="text-[10px] text-slate-400">{{ formatTime(item.msg.created_at) }}</span>
+                  </div>
+                </div>
+
+                <!-- 재확인 요청 카드 -->
+                <div
+                  v-else-if="item.type === 'message' && isProductionRecheckMessage(item.msg)"
+                  class="flex items-end gap-1"
+                  :class="item.msg.sender_id === myId ? 'flex-row-reverse' : ''"
+                >
+                  <MessengerProductionRecheckCard
+                    v-if="getProductionRecheckPayload(item.msg)"
+                    :payload="getProductionRecheckPayload(item.msg)"
+                    :message-id="item.msg.id"
+                    :sender-name="item.msg.sender_name"
+                    :confirming="confirmingMessageId === item.msg.id"
+                    @confirm="handleWorkConfirm"
+                  />
+                  <div
+                    class="flex flex-col gap-0.5"
+                    :class="item.msg.sender_id === myId ? 'items-end' : 'items-start'"
+                  >
+                    <ChatReadCount :count="getMessageUnreadCount(item.msg)" />
+                    <span class="text-[10px] text-slate-400">{{ formatTime(item.msg.created_at) }}</span>
+                  </div>
                 </div>
 
                 <!-- 이미지 -->
-                <img
+                <div
                   v-else-if="item.msg.file_type === 'image' && item.msg.file_url"
-                  :src="item.msg.file_url"
-                  class="max-w-[min(312px,calc(100vw-96px))] cursor-pointer rounded-2xl border border-slate-200 object-cover shadow-sm transition hover:opacity-90"
-                  :class="item.msg.sender_id === myId ? 'rounded-br-sm' : 'rounded-bl-sm'"
-                  @click="openImageViewer(item.msg.file_url)"
-                />
+                  class="flex items-end gap-1"
+                  :class="item.msg.sender_id === myId ? 'flex-row-reverse' : ''"
+                >
+                  <img
+                    :src="item.msg.file_url"
+                    class="max-w-[min(312px,calc(100vw-96px))] cursor-pointer rounded-2xl border border-slate-200 object-cover shadow-sm transition hover:opacity-90"
+                    :class="item.msg.sender_id === myId ? 'rounded-br-sm' : 'rounded-bl-sm'"
+                    @click="openImageViewer(item.msg.file_url)"
+                  />
+                  <div
+                    class="flex flex-col gap-0.5"
+                    :class="item.msg.sender_id === myId ? 'items-end' : 'items-start'"
+                  >
+                    <ChatReadCount :count="getMessageUnreadCount(item.msg)" />
+                    <span class="text-[10px] text-slate-400">{{ formatTime(item.msg.created_at) }}</span>
+                  </div>
+                </div>
 
                 <!-- 동영상 -->
-                <video
+                <div
                   v-else-if="item.msg.file_type === 'video' && item.msg.file_url"
-                  :src="item.msg.file_url"
-                  controls
-                  class="max-w-[min(300px,calc(100vw-96px))] rounded-2xl border border-slate-200 shadow-sm"
-                  :class="item.msg.sender_id === myId ? 'rounded-br-sm' : 'rounded-bl-sm'"
-                />
+                  class="flex items-end gap-1"
+                  :class="item.msg.sender_id === myId ? 'flex-row-reverse' : ''"
+                >
+                  <video
+                    :src="item.msg.file_url"
+                    controls
+                    class="max-w-[min(300px,calc(100vw-96px))] rounded-2xl border border-slate-200 shadow-sm"
+                    :class="item.msg.sender_id === myId ? 'rounded-br-sm' : 'rounded-bl-sm'"
+                  />
+                  <div
+                    class="flex flex-col gap-0.5"
+                    :class="item.msg.sender_id === myId ? 'items-end' : 'items-start'"
+                  >
+                    <ChatReadCount :count="getMessageUnreadCount(item.msg)" />
+                    <span class="text-[10px] text-slate-400">{{ formatTime(item.msg.created_at) }}</span>
+                  </div>
+                </div>
 
                 <!-- PDF -->
-                <a
+                <div
                   v-else-if="item.msg.file_type === 'pdf' && item.msg.file_url"
-                  :href="item.msg.file_url"
-                  target="_blank"
-                  class="flex items-center gap-2.5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 shadow-sm transition hover:bg-red-100"
-                  :class="item.msg.sender_id === myId ? 'rounded-br-sm' : 'rounded-bl-sm'"
+                  class="flex items-end gap-1"
+                  :class="item.msg.sender_id === myId ? 'flex-row-reverse' : ''"
                 >
-                  <svg viewBox="0 0 24 24" class="h-5 w-5 shrink-0" fill="currentColor">
-                    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6zm-1 1.5L18.5 9H13V3.5zM8.5 17.5v-5h1.25c.69 0 1.25.56 1.25 1.25v2.5c0 .69-.56 1.25-1.25 1.25H8.5zm1.25-4h-.5v3h.5c.14 0 .25-.11.25-.25v-2.5c0-.14-.11-.25-.25-.25zm2.75 4v-5h2v.75h-1.25v1.25H14v.75h-1.25v2.25H12.5zm3.5 0v-5h.75v5H16z" />
-                  </svg>
-                  PDF 파일 보기
-                </a>
+                  <a
+                    :href="item.msg.file_url"
+                    target="_blank"
+                    class="flex items-center gap-2.5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 shadow-sm transition hover:bg-red-100"
+                    :class="item.msg.sender_id === myId ? 'rounded-br-sm' : 'rounded-bl-sm'"
+                  >
+                    <svg viewBox="0 0 24 24" class="h-5 w-5 shrink-0" fill="currentColor">
+                      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6zm-1 1.5L18.5 9H13V3.5zM8.5 17.5v-5h1.25c.69 0 1.25.56 1.25 1.25v2.5c0 .69-.56 1.25-1.25 1.25H8.5zm1.25-4h-.5v3h.5c.14 0 .25-.11.25-.25v-2.5c0-.14-.11-.25-.25-.25zm2.75 4v-5h2v.75h-1.25v1.25H14v.75h-1.25v2.25H12.5zm3.5 0v-5h.75v5H16z" />
+                    </svg>
+                    PDF 파일 보기
+                  </a>
+                  <div
+                    class="flex flex-col gap-0.5"
+                    :class="item.msg.sender_id === myId ? 'items-end' : 'items-start'"
+                  >
+                    <ChatReadCount :count="getMessageUnreadCount(item.msg)" />
+                    <span class="text-[10px] text-slate-400">{{ formatTime(item.msg.created_at) }}</span>
+                  </div>
+                </div>
 
                 <!-- 텍스트 버블 -->
                 <div
-                  v-if="item.type === 'message' && item.msg.content"
-                  class="rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed shadow-sm"
-                  :class="
-                    item.msg.sender_id === myId
-                      ? 'rounded-br-sm bg-indigo-600 text-white'
-                      : 'rounded-bl-sm bg-white text-slate-800 border border-slate-200'
-                  "
+                  v-if="item.type === 'message' && item.msg.content && !isProductionRequestMessage(item.msg) && !isProductionConfirmMessage(item.msg) && !isProductionRecheckMessage(item.msg)"
+                  class="flex items-end gap-1"
+                  :class="item.msg.sender_id === myId ? 'flex-row-reverse' : ''"
                 >
-                  {{ item.msg.content }}
+                  <div
+                    class="rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed shadow-sm"
+                    :class="
+                      item.msg.sender_id === myId
+                        ? 'rounded-br-sm bg-indigo-600 text-white'
+                        : 'rounded-bl-sm bg-white text-slate-800 border border-slate-200'
+                    "
+                  >
+                    <ChatMentionText
+                      :content="item.msg.content"
+                      :members="members"
+                      :mine="item.msg.sender_id === myId"
+                    />
+                  </div>
+                  <div
+                    class="flex flex-col gap-0.5"
+                    :class="item.msg.sender_id === myId ? 'items-end' : 'items-start'"
+                  >
+                    <ChatReadCount :count="getMessageUnreadCount(item.msg)" />
+                    <div class="flex items-center gap-1.5">
+                      <span class="text-[10px] text-slate-400">{{ formatTime(item.msg.created_at) }}</span>
+                      <button
+                        v-if="item.msg.sender_id === myId"
+                        type="button"
+                        class="hidden rounded p-0.5 text-slate-300 hover:text-red-400 group-hover:block"
+                        @click="handleDeleteMessage(item.msg)"
+                      >
+                        <svg viewBox="0 0 24 24" class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2">
+                          <path d="M18 6L6 18M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
-                <!-- 시간 + 삭제 -->
-                <div
-                  class="flex items-center gap-1.5"
-                  :class="(item.type === 'message' ? item.msg.sender_id : item.sender_id) === myId ? 'flex-row-reverse' : ''"
-                >
-                  <span class="text-[10px] text-slate-400">{{ formatTime(item.type === 'message' ? item.msg.created_at : item.messages[item.messages.length - 1]?.created_at) }}</span>
-                  <button
-                    v-if="item.type === 'message' && item.msg.sender_id === myId"
-                    type="button"
-                    class="hidden rounded p-0.5 text-slate-300 hover:text-red-400 group-hover:block"
-                    @click="handleDeleteMessage(item.msg)"
-                  >
-                    <svg viewBox="0 0 24 24" class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M18 6L6 18M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
               </div>
             </div>
           </template>
@@ -679,7 +1028,7 @@ onBeforeUnmount(() => {
       </div>
 
       <!-- 파일 미리보기 (다중) -->
-      <div v-if="pendingFiles.length > 0" class="border-t border-slate-100 bg-white px-3 py-2.5 md:px-4">
+      <div v-if="pendingFiles.length > 0 && roomViewTab === 'chat'" class="border-t border-slate-100 bg-white px-3 py-2.5 md:px-4">
         <div class="flex items-center justify-between mb-2">
           <span class="text-xs font-semibold text-slate-500">첨부 파일 {{ pendingFiles.length }}/{{ MAX_FILES }}</span>
           <button type="button" class="text-[11px] font-semibold text-red-400 hover:text-red-600" @click="clearPendingFiles">전체 삭제</button>
@@ -743,7 +1092,13 @@ onBeforeUnmount(() => {
       </div>
 
       <!-- 입력창 -->
-      <div v-if="activeRoomId" class="flex-shrink-0 border-t border-slate-200 bg-white px-3 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] md:px-4">
+      <div v-if="activeRoomId && roomViewTab === 'chat'" class="flex-shrink-0 border-t border-slate-200 bg-white px-3 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] md:px-4">
+        <MentionMemberPicker
+          v-if="mentionOpen"
+          :members="filteredMembers"
+          :active-index="mentionIndex"
+          @select="selectMention"
+        />
         <div class="flex items-end gap-2">
           <!-- 파일 첨부 버튼 -->
           <button
@@ -756,6 +1111,14 @@ onBeforeUnmount(() => {
               <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
             </svg>
           </button>
+          <button
+            type="button"
+            class="flex h-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 px-3 text-xs font-extrabold text-slate-600 transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-600 disabled:opacity-40"
+            :disabled="uploading || sending"
+            @click="drawingSearchOpen = true"
+          >
+            요청
+          </button>
           <input
             ref="fileInputRef"
             type="file"
@@ -767,12 +1130,16 @@ onBeforeUnmount(() => {
 
           <!-- 텍스트 입력 -->
           <textarea
+            ref="textareaRef"
             v-model="messageInput"
             rows="1"
             class="min-h-10 flex-1 resize-none rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition focus:border-indigo-300 focus:bg-white focus:outline-none"
-            placeholder="메시지를 입력하세요 (Enter 전송, Shift+Enter 줄바꿈)"
+            placeholder="메시지 입력"
             :disabled="sending || uploading"
             @keydown="handleKeydown"
+            @input="syncMentionFromCaret"
+            @click="syncMentionFromCaret"
+            @keyup="syncMentionFromCaret"
           />
 
           <!-- 전송 버튼 -->
@@ -1044,5 +1411,18 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </div>
+
+    <MessengerDrawingSearchDialog
+      :open="drawingSearchOpen"
+      @close="drawingSearchOpen = false"
+      @select="openProductionRequest"
+    />
+    <MessengerProductionRequestDialog
+      :open="productionRequestOpen"
+      :product="productionRequestProduct"
+      :submitting="productionRequestSubmitting"
+      @close="closeProductionRequest"
+      @submit="handleProductionRequestSubmit"
+    />
   </section>
 </template>

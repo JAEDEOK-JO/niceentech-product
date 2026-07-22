@@ -146,7 +146,7 @@ const markRoomAsRead = async (roomId) => {
     [normalizedRoomId]: 0,
   }
 
-  const { error } = await supabase.rpc('mark_my_chat_room_read', {
+  const { error, data } = await supabase.rpc('mark_my_chat_room_read', {
     target_room_id: normalizedRoomId,
   })
 
@@ -156,7 +156,10 @@ const markRoomAsRead = async (roomId) => {
   }
 
   void refreshUnreadCounts()
-  return { ok: true }
+  return {
+    ok: true,
+    lastReadAt: String(data?.last_read_at ?? '').trim() || new Date().toISOString(),
+  }
 }
 
 export const useMessengerUnread = () => ({
