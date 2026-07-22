@@ -3,6 +3,14 @@ import {
   isHomeLeaveType,
 } from './attendanceLeaveType'
 
+/** 선택형 사유 — 신청서에 고정 문구가 붙는다 */
+export const PRESET_LEAVE_REASONS = ['병원', '출입국방문', '은행업무', '자동차수리'] as const
+export type PresetLeaveReason = (typeof PRESET_LEAVE_REASONS)[number]
+
+export function isPresetLeaveReason(reason: string): reason is PresetLeaveReason {
+  return (PRESET_LEAVE_REASONS as readonly string[]).includes(String(reason ?? '').trim())
+}
+
 const formatDaysLabel = (daysCount: number, leaveType?: string) => {
   if (leaveType) {
     const label = formatLeaveDaysCountLabel(leaveType, daysCount)
@@ -14,13 +22,11 @@ const formatDaysLabel = (daysCount: number, leaveType?: string) => {
   return Number.isInteger(safe) ? `${safe}일` : `${safe.toFixed(1)}일`
 }
 
-const buildReasonBody = (reason: string) => {
-  const normalized = String(reason ?? '').trim()
-  if (normalized === '병원') return '병원 방문으로 인하여'
-  if (normalized === '출입국방문') return '출입국 업무 방문으로 인하여'
-  if (normalized === '은행업무') return '은행 업무로 인하여'
-  if (normalized === '자동차수리') return '자동차 수리로 인하여'
-  return normalized ? `${normalized}(으)로 인하여` : '개인 사유로'
+const buildPresetReasonBody = (reason: PresetLeaveReason) => {
+  if (reason === '병원') return '병원 방문으로 인하여'
+  if (reason === '출입국방문') return '출입국 업무 방문으로 인하여'
+  if (reason === '은행업무') return '은행 업무로 인하여'
+  return '자동차 수리로 인하여'
 }
 
 /** 2026-01-01 → 26년 1월 1일 */
@@ -58,8 +64,15 @@ export const formatAttendanceReasonText = ({
     return formatHomeLeaveReasonText(startDate ?? '', endDate ?? '')
   }
 
+  const normalized = String(reason ?? '').trim()
+
+  // 직접 입력: 신청서에 입력값 그대로 출력
+  if (!isPresetLeaveReason(normalized)) {
+    return normalized
+  }
+
   const daysLabel = formatDaysLabel(daysCount, leaveType)
-  const reasonBody = buildReasonBody(reason)
+  const reasonBody = buildPresetReasonBody(normalized)
   const leaveLabel = String(leaveType ?? '').trim() || '휴가'
 
   return `${reasonBody} ${leaveLabel} ${daysLabel}을 요청드립니다.`.replace(/\s+/g, ' ').trim()

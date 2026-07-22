@@ -164,14 +164,16 @@ async function invokeElectronPrint(html: string) {
   }
 
   const result = await electronAPI.printHtmlDocument(options)
-  if (result?.success || isCanceledPrint(result)) return true
+  if (result?.success) return true
+  if (isCanceledPrint(result)) return false
 
   const fallback = await electronAPI.printHtmlDocument({
     ...options,
     silent: true,
   })
 
-  if (fallback?.success || isCanceledPrint(fallback)) return true
+  if (fallback?.success) return true
+  if (isCanceledPrint(fallback)) return false
 
   window.alert(`인쇄에 실패했습니다.\n사유: ${fallback?.errorType || result?.errorType || '알 수 없음'}`)
   return false
@@ -180,30 +182,30 @@ async function invokeElectronPrint(html: string) {
 export async function printAttendanceLeaveApplication(
   item: AttendanceRequest,
   employees: Employee[],
-) {
-  if (typeof window === 'undefined') return
+): Promise<boolean> {
+  if (typeof window === 'undefined') return false
 
   const content = await renderLeaveApplicationContent(item, employees)
   const docTitle = getLeaveApplicationDocumentTitle(item.leaveType)
   const html = buildPrintHtml([content], `${docTitle}_${item.userName}`)
-  await invokeElectronPrint(html)
+  return invokeElectronPrint(html)
 }
 
 export async function printAllApprovedAttendanceLeaveApplications(
   items: AttendanceRequest[],
   employees: Employee[],
-) {
-  if (typeof window === 'undefined') return
+): Promise<boolean> {
+  if (typeof window === 'undefined') return false
 
   const approvedItems = items.filter((item) => item.status === '승인')
   if (approvedItems.length === 0) {
     window.alert('인쇄할 승인 건이 없습니다.')
-    return
+    return false
   }
 
   const pages = await Promise.all(
     approvedItems.map((item) => renderLeaveApplicationContent(item, employees)),
   )
   const html = buildPrintHtml(pages, '휴가신청서_전체')
-  await invokeElectronPrint(html)
+  return invokeElectronPrint(html)
 }

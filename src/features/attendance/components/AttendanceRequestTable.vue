@@ -56,6 +56,7 @@ const BTN = {
   red: 'rounded-lg bg-red-500 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-400',
   outline: 'rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-100',
   outlineRed: 'rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-bold text-red-500 hover:bg-red-50',
+  deepOrange: 'rounded-lg bg-orange-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-orange-600',
 }
 
 function actionsFor(item: AttendanceRequest): ActionDef[] {
@@ -94,9 +95,23 @@ function actionsFor(item: AttendanceRequest): ActionDef[] {
       { key: 'adminDelete', label: '삭제', buttonClass: BTN.outlineRed },
     ]
   }
-  const actions: ActionDef[] = [{ key: 'print', label: '인쇄', buttonClass: BTN.outline }]
+  const actions: ActionDef[] = [{
+    key: 'print',
+    label: item.printedAt ? '인쇄완료' : '인쇄',
+    buttonClass: item.printedAt ? BTN.deepOrange : BTN.outline,
+  }]
   if (props.isRootAdmin) actions.push({ key: 'adminDelete', label: '삭제', buttonClass: BTN.outlineRed })
   return actions
+}
+
+function statusLabel(item: AttendanceRequest) {
+  if (item.printedAt && item.status === '승인') return '인쇄완료'
+  return item.status
+}
+
+function statusClass(item: AttendanceRequest) {
+  if (item.printedAt && item.status === '승인') return 'bg-orange-700 text-white'
+  return props.statusBadgeClass?.(item.status)
 }
 
 function runAction(key: ActionKey, item: AttendanceRequest) {
@@ -162,8 +177,8 @@ function runAction(key: ActionKey, item: AttendanceRequest) {
             </p>
           </td>
           <td v-if="mode === 'requests'" class="whitespace-nowrap border border-slate-200 px-4 py-3 text-center">
-            <span class="rounded-full px-2.5 py-1 text-[11px] font-bold" :class="statusBadgeClass?.(item.status)">
-              {{ item.status }}
+            <span class="rounded-full px-2.5 py-1 text-[11px] font-bold" :class="statusClass(item)">
+              {{ statusLabel(item) }}
             </span>
           </td>
           <td class="border border-slate-200 px-4 py-3">
@@ -212,9 +227,9 @@ function runAction(key: ActionKey, item: AttendanceRequest) {
           <span
             v-if="mode === 'requests'"
             class="rounded-full px-2.5 py-1 text-[11px] font-bold"
-            :class="statusBadgeClass?.(item.status)"
+            :class="statusClass(item)"
           >
-            {{ item.status }}
+            {{ statusLabel(item) }}
           </span>
         </div>
       </div>

@@ -29,18 +29,11 @@ const summaryTotals = computed(() =>
       acc.annualCount += item.annualCount
       acc.halfDayCount += item.halfDayCount
       acc.sickCount += item.sickCount
-      acc.totalUsedDays += item.totalUsedDays
       return acc
     },
-    { people: 0, annualCount: 0, halfDayCount: 0, sickCount: 0, totalUsedDays: 0 },
+    { people: 0, annualCount: 0, halfDayCount: 0, sickCount: 0 },
   ),
 )
-
-const formatDays = (value: number) => {
-  const safe = Number(value ?? 0)
-  if (!Number.isFinite(safe)) return '0일'
-  return Number.isInteger(safe) ? `${safe}일` : `${safe.toFixed(1)}일`
-}
 </script>
 
 <template>
@@ -48,7 +41,6 @@ const formatDays = (value: number) => {
     <div class="mb-5 flex flex-wrap items-center justify-between gap-3">
       <div>
         <h2 class="text-lg font-extrabold text-slate-900">근태요약</h2>
-        <p class="mt-1 text-sm text-slate-500">승인 완료된 휴가 기준으로 월별 사용 현황을 보여줍니다.</p>
       </div>
       <div class="flex items-center gap-2">
         <select
@@ -68,7 +60,7 @@ const formatDays = (value: number) => {
       </div>
     </div>
 
-    <div class="mb-5 grid grid-cols-2 gap-4 lg:grid-cols-4">
+    <div class="mb-5 grid grid-cols-2 gap-4 lg:grid-cols-3">
       <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <p class="text-xs font-medium text-slate-400">사용 직원</p>
         <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summaryTotals.people }}명</p>
@@ -80,10 +72,6 @@ const formatDays = (value: number) => {
       <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <p class="text-xs font-medium text-slate-400">병가</p>
         <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summaryTotals.sickCount }}회</p>
-      </div>
-      <div class="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 shadow-sm">
-        <p class="text-xs font-medium text-emerald-600">총 사용일</p>
-        <p class="mt-2 text-2xl font-extrabold text-emerald-700">{{ formatDays(summaryTotals.totalUsedDays) }}</p>
       </div>
     </div>
 
@@ -127,18 +115,6 @@ const formatDays = (value: number) => {
           <span class="rounded-full bg-slate-100 px-3 py-1 text-slate-700">연차 {{ summary.annualCount }}회</span>
           <span class="rounded-full bg-purple-100 px-3 py-1 text-purple-700">병가 {{ summary.sickCount }}회</span>
           <span v-if="summary.otherCount > 0" class="rounded-full bg-orange-100 px-3 py-1 text-orange-700">기타 {{ summary.otherCount }}회</span>
-        </div>
-
-        <p class="mt-3 text-xs font-semibold text-slate-600">
-          반차 {{ summary.halfDayCount }}회
-          연차 {{ summary.annualCount }}회
-          <template v-if="summary.sickCount > 0"> 병가 {{ summary.sickCount }}회</template>
-          총 {{ formatDays(summary.totalUsedDays) }}
-        </p>
-
-        <div class="mt-4 rounded-xl bg-slate-900 px-3 py-3 text-white">
-          <p class="text-xs font-medium text-slate-300">총 사용일</p>
-          <p class="mt-1 text-2xl font-extrabold">{{ formatDays(summary.totalUsedDays) }}</p>
         </div>
       </article>
     </div>

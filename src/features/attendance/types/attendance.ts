@@ -26,6 +26,7 @@ export interface AttendanceRequest {
   gyeongyuAt: string | null
   daepyoBy: string | null
   daepyoAt: string | null
+  printedAt: string | null
   createdAt: string
   updatedAt: string
 }
@@ -93,6 +94,7 @@ export function mapAttendanceRequest(raw: Record<string, unknown>): AttendanceRe
     gyeongyuAt: raw.gyeongyu_at != null ? toStr(raw.gyeongyu_at) : null,
     daepyoBy: raw.daepyo_by != null ? toStr(raw.daepyo_by) : null,
     daepyoAt: raw.daepyo_at != null ? toStr(raw.daepyo_at) : null,
+    printedAt: raw.printed_at != null ? toStr(raw.printed_at) : null,
     createdAt: toStr(raw.created_at),
     updatedAt: toStr(raw.updated_at),
   }
@@ -184,7 +186,6 @@ export interface AttendanceMonthlySummary {
   sickCount: number
   otherCount: number
   totalApprovedCount: number
-  totalUsedDays: number
 }
 
 // ─── 금일 작업시간 ─────────────────────────────────────────────────────────────

@@ -26,6 +26,8 @@ import {
   rejectAttendanceRequest,
   gyeongyuAttendanceRequest,
   daepyoApproveAttendanceRequest,
+  markAttendanceRequestPrinted,
+  markAttendanceRequestsPrinted,
   fetchAnnualQuota,
   fetchDepartments,
   fetchEmployeeCount,
@@ -660,7 +662,12 @@ async function handleAdminDelete(item: AttendanceRequest) {
 async function handlePrint(item: AttendanceRequest) {
   if (item.status !== '승인') return
   try {
-    await printAttendanceLeaveApplication(item, employees.value)
+    const printed = await printAttendanceLeaveApplication(item, employees.value)
+    if (!printed) return
+    const printedAt = await markAttendanceRequestPrinted(item.id)
+    items.value = items.value.map((row) =>
+      row.id === item.id ? { ...row, printedAt } : row,
+    )
   } catch {
     showToast('인쇄 준비 중 오류가 발생했습니다.', 'error')
   }
@@ -673,7 +680,14 @@ async function handlePrintAllApproved() {
       ...filters,
       status: '승인',
     })
-    await printAllApprovedAttendanceLeaveApplications(approvedItems, employees.value)
+    const printed = await printAllApprovedAttendanceLeaveApplications(approvedItems, employees.value)
+    if (!printed) return
+    const ids = approvedItems.map((item) => item.id)
+    const printedAt = await markAttendanceRequestsPrinted(ids)
+    const idSet = new Set(ids)
+    items.value = items.value.map((row) =>
+      idSet.has(row.id) ? { ...row, printedAt } : row,
+    )
   } catch {
     showToast('전체 인쇄 준비 중 오류가 발생했습니다.', 'error')
   }

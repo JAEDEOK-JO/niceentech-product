@@ -348,6 +348,32 @@ export async function rejectAttendanceRequest(
   if (error) throw error
 }
 
+// ─── 인쇄 완료 표시 ────────────────────────────────────────────────────────────
+export async function markAttendanceRequestPrinted(id: number): Promise<string> {
+  const printedAt = new Date().toISOString()
+  const { error } = await supabase
+    .from('attendance_requests')
+    .update({ printed_at: printedAt })
+    .eq('id', id)
+
+  if (error) throw error
+  return printedAt
+}
+
+export async function markAttendanceRequestsPrinted(ids: number[]): Promise<string> {
+  const uniqueIds = [...new Set(ids.filter((id) => Number.isFinite(id) && id > 0))]
+  const printedAt = new Date().toISOString()
+  if (uniqueIds.length === 0) return printedAt
+
+  const { error } = await supabase
+    .from('attendance_requests')
+    .update({ printed_at: printedAt })
+    .in('id', uniqueIds)
+
+  if (error) throw error
+  return printedAt
+}
+
 // ─── 연차 잔여 조회 ────────────────────────────────────────────────────────────
 export async function fetchAnnualQuota(
   userId: string,
@@ -430,7 +456,7 @@ export async function fetchAttendanceMonthlySummary(
 
   const { data, error } = await supabase
     .from('attendance_requests')
-    .select('user_id,user_name,department,leave_type,days_count,status,start_date')
+    .select('user_id,user_name,department,leave_type,status,start_date')
     .eq('status', '승인')
     .gte('start_date', startDate)
     .lte('start_date', endDate)
@@ -444,7 +470,6 @@ export async function fetchAttendanceMonthlySummary(
     const userName = String(row.user_name ?? '').trim()
     const department = String(row.department ?? '').trim()
     const leaveType = String(row.leave_type ?? '').trim()
-    const daysCount = Number(row.days_count ?? 0) || 0
     const key = `${userName}:${department}`
 
     const current =
@@ -458,11 +483,9 @@ export async function fetchAttendanceMonthlySummary(
         sickCount: 0,
         otherCount: 0,
         totalApprovedCount: 0,
-        totalUsedDays: 0,
       }
 
     current.totalApprovedCount += 1
-    current.totalUsedDays += daysCount
 
     if (leaveType === '연차') {
       current.annualCount += 1
@@ -478,7 +501,6 @@ export async function fetchAttendanceMonthlySummary(
   }
 
   return [...summaryMap.values()].sort((left, right) => {
-    if (right.totalUsedDays !== left.totalUsedDays) return right.totalUsedDays - left.totalUsedDays
     if (right.totalApprovedCount !== left.totalApprovedCount) return right.totalApprovedCount - left.totalApprovedCount
     return left.userName.localeCompare(right.userName, 'ko')
   })

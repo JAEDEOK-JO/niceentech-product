@@ -3,7 +3,6 @@ import { ref, computed, watch } from 'vue'
 import {
   HOME_LEAVE_REASON,
   HOME_LEAVE_REASON_WEDDING,
-  LEAVE_REASONS,
   LEAVE_TYPES,
   type AttendanceFormState,
   type AttendanceRequest,
@@ -12,6 +11,7 @@ import {
 } from '../types/attendance'
 import { fetchEmployeeHomeLeaveRequests } from '../services/attendance.service'
 import AttendanceEvidencePicker from './AttendanceEvidencePicker.vue'
+import AttendanceReasonField from './AttendanceReasonField.vue'
 import {
   deductsAnnualLeave,
   formatLeaveDaysCountLabel,
@@ -20,6 +20,7 @@ import {
   isHomeLeaveType,
   isSingleDayLeaveType,
 } from '../utils/attendanceLeaveType'
+import { PRESET_LEAVE_REASONS } from '../utils/attendanceReason'
 import {
   HOME_LEAVE_DURATION_1M,
   HOME_LEAVE_DURATION_2M_WEDDING,
@@ -107,9 +108,7 @@ const selectedHomeLeaveDuration = computed(() =>
   getHomeLeaveDurationFromReason(form.value.reason),
 )
 
-const generalReasons = computed(() =>
-  LEAVE_REASONS.filter((r) => r !== HOME_LEAVE_REASON && r !== HOME_LEAVE_REASON_WEDDING),
-)
+const generalReasons = PRESET_LEAVE_REASONS
 
 function emitUpdate(next: AttendanceFormState) {
   form.value = next
@@ -191,7 +190,7 @@ function resolveReasonForType(type: LeaveType, currentReason: string): string {
       : HOME_LEAVE_REASON
   }
   if (currentReason === HOME_LEAVE_REASON || currentReason === HOME_LEAVE_REASON_WEDDING) {
-    return generalReasons.value[0] ?? '병원'
+    return generalReasons[0] ?? '병원'
   }
   return currentReason
 }
@@ -466,13 +465,12 @@ function onEndDateChange(date: string) {
     <!-- 사유 -->
     <div v-if="!isHomeLeave">
       <label class="mb-1.5 block text-sm font-bold text-slate-700">사유</label>
-      <select
-        :value="form.reason"
-        class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400"
-        @change="emitUpdate({ ...form, reason: ($event.target as HTMLSelectElement).value })"
-      >
-        <option v-for="r in generalReasons" :key="r" :value="r">{{ r }}</option>
-      </select>
+      <AttendanceReasonField
+        :model-value="form.reason"
+        :reasons="generalReasons"
+        :disabled="loading"
+        @update:model-value="emitUpdate({ ...form, reason: $event })"
+      />
     </div>
 
     <!-- 증빙 사진 -->
