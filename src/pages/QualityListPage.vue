@@ -25,6 +25,10 @@ import {
 } from '@/features/quality-list/services/quality.service'
 import { formatIsoDate, formatQualityDate, getNextTuesday, moveByWeeks, parseQualityDate } from '@/features/quality-list/utils/date'
 import { exportQualityListToExcel, exportQualityStampToExcel } from '@/features/quality-list/utils/print'
+import {
+  chunkQualityPrintPages,
+  getQualityPrintRowNumber,
+} from '@/features/quality-list/utils/qualityPrintPaging'
 import type { QualityCountField } from '@/features/quality-list/services/quality.service'
 import type { QualityListRow } from '@/features/quality-list/types/quality'
 import { mapQualityListRow } from '@/features/quality-list/types/quality'
@@ -52,6 +56,8 @@ const printTotal = computed(() =>
     0,
   ),
 )
+
+const printPages = computed(() => chunkQualityPrintPages(items.value))
 
 const printCountColumns = [
   { label: '32A', key: 'a32', className: 'quality-print-inch' },
@@ -308,7 +314,7 @@ function onPrint() {
 
 async function printQualityListPage(options = {}) {
   isPrintSettingsOpen.value = false
-  await printCurrentPage(isPrinting, options, { margin: '8mm' })
+  await printCurrentPage(isPrinting, options, { margin: '2px' })
 }
 
 onMounted(() => {
@@ -328,6 +334,7 @@ onBeforeUnmount(() => {
         v-model:show-all-records="showAllRecords"
         :current-date-label="currentDateLabel"
         :calendar-value="calendarValue"
+        :total="printTotal"
         :loading="loading"
         @calendar-change="handleCalendarChange"
         @search="load"
@@ -366,62 +373,72 @@ onBeforeUnmount(() => {
     </div>
 
     <section class="quality-print-page">
-      <h1>{{ currentDateLabel }} 검수리스트</h1>
-      <div class="quality-print-summary">총합 : {{ printTotal }}개</div>
-      <table class="quality-print-table">
-        <colgroup>
-          <col style="width: 32px" />
-          <col style="width: 52px" />
-          <col style="width: 26%" />
-          <col style="width: 22%" />
-          <col v-for="column in printCountColumns" :key="column.key" style="width: 46px" />
-          <col style="width: 54px" />
-        </colgroup>
-        <thead>
-          <tr>
-            <th class="quality-print-base">N</th>
-            <th class="quality-print-base">도번</th>
-            <th class="quality-print-base">현장명</th>
-            <th class="quality-print-base">확관</th>
-            <th
-              v-for="column in printCountColumns"
-              :key="column.key"
-              :class="column.className"
-            >
-              {{ column.label }}
-            </th>
-            <th class="quality-print-base">합계</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-if="items.length === 0">
-            <td colspan="15">검수리스트가 없습니다.</td>
-          </tr>
-          <tr v-for="(item, index) in items" :key="item.id">
-            <td>{{ index + 1 }}</td>
-            <td class="quality-print-initial">{{ item.initial }}</td>
-            <td class="quality-print-place">
-              {{ item.company }} {{ item.place }}{{ item.area ? ' ' + item.area : '' }}
-              <span v-if="showAllRecords && item.testDate" class="quality-print-date">({{ item.testDate.replace(/\s/g, '').slice(2) }})</span>
-            </td>
-            <td class="quality-print-lot">
-              <div class="quality-print-lot-inner" :style="getLotRoundStyle(item.lotRound)">
-                <span>({{ item.lotNumH ? String(item.lotNumH).slice(-3) : '---' }})</span>
-                <strong>{{ item.lotNameH || '-' }}</strong>
-                <span>{{ item.lotNumStartH || '' }} ~ {{ item.lotNumEndH || '' }}</span>
-              </div>
-            </td>
-            <td
-              v-for="column in printCountColumns"
-              :key="column.key"
-              :class="column.className"
-            >
-              {{ item[column.key] || '' }}
-            </td>
-            <td class="quality-print-total">{{ item.totalH || '' }}</td>
-          </tr>
-        </tbody>
-      </table>
+      <div
+        v-for="(pageItems, pageIndex) in printPages"
+        :key="pageIndex"
+        class="quality-print-sheet"
+      >
+        <div v-if="pageIndex === 0" class="quality-print-header">
+          <h1>{{ currentDateLabel }} 검수리스트</h1>
+          <span class="quality-print-summary">총합 : {{ printTotal }}개</span>
+        </div>
+        <table class="quality-print-table">
+          <colgroup>
+            <col style="width: 32px" />
+            <col style="width: 52px" />
+            <col style="width: 26%" />
+            <col style="width: 22%" />
+            <col v-for="column in printCountColumns" :key="column.key" style="width: 46px" />
+            <col style="width: 54px" />
+          </colgroup>
+          <thead>
+            <tr>
+              <th class="quality-print-base">N</th>
+              <th class="quality-print-base">도번</th>
+              <th class="quality-print-base">현장명</th>
+              <th class="quality-print-base">확관</th>
+              <th
+                v-for="column in printCountColumns"
+                :key="column.key"
+                :class="column.className"
+              >
+                {{ column.label }}
+              </th>
+              <th class="quality-print-base">합계</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-if="pageItems.length === 0">
+              <td colspan="15">검수리스트가 없습니다.</td>
+            </tr>
+            <tr v-for="(item, index) in pageItems" :key="item.id">
+              <td>{{ getQualityPrintRowNumber(pageIndex, index) }}</td>
+              <td class="quality-print-initial">
+                <span class="quality-print-initial-text">{{ item.initial }}</span>
+              </td>
+              <td class="quality-print-place">
+                {{ item.company }} {{ item.place }}{{ item.area ? ' ' + item.area : '' }}
+                <span v-if="showAllRecords && item.testDate" class="quality-print-date">({{ item.testDate.replace(/\s/g, '').slice(2) }})</span>
+              </td>
+              <td class="quality-print-lot">
+                <div class="quality-print-lot-inner" :style="getLotRoundStyle(item.lotRound)">
+                  <span>({{ item.lotNumH ? String(item.lotNumH).slice(-3) : '---' }})</span>
+                  <strong>{{ item.lotNameH || '-' }}</strong>
+                  <span>{{ item.lotNumStartH || '' }} ~ {{ item.lotNumEndH || '' }}</span>
+                </div>
+              </td>
+              <td
+                v-for="column in printCountColumns"
+                :key="column.key"
+                :class="column.className"
+              >
+                {{ item[column.key] || '' }}
+              </td>
+              <td class="quality-print-total">{{ item.totalH || '' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </section>
 
     <PrintSettingsDialog
@@ -468,20 +485,37 @@ onBeforeUnmount(() => {
     font-family: "Malgun Gothic", Arial, sans-serif;
   }
 
+  .quality-print-sheet {
+    page-break-after: always;
+    break-after: page;
+  }
+
+  .quality-print-sheet:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
+
+  .quality-print-header {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: baseline;
+    justify-content: center;
+    gap: 12px;
+    margin: 0 0 4px;
+    white-space: nowrap;
+  }
+
   .quality-print-page h1 {
-    margin: 0 0 10px;
+    margin: 0;
     color: #1e3a8a;
-    font-size: 20px;
+    font-size: 18px;
     font-weight: 800;
     text-align: center;
   }
 
   .quality-print-summary {
-    display: flex;
-    justify-content: flex-end;
-    margin-bottom: 8px;
     color: #1e293b;
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 800;
   }
 
@@ -490,7 +524,7 @@ onBeforeUnmount(() => {
     table-layout: fixed;
     border-collapse: separate;
     border-spacing: 0;
-    font-size: 14px;
+    font-size: 13px;
   }
 
   .quality-print-table th,
@@ -508,12 +542,12 @@ onBeforeUnmount(() => {
   }
 
   .quality-print-table thead th {
-    height: 40px;
+    height: 32px;
     border-top: 1px solid #94a3b8;
     border-right: 1px solid #64748b;
     border-bottom: 2px solid #475569;
     color: #1e3a8a;
-    font-size: 14px;
+    font-size: 12px;
     font-weight: 800;
     white-space: nowrap;
   }
@@ -532,24 +566,36 @@ onBeforeUnmount(() => {
   }
 
   .quality-print-table tbody tr {
-    height: 58px;
+    height: 50px;
     page-break-inside: avoid;
   }
 
   .quality-print-initial {
+    padding: 2px !important;
     color: #334155;
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 700;
-    line-height: 1.4;
+    vertical-align: middle;
+  }
+
+  .quality-print-initial-text {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    overflow: hidden;
+    text-overflow: ellipsis;
     word-break: break-all;
+    line-height: 1.4;
+    max-height: calc(1.4em * 3);
   }
 
   .quality-print-place {
-    padding: 6px 8px !important;
+    padding: 2px 4px !important;
     color: #0f172a;
-    font-size: 14px;
+    font-size: 12px;
     font-weight: 700;
-    line-height: 1.5;
+    line-height: 1.35;
     text-align: left !important;
     word-break: keep-all;
   }
@@ -574,14 +620,14 @@ onBeforeUnmount(() => {
   .quality-print-lot-inner strong {
     min-width: 0;
     overflow: hidden;
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 800;
     text-overflow: ellipsis;
   }
 
   .quality-print-lot-inner span {
     flex-shrink: 0;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 700;
   }
 

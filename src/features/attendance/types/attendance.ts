@@ -1,3 +1,6 @@
+import { getDeptHeadApprovedByDisplay } from '../utils/attendanceApprovalAccess'
+import type { LeaveType } from '../utils/attendanceLeaveType'
+
 export const LEAVE_REASONS = ['병원', '출입국방문', '은행업무', '자동차수리', '귀국휴가', '귀국휴가(결혼식)'] as const
 export const HOME_LEAVE_REASON = '귀국휴가' as const
 export const HOME_LEAVE_REASON_WEDDING = '귀국휴가(결혼식)' as const
@@ -74,18 +77,20 @@ const toEvidenceUrls = (value: unknown): string[] => {
 }
 
 export function mapAttendanceRequest(raw: Record<string, unknown>): AttendanceRequest {
+  const department = toStr(raw.department)
+  const approvedByRaw = raw.approved_by != null ? normalizeApprovedBy(raw.approved_by) : null
   return {
     id: toNum(raw.id),
     userId: toStr(raw.user_id),
     userName: toStr(raw.user_name),
-    department: toStr(raw.department),
+    department,
     leaveType: toStr(raw.leave_type),
     startDate: toStr(raw.start_date),
     endDate: toStr(raw.end_date),
     daysCount: toNum(raw.days_count),
     reason: toStr(raw.reason),
     status: toStr(raw.status),
-    approvedBy: raw.approved_by != null ? normalizeApprovedBy(raw.approved_by) : null,
+    approvedBy: getDeptHeadApprovedByDisplay({ department, approvedBy: approvedByRaw }),
     approvedAt: raw.approved_at != null ? toStr(raw.approved_at) : null,
     rejectReason: raw.reject_reason != null ? toStr(raw.reject_reason) : null,
     signatureUrl: raw.signature_url != null ? toStr(raw.signature_url) : null,

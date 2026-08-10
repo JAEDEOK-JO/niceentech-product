@@ -1,5 +1,9 @@
 import * as XLSX from 'xlsx'
 import type { QualityListRow } from '../types/quality'
+import {
+  chunkQualityPrintPages,
+  getQualityPrintRowNumber,
+} from './qualityPrintPaging'
 
 interface StampSizeRow {
   field: keyof QualityListRow
@@ -124,106 +128,8 @@ export function printQualityList(items: QualityListRow[], title: string) {
     0,
   )
 
-  const rows = items
-    .map((item, index) => {
-      const placeParts = [item.company, item.place].filter((p) => String(p ?? '').trim())
-      const placeMain = escapeHtml(placeParts.join(' '))
-      const area = item.area ? ` ${escapeHtml(item.area)}` : ''
-      const lotNumShort = item.lotNumH ? String(item.lotNumH).slice(-3) : '---'
-      const color = roundColor(item.lotRound)
-      const lotStart = item.lotNumStartH ? String(item.lotNumStartH) : ''
-      const lotEnd = item.lotNumEndH ? String(item.lotNumEndH) : ''
-      const lotCell = `
-        <div class="lot-inner" style="color:${color}">
-          <span class="lot-num">(${escapeHtml(lotNumShort)})</span>
-          <span class="lot-name">${escapeHtml(item.lotNameH || '-')}</span>
-          <span class="lot-range">${escapeHtml(lotStart)} ~ ${escapeHtml(lotEnd)}</span>
-        </div>`
-      const cell = (v: number) => (v ? String(v) : '')
-      return `
-      <tr>
-        <td>${index + 1}</td>
-        <td class="td-initial">${escapeHtml(item.initial)}</td>
-        <td class="td-place">${placeMain}${area}</td>
-        <td class="td-lot">${lotCell}</td>
-        <td class="td-inch">${cell(item.a32)}</td>
-        <td class="td-inch">${cell(item.a40)}</td>
-        <td class="td-inch">${cell(item.a50)}</td>
-        <td class="td-inch">${cell(item.a65)}</td>
-        <td class="td-metric">${cell(item.m65)}</td>
-        <td class="td-metric">${cell(item.m80)}</td>
-        <td class="td-metric">${cell(item.m100)}</td>
-        <td class="td-metric">${cell(item.m125)}</td>
-        <td class="td-metric">${cell(item.m150)}</td>
-        <td class="td-metric">${cell(item.m200)}</td>
-        <td class="td-total">${item.totalH || ''}</td>
-      </tr>`
-    })
-    .join('')
-
-  popup.document.write(`
-    <!doctype html>
-    <html lang="ko">
-      <head>
-        <meta charset="utf-8" />
-        <title>${escapeHtml(title)}</title>
-        <style>
-          @page { margin: 8mm; }
-          * { box-sizing: border-box; }
-          body { font-family: 'Malgun Gothic', Arial, sans-serif; margin: 0; padding: 14px 18px; color: #111; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          h1 { margin: 0 0 10px; font-size: 20px; text-align: center; color: #1e3a8a; font-weight: 700; }
-          .summary { display: flex; justify-content: flex-end; font-size: 18px; font-weight: 700; color: #1e293b; margin-bottom: 8px; }
-          table { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 14px; table-layout: fixed; }
-          th, td {
-            border-right: 1px solid #94a3b8;
-            border-bottom: 1px solid #94a3b8;
-            padding: 0;
-            vertical-align: middle;
-            text-align: center;
-          }
-          th:first-child, td:first-child { border-left: 1px solid #94a3b8; }
-          thead th {
-            color: #1e3a8a;
-            font-weight: 700;
-            font-size: 14px;
-            height: 40px;
-            padding: 0 4px;
-            white-space: nowrap;
-            border-top: 1px solid #94a3b8;
-            border-right: 1px solid #64748b;
-            border-bottom: 2px solid #475569;
-          }
-          thead .th-base   { background: #eff6ff; }
-          thead .th-inch   { background: #dbeafe; }
-          thead .th-metric { background: #ffedd5; color: #7c2d12; }
-          tbody tr { height: 58px; page-break-inside: avoid; }
-          tbody .td-initial { font-size: 13px; color: #334155; font-weight: 600; word-break: break-all; line-height: 1.4; }
-          tbody .td-place {
-            text-align: left;
-            font-size: 14px;
-            font-weight: 600;
-            color: #0f172a;
-            padding: 6px 8px;
-            line-height: 1.5;
-            word-break: keep-all;
-          }
-          tbody .td-lot { padding: 0 4px; }
-          tbody .lot-inner {
-            display: flex; flex-direction: row; align-items: center; justify-content: center;
-            gap: 3px; white-space: nowrap;
-          }
-          tbody .lot-num { font-size: 12px; font-weight: 600; }
-          tbody .lot-name { font-size: 13px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; }
-          tbody .lot-range { font-size: 12px; font-weight: 600; }
-          tbody .td-inch   { background: #ffffff; font-weight: 700; }
-          tbody .td-metric { background: #fff7ed; font-weight: 700; }
-          tbody .td-total  { font-weight: 700; }
-        </style>
-      </head>
-      <body>
-        <h1>${escapeHtml(title)}</h1>
-        <div class="summary">총합 : ${total}개</div>
-        <table>
+  const pages = chunkQualityPrintPages(items)
+  const tableHead = `
           <colgroup>
             <col style="width:32px" />
             <col style="width:52px" />
@@ -259,9 +165,147 @@ export function printQualityList(items: QualityListRow[], title: string) {
               <th class="th-metric">200A</th>
               <th class="th-base">합계</th>
             </tr>
-          </thead>
-          <tbody>${rows}</tbody>
+          </thead>`
+
+  const sheets = pages
+    .map((pageItems, pageIndex) => {
+      const rows = pageItems
+        .map((item, index) => {
+          const placeParts = [item.company, item.place].filter((p) => String(p ?? '').trim())
+          const placeMain = escapeHtml(placeParts.join(' '))
+          const area = item.area ? ` ${escapeHtml(item.area)}` : ''
+          const lotNumShort = item.lotNumH ? String(item.lotNumH).slice(-3) : '---'
+          const color = roundColor(item.lotRound)
+          const lotStart = item.lotNumStartH ? String(item.lotNumStartH) : ''
+          const lotEnd = item.lotNumEndH ? String(item.lotNumEndH) : ''
+          const lotCell = `
+        <div class="lot-inner" style="color:${color}">
+          <span class="lot-num">(${escapeHtml(lotNumShort)})</span>
+          <span class="lot-name">${escapeHtml(item.lotNameH || '-')}</span>
+          <span class="lot-range">${escapeHtml(lotStart)} ~ ${escapeHtml(lotEnd)}</span>
+        </div>`
+          const cell = (v: number) => (v ? String(v) : '')
+          return `
+      <tr>
+        <td>${getQualityPrintRowNumber(pageIndex, index)}</td>
+        <td class="td-initial"><span class="td-initial-text">${escapeHtml(item.initial)}</span></td>
+        <td class="td-place">${placeMain}${area}</td>
+        <td class="td-lot">${lotCell}</td>
+        <td class="td-inch">${cell(item.a32)}</td>
+        <td class="td-inch">${cell(item.a40)}</td>
+        <td class="td-inch">${cell(item.a50)}</td>
+        <td class="td-inch">${cell(item.a65)}</td>
+        <td class="td-metric">${cell(item.m65)}</td>
+        <td class="td-metric">${cell(item.m80)}</td>
+        <td class="td-metric">${cell(item.m100)}</td>
+        <td class="td-metric">${cell(item.m125)}</td>
+        <td class="td-metric">${cell(item.m150)}</td>
+        <td class="td-metric">${cell(item.m200)}</td>
+        <td class="td-total">${item.totalH || ''}</td>
+      </tr>`
+        })
+        .join('')
+
+      const header =
+        pageIndex === 0
+          ? `<div class="print-header">
+          <h1>${escapeHtml(title)}</h1>
+          <span class="summary">총합 : ${total}개</span>
+        </div>`
+          : ''
+
+      return `
+      <div class="print-sheet">
+        ${header}
+        <table>
+          ${tableHead}
+          <tbody>${rows || '<tr><td colspan="15">검수리스트가 없습니다.</td></tr>'}</tbody>
         </table>
+      </div>`
+    })
+    .join('')
+
+  popup.document.write(`
+    <!doctype html>
+    <html lang="ko">
+      <head>
+        <meta charset="utf-8" />
+        <title>${escapeHtml(title)}</title>
+        <style>
+          @page { margin: 2px; }
+          * { box-sizing: border-box; }
+          body { font-family: 'Malgun Gothic', Arial, sans-serif; margin: 0; padding: 0; color: #111; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          h1 { margin: 0; font-size: 18px; text-align: center; color: #1e3a8a; font-weight: 700; }
+          .print-header { display: flex; flex-wrap: nowrap; align-items: baseline; justify-content: center; gap: 12px; margin: 0 0 4px; white-space: nowrap; }
+          .summary { font-size: 16px; font-weight: 700; color: #1e293b; }
+          .print-sheet { page-break-after: always; break-after: page; }
+          .print-sheet:last-child { page-break-after: auto; break-after: auto; }
+          table { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 13px; table-layout: fixed; }
+          th, td {
+            border-right: 1px solid #94a3b8;
+            border-bottom: 1px solid #94a3b8;
+            padding: 0;
+            vertical-align: middle;
+            text-align: center;
+          }
+          th:first-child, td:first-child { border-left: 1px solid #94a3b8; }
+          thead th {
+            color: #1e3a8a;
+            font-weight: 700;
+            font-size: 12px;
+            height: 32px;
+            padding: 0 4px;
+            white-space: nowrap;
+            border-top: 1px solid #94a3b8;
+            border-right: 1px solid #64748b;
+            border-bottom: 2px solid #475569;
+          }
+          thead .th-base   { background: #eff6ff; }
+          thead .th-inch   { background: #dbeafe; }
+          thead .th-metric { background: #ffedd5; color: #7c2d12; }
+          tbody tr { height: 50px; page-break-inside: avoid; }
+          tbody .td-initial {
+            padding: 2px;
+            vertical-align: middle;
+            color: #334155;
+            font-size: 12px;
+            font-weight: 600;
+          }
+          tbody .td-initial-text {
+            display: -webkit-box;
+            -webkit-box-orient: vertical;
+            -webkit-line-clamp: 3;
+            line-clamp: 3;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            word-break: break-all;
+            line-height: 1.4;
+            max-height: calc(1.4em * 3);
+          }
+          tbody .td-place {
+            text-align: left;
+            font-size: 12px;
+            font-weight: 600;
+            color: #0f172a;
+            padding: 2px 4px;
+            line-height: 1.35;
+            word-break: keep-all;
+          }
+          tbody .td-lot { padding: 0 4px; }
+          tbody .lot-inner {
+            display: flex; flex-direction: row; align-items: center; justify-content: center;
+            gap: 3px; white-space: nowrap;
+          }
+          tbody .lot-num { font-size: 11px; font-weight: 600; }
+          tbody .lot-name { font-size: 12px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; }
+          tbody .lot-range { font-size: 11px; font-weight: 600; }
+          tbody .td-inch   { background: #ffffff; font-weight: 700; }
+          tbody .td-metric { background: #fff7ed; font-weight: 700; }
+          tbody .td-total  { font-weight: 700; }
+        </style>
+      </head>
+      <body>
+        ${sheets}
         <script>
           window.addEventListener('load', function () {
             setTimeout(function () { window.focus(); window.print(); }, 150);

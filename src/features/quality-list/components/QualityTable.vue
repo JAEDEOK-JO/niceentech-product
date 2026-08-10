@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { ref, watch } from 'vue'
 import type { QualityCountField } from '../services/quality.service'
 import type { QualityListRow } from '../types/quality'
 
@@ -64,13 +64,6 @@ function isCardExpanded(item: QualityListRow) {
   return Boolean(expandedCards.value[item.id])
 }
 
-const total = computed(() =>
-  props.items.reduce(
-    (sum, item) => sum + item.a32 + item.a40 + item.a50 + item.a65 + item.m65 + item.m80 + item.m100 + item.m125 + item.m150 + item.m200,
-    0,
-  ),
-)
-
 function lotRoundClass(round: string) {
   if (round === '1차') return 'round-1'
   if (round === '2차') return 'round-2'
@@ -115,11 +108,6 @@ const mobileCountRows: CountCol[][] = [
 
 <template>
   <section class="qt-wrap">
-    <div class="qt-summary">
-      <span />
-      <strong>총합 : {{ total }}개</strong>
-    </div>
-
     <div v-if="loading" class="qt-empty">로딩 중...</div>
     <div v-else-if="items.length === 0" class="qt-empty">검수리스트가 없습니다.</div>
     <div v-else class="qt-list">
@@ -202,7 +190,9 @@ const mobileCountRows: CountCol[][] = [
         <tbody>
           <tr v-for="(item, index) in items" :key="item.id">
             <td class="td-center">{{ index + 1 }}</td>
-            <td class="td-center td-initial">{{ item.initial }}</td>
+            <td class="td-center td-initial" :title="item.initial || ''">
+              <span class="td-initial-text">{{ item.initial }}</span>
+            </td>
             <td class="td-center td-place">
               {{ item.company }} {{ item.place }}{{ item.area ? ' ' + item.area : '' }}
               <span v-if="showAllRecords && item.testDate" class="place-date">{{ formatShortDate(item.testDate) }}</span>
@@ -280,20 +270,11 @@ const mobileCountRows: CountCol[][] = [
   gap: 10px;
 }
 
-.qt-summary {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  font-size: 23px;
-  font-weight: 700;
-  color: #1e293b;
-}
-
 .qt-empty {
   padding: 56px 24px;
   text-align: center;
   color: #94a3b8;
-  font-size: 15px;
+  font-size: 14px;
 }
 
 .qt-list {
@@ -318,7 +299,7 @@ const mobileCountRows: CountCol[][] = [
   table-layout: fixed;
   border-collapse: separate;
   border-spacing: 0;
-  font-size: 15px;
+  font-size: 14px;
   background: #fff;
 }
 
@@ -350,7 +331,7 @@ const mobileCountRows: CountCol[][] = [
   z-index: 10;
   color: #1e3a8a;
   font-weight: 700;
-  font-size: 15px;
+  font-size: 14px;
   height: 40px;
   padding: 0 4px;
   white-space: nowrap;
@@ -373,20 +354,31 @@ const mobileCountRows: CountCol[][] = [
 .td-center { padding: 10px 4px; }
 
 .td-initial {
-  font-size: 14px;
+  font-size: 13px;
   color: #334155;
   font-weight: 600;
   padding: 6px 4px;
+  vertical-align: middle;
+}
+
+.td-initial-text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: normal;
   word-break: break-all;
   line-height: 1.4;
+  max-height: calc(1.4em * 3);
 }
 
 /* 현장명 — 헤더 제외 바디 셀만 왼쪽 정렬 */
 .qt tbody .td-place {
   white-space: normal;
   word-break: keep-all;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   color: #0f172a;
   padding: 10px 8px;
@@ -396,7 +388,7 @@ const mobileCountRows: CountCol[][] = [
 
 .place-date {
   margin-left: 4px;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   color: #ea580c;
   white-space: nowrap;
@@ -416,14 +408,14 @@ const mobileCountRows: CountCol[][] = [
   white-space: nowrap;
 }
 .lot-num {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: #111827;
   white-space: nowrap;
   flex-shrink: 0;
 }
 .lot-name {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   color: #111827;
   overflow: hidden;
@@ -437,7 +429,7 @@ const mobileCountRows: CountCol[][] = [
   padding: 3px 7px;
   border: 1px solid #94a3b8;
   border-radius: 6px;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   text-align: center;
   background: #f8fafc;
@@ -454,7 +446,7 @@ const mobileCountRows: CountCol[][] = [
   box-shadow: 0 0 0 2px rgba(59,130,246,0.2);
 }
 .lot-end {
-  font-size: 14px;
+  font-size: 13px;
   color: #111827;
   white-space: nowrap;
 }
@@ -489,7 +481,7 @@ const mobileCountRows: CountCol[][] = [
   background: transparent;
   border: none;
   cursor: pointer;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
   color: #111827;
 }
@@ -499,7 +491,7 @@ const mobileCountRows: CountCol[][] = [
 /* 합계 */
 .td-total {
   font-weight: 700;
-  font-size: 15px;
+  font-size: 14px;
   color: #0f172a;
   padding: 8px 4px;
 }
@@ -509,7 +501,7 @@ const mobileCountRows: CountCol[][] = [
   background: transparent;
   border: none;
   padding: 4px 0;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   color: #111827;
   cursor: pointer;
@@ -547,17 +539,17 @@ const mobileCountRows: CountCol[][] = [
 }
 .dialog-company {
   font-weight: 700;
-  font-size: 15px;
+  font-size: 14px;
   color: #0f172a;
   margin: 0;
 }
 .dialog-area {
-  font-size: 13px;
+  font-size: 12px;
   color: #64748b;
   margin: 4px 0 0;
 }
 .dialog-close {
-  font-size: 13px;
+  font-size: 12px;
   color: #94a3b8;
   background: transparent;
   border: none;
@@ -576,7 +568,7 @@ const mobileCountRows: CountCol[][] = [
   border-radius: 10px;
   border: 1px solid #e2e8f0;
   background: #f8fafc;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   color: #1e293b;
   cursor: pointer;
@@ -596,7 +588,7 @@ const mobileCountRows: CountCol[][] = [
   .qt-summary {
     justify-content: flex-start;
     padding: 0 2px;
-    font-size: 16px;
+    font-size: 15px;
   }
 
   .qt-scroll {
@@ -631,19 +623,19 @@ const mobileCountRows: CountCol[][] = [
     flex-direction: column;
     gap: 3px;
     color: #0f172a;
-    font-size: 13px;
+    font-size: 12px;
     line-height: 1.35;
   }
 
   .qt-card-title strong {
-    font-size: 15px;
+    font-size: 14px;
     line-height: 1.3;
   }
 
   .qt-card-index,
   .qt-card-date {
     color: #64748b;
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 800;
   }
 
@@ -659,7 +651,7 @@ const mobileCountRows: CountCol[][] = [
     background: #eff6ff;
     padding: 5px 9px;
     color: #1e3a8a;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 800;
   }
 
@@ -672,7 +664,7 @@ const mobileCountRows: CountCol[][] = [
     background: #f8fafc;
     padding: 9px 10px;
     color: #111827;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 800;
   }
 
@@ -690,7 +682,7 @@ const mobileCountRows: CountCol[][] = [
 
   .qt-card-lot-start {
     flex-shrink: 0;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 800;
   }
 
@@ -702,7 +694,7 @@ const mobileCountRows: CountCol[][] = [
     border-top: 1px solid #eef2f7;
     padding-top: 12px;
     color: #0f172a;
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 900;
   }
 
@@ -758,13 +750,13 @@ const mobileCountRows: CountCol[][] = [
 
   .qt-card-count span {
     color: #64748b;
-    font-size: 10px;
+    font-size: 9px;
     font-weight: 900;
   }
 
   .qt-card-count strong {
     margin-top: 3px;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 900;
   }
 

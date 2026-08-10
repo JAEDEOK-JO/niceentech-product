@@ -56,6 +56,7 @@ const normalizeRow = (row) => ({
   place: String(row.place ?? '').trim(),
   fullName: String(row.full_name ?? '').trim(),
   totalHeadCount: row.total_head_count == null ? '' : String(row.total_head_count),
+  progressedHeadCount: row.progressed_head_count == null ? '0' : String(row.progressed_head_count),
   totalScrewCount: row.total_screw_count == null ? '' : String(row.total_screw_count),
   totalSupipeCount: row.total_supipe_count == null ? '' : String(row.total_supipe_count),
   directorName: String(row.director_name ?? '').trim(),
@@ -95,7 +96,7 @@ const fetchRows = async () => {
 
   const { data, error } = await supabase
     .from('company_list')
-    .select('id,company,place,full_name,total_head_count,total_screw_count,total_supipe_count,director_name,director_phone,site_address,company_type,business_registration_number,registration_month,start_date,end_date,manager_id,order_confirmed,site_completed')
+    .select('id,company,place,full_name,total_head_count,progressed_head_count,total_screw_count,total_supipe_count,director_name,director_phone,site_address,company_type,business_registration_number,registration_month,start_date,end_date,manager_id,order_confirmed,site_completed')
     .order('id', { ascending: false })
 
   loading.value = false

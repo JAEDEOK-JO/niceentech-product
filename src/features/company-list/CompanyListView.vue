@@ -3,6 +3,12 @@ import { computed, ref } from 'vue'
 import Button from '@/components/ui/button/Button.vue'
 import Input from '@/components/ui/input/Input.vue'
 import { COMPANY_TYPE_OPTIONS } from '@/constants/companyTypes'
+import {
+  formatIsoDateDisplay,
+  formatRegistrationMonthDisplay,
+  parseIsoDateInput,
+  parseRegistrationMonthInput,
+} from './companyListDateFormat'
 
 const props = defineProps({
   rows: { type: Array, default: () => [] },
@@ -23,6 +29,18 @@ const onNumericInput = (event, rowId, field) => {
   const digits = String(event.target.value ?? '').replace(/\D/g, '')
   if (event.target.value !== digits) event.target.value = digits
   emit('update-row', rowId, field, digits)
+}
+
+const onRegistrationMonthInput = (event, rowId) => {
+  const next = parseRegistrationMonthInput(event.target.value)
+  emit('update-row', rowId, 'registrationMonth', next)
+  event.target.value = formatRegistrationMonthDisplay(next)
+}
+
+const onIsoDateInput = (event, rowId, field) => {
+  const next = parseIsoDateInput(event.target.value)
+  emit('update-row', rowId, field, next)
+  event.target.value = formatIsoDateDisplay(next)
 }
 
 const isSaving = (rowId) => props.savingIds.includes(rowId)
@@ -252,6 +270,15 @@ const groupedByConsonant = computed(() => {
                   />
                 </div>
                 <div>
+                  <p class="mb-2 text-sm font-bold text-slate-700">진행된 헤드수량</p>
+                  <input
+                    class="flex h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
+                    type="text"
+                    readonly
+                    :value="selectedRow.progressedHeadCount"
+                  />
+                </div>
+                <div>
                   <p class="mb-2 text-sm font-bold text-slate-700">총나사수</p>
                   <input
                     class="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
@@ -314,28 +341,34 @@ const groupedByConsonant = computed(() => {
                 <div>
                   <p class="mb-2 text-sm font-bold text-slate-700">등록월</p>
                   <input
-                    type="month"
-                    class="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
-                    :value="selectedRow.registrationMonth"
-                    @input="emit('update-row', selectedRow.id, 'registrationMonth', $event.target.value)"
+                    class="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                    type="text"
+                    inputmode="numeric"
+                    placeholder="예: 2026.08"
+                    :value="formatRegistrationMonthDisplay(selectedRow.registrationMonth)"
+                    @blur="onRegistrationMonthInput($event, selectedRow.id)"
                   />
                 </div>
                 <div>
                   <p class="mb-2 text-sm font-bold text-slate-700">착공일</p>
                   <input
-                    type="date"
-                    class="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
-                    :value="selectedRow.startDate"
-                    @input="emit('update-row', selectedRow.id, 'startDate', $event.target.value)"
+                    class="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                    type="text"
+                    inputmode="numeric"
+                    placeholder="예: 2026.08.01"
+                    :value="formatIsoDateDisplay(selectedRow.startDate)"
+                    @blur="onIsoDateInput($event, selectedRow.id, 'startDate')"
                   />
                 </div>
                 <div>
                   <p class="mb-2 text-sm font-bold text-slate-700">준공일</p>
                   <input
-                    type="date"
-                    class="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
-                    :value="selectedRow.endDate"
-                    @input="emit('update-row', selectedRow.id, 'endDate', $event.target.value)"
+                    class="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                    type="text"
+                    inputmode="numeric"
+                    placeholder="예: 2026.12.31"
+                    :value="formatIsoDateDisplay(selectedRow.endDate)"
+                    @blur="onIsoDateInput($event, selectedRow.id, 'endDate')"
                   />
                 </div>
                 <div>

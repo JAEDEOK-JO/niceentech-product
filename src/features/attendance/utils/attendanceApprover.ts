@@ -1,4 +1,5 @@
 import type { AttendanceRequest } from '../types/attendance'
+import { getDeptHeadDisplayName } from './attendanceApprovalAccess'
 
 export const ATTENDANCE_WORKFLOW_STATUS = {
   PENDING: '대기중',
@@ -8,6 +9,23 @@ export const ATTENDANCE_WORKFLOW_STATUS = {
   APPROVED: '승인',
   REJECTED: '반려',
 } as const
+
+/** 승인 대기 목록 조회에 쓰는 DB status (월 필터 없이 조회) */
+export const PENDING_ATTENDANCE_STATUSES = [
+  ATTENDANCE_WORKFLOW_STATUS.PENDING,
+  ATTENDANCE_WORKFLOW_STATUS.GYEONGYU_PENDING,
+  ATTENDANCE_WORKFLOW_STATUS.FINAL_PENDING,
+  ATTENDANCE_WORKFLOW_STATUS.LEGACY_DEPT_APPROVED,
+] as const
+
+/** UI 표시용 상태 라벨 (탭명과 맞춤) */
+export function getAttendanceStatusLabel(status: string): string {
+  if (status === ATTENDANCE_WORKFLOW_STATUS.PENDING) return '부서장 대기'
+  if (status === ATTENDANCE_WORKFLOW_STATUS.GYEONGYU_PENDING) return '경유 대기'
+  if (status === ATTENDANCE_WORKFLOW_STATUS.FINAL_PENDING) return '최종승인 대기'
+  if (status === ATTENDANCE_WORKFLOW_STATUS.LEGACY_DEPT_APPROVED) return '경유 대기'
+  return status
+}
 
 const hasGyeongyuApproval = (item: AttendanceRequest) =>
   Boolean(String(item.gyeongyuBy ?? '').trim()) && Boolean(String(item.gyeongyuAt ?? '').trim())
@@ -37,8 +55,10 @@ export function isDeptHeadApproved(item: AttendanceRequest): boolean {
   )
 }
 
-/** 승인 완료 건의 최종 승인자 표시명 (대표이사 우선, 없으면 부서장) */
+/** 승인 완료 건의 최종 승인자 표시명 (대표이사 우선, 없으면 부서장 표시명) */
 export function getFinalApproverDisplayName(item: AttendanceRequest): string | null {
   if (item.status !== ATTENDANCE_WORKFLOW_STATUS.APPROVED) return null
-  return item.daepyoBy ?? item.approvedBy
+  if (item.daepyoBy) return item.daepyoBy
+  if (!item.approvedBy) return null
+  return getDeptHeadDisplayName(item.department)
 }

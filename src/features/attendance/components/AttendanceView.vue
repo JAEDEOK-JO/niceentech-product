@@ -14,7 +14,6 @@ import AttendanceForm from './AttendanceForm.vue'
 import AttendanceEmployeeList from './AttendanceEmployeeList.vue'
 import AttendanceAnalysisPanel from './AttendanceAnalysisPanel.vue'
 import AttendanceSummaryBoard from './AttendanceSummaryBoard.vue'
-import AttendanceSummaryDetailModal from './AttendanceSummaryDetailModal.vue'
 import AttendanceDetailModal from './AttendanceDetailModal.vue'
 import AttendanceRequestSignatureDialog from './AttendanceRequestSignatureDialog.vue'
 import AttendancePasswordKeypad from './AttendancePasswordKeypad.vue'
@@ -27,8 +26,12 @@ import type { DailyWorkHour } from '../types/attendance'
 import { isDeptHeadPending, isFinalApprovalPending, isGyeongyuPending } from '../utils/attendanceApprover'
 import { formatLeaveDaysCountLabel, isHalfDayLeaveType, LEAVE_TYPE_ABSENCE, LEAVE_TYPE_HOME, LEAVE_TYPE_OUTING } from '../utils/attendanceLeaveType'
 
+type AdminTab = 'requests' | 'employees' | 'summary' | 'analysis' | 'approval' | 'daepyo' | 'gyeongyu' | 'workhours'
+
 const props = defineProps<{
   items: AttendanceRequest[]
+  /** 승인 대기 전용 (연·월 필터 없음) */
+  pendingItems: AttendanceRequest[]
   filters: AttendanceFilters
   departments: string[]
   quota: AttendanceAnnualQuota | null
@@ -38,11 +41,7 @@ const props = defineProps<{
   summaryYear: number
   summaryMonth: number
   summaryLoading: boolean
-  monthlySummaries: import('../types/attendance').AttendanceMonthlySummary[]
-  summaryDetailVisible: boolean
-  summaryDetailUserName: string
-  summaryDetailDepartment: string
-  summaryDetailRequests: AttendanceRequest[]
+  summaryRequests: AttendanceRequest[]
   currentUserId: string
   isAdmin: boolean
   isRootAdmin: boolean
@@ -79,9 +78,7 @@ const emit = defineEmits<{
   (e: 'update:formData', value: AttendanceFormState): void
   (e: 'update:rejectReason', value: string): void
   (e: 'update:rejectEvidenceUrls', value: string[]): void
-  (e: 'openSummaryDetail', summary: import('../types/attendance').AttendanceMonthlySummary): void
-  (e: 'closeSummaryDetail'): void
-  (e: 'openSummaryRequestDetail', item: AttendanceRequest): void
+  (e: 'openSummaryRequest', item: AttendanceRequest): void
   (e: 'openForm'): void
   (e: 'closeForm'): void
   (e: 'submitForm'): void
@@ -143,7 +140,12 @@ function onKeypadSuccess(emp: Employee) {
 }
 
 // 관리자 탭
-const activeTab = ref<'requests' | 'employees' | 'summary' | 'analysis' | 'approval' | 'daepyo' | 'gyeongyu' | 'workhours'>('requests')
+const activeTab = ref<AdminTab>('requests')
+
+const tabBtnClass = (tab: AdminTab) =>
+  activeTab.value === tab
+    ? 'bg-slate-900 text-white'
+    : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'
 
 // 금일 작업시간 입력 다이얼로그
 const workHoursDialogVisible = ref(false)
@@ -200,9 +202,9 @@ const leaveTypeBadge = (type: string) => {
   return 'bg-slate-100 text-slate-500'
 }
 
-const thisMonthLabel = computed(() => {
-  const now = new Date()
-  return `${now.getFullYear()}년 ${now.getMonth() + 1}월`
+const periodLabel = computed(() => {
+  if (props.filters.month) return `${props.filters.year}년 ${props.filters.month}월`
+  return `${props.filters.year}년`
 })
 
 const totalRequestPages = computed(() => Math.max(1, Math.ceil(props.items.length / REQUESTS_PER_PAGE)))
@@ -210,9 +212,9 @@ const pagedRequestItems = computed(() => {
   const start = (requestsPage.value - 1) * REQUESTS_PER_PAGE
   return props.items.slice(start, start + REQUESTS_PER_PAGE)
 })
-const deptHeadPendingItems = computed(() => props.items.filter(isDeptHeadPending))
-const gyeongyuPendingItems = computed(() => props.items.filter(isGyeongyuPending))
-const finalApprovalPendingItems = computed(() => props.items.filter(isFinalApprovalPending))
+const deptHeadPendingItems = computed(() => props.pendingItems.filter(isDeptHeadPending))
+const gyeongyuPendingItems = computed(() => props.pendingItems.filter(isGyeongyuPending))
+const finalApprovalPendingItems = computed(() => props.pendingItems.filter(isFinalApprovalPending))
 const canGoPrevPage = computed(() => requestsPage.value > 1)
 const canGoNextPage = computed(() => requestsPage.value < totalRequestPages.value)
 const moveRequestPage = (delta: number) => {
@@ -237,7 +239,7 @@ watch(
       <div class="mb-7 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 class="text-2xl font-extrabold text-slate-900">생산부 근태관리</h1>
-          <p class="mt-1 text-sm text-slate-500">{{ thisMonthLabel }} 휴가 신청 및 근태 현황</p>
+          <p class="mt-1 text-sm text-slate-500">{{ periodLabel }} 휴가 신청 및 근태 현황</p>
         </div>
       </div>
 
@@ -273,14 +275,14 @@ watch(
       <div v-if="isAdmin" class="mb-5 flex flex-wrap gap-1 rounded-xl border border-slate-200 bg-white p-1 w-fit">
         <button
           type="button"
-          class="rounded-lg px-4 py-2 text-sm font-bold transition-colors"
-          :class="activeTab === 'requests' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-800'"
+          class="rounded-lg px-3.5 py-2 text-sm font-bold transition-colors"
+          :class="tabBtnClass('requests')"
           @click="activeTab = 'requests'"
         >신청 현황</button>
         <button
           type="button"
-          class="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-bold transition-colors"
-          :class="activeTab === 'approval' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-800'"
+          class="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-bold transition-colors"
+          :class="tabBtnClass('approval')"
           @click="activeTab = 'approval'"
         >
           부서장 대기
@@ -291,8 +293,8 @@ watch(
         </button>
         <button
           type="button"
-          class="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-bold transition-colors"
-          :class="activeTab === 'gyeongyu' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-800'"
+          class="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-bold transition-colors"
+          :class="tabBtnClass('gyeongyu')"
           @click="activeTab = 'gyeongyu'"
         >
           경유 대기
@@ -303,8 +305,8 @@ watch(
         </button>
         <button
           type="button"
-          class="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-bold transition-colors"
-          :class="activeTab === 'daepyo' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-800'"
+          class="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-bold transition-colors"
+          :class="tabBtnClass('daepyo')"
           @click="activeTab = 'daepyo'"
         >
           최종승인 대기
@@ -315,26 +317,26 @@ watch(
         </button>
         <button
           type="button"
-          class="rounded-lg px-4 py-2 text-sm font-bold transition-colors"
-          :class="activeTab === 'summary' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-800'"
+          class="rounded-lg px-3.5 py-2 text-sm font-bold transition-colors"
+          :class="tabBtnClass('summary')"
           @click="activeTab = 'summary'"
         >근태요약</button>
         <button
           type="button"
-          class="rounded-lg px-4 py-2 text-sm font-bold transition-colors"
-          :class="activeTab === 'employees' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-800'"
+          class="rounded-lg px-3.5 py-2 text-sm font-bold transition-colors"
+          :class="tabBtnClass('employees')"
           @click="activeTab = 'employees'"
         >직원 목록</button>
         <button
           type="button"
-          class="rounded-lg px-4 py-2 text-sm font-bold transition-colors"
-          :class="activeTab === 'analysis' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-800'"
+          class="rounded-lg px-3.5 py-2 text-sm font-bold transition-colors"
+          :class="tabBtnClass('analysis')"
           @click="activeTab = 'analysis'"
         >근태 분석</button>
         <button
           type="button"
-          class="rounded-lg px-4 py-2 text-sm font-bold transition-colors"
-          :class="activeTab === 'workhours' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-800'"
+          class="rounded-lg px-3.5 py-2 text-sm font-bold transition-colors"
+          :class="tabBtnClass('workhours')"
           @click="activeTab = 'workhours'"
         >작업시간</button>
       </div>
@@ -373,13 +375,13 @@ watch(
 
       <AttendanceSummaryBoard
         v-if="isAdmin && activeTab === 'summary'"
-        :summaries="monthlySummaries"
+        :requests="summaryRequests"
         :loading="summaryLoading"
         :year="summaryYear"
         :month="summaryMonth"
         @update:year="emit('update:summaryYear', $event)"
         @update:month="emit('update:summaryMonth', $event)"
-        @open-detail="emit('openSummaryDetail', $event)"
+        @open-request="emit('openSummaryRequest', $event)"
       />
 
       <!-- ═══ 부서장 대기 탭 ═══ -->
@@ -657,17 +659,6 @@ watch(
     </Teleport>
 
     <!-- 디테일 모달 -->
-    <Teleport to="body">
-      <AttendanceSummaryDetailModal
-        :visible="summaryDetailVisible"
-        :user-name="summaryDetailUserName"
-        :department="summaryDetailDepartment"
-        :requests="summaryDetailRequests"
-        @close="emit('closeSummaryDetail')"
-        @select="emit('openSummaryRequestDetail', $event)"
-      />
-    </Teleport>
-
     <Teleport to="body">
       <AttendanceDetailModal
         v-if="detailItem"

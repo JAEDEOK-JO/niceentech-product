@@ -45,6 +45,10 @@ function getOpenWindows() {
   return appWindows
 }
 
+function getHiddenWindows() {
+  return getOpenWindows().filter((window) => !window.isVisible())
+}
+
 function getPrimaryWindow() {
   const focused = BrowserWindow.getFocusedWindow()
   if (focused && !focused.isDestroyed() && getOpenWindows().includes(focused)) return focused
@@ -69,6 +73,13 @@ function loadIcon(filename) {
 }
 
 function createWindow() {
+  // 숨겨둔 창이 있으면 새 창 대신 재사용 (슬롯 낭비 방지)
+  const hidden = getHiddenWindows()[0]
+  if (hidden) {
+    showWindow(hidden)
+    return hidden
+  }
+
   const openWindows = getOpenWindows()
   if (openWindows.length >= MAX_WINDOWS) {
     showWindow(openWindows[openWindows.length - 1])
@@ -108,6 +119,9 @@ function createWindow() {
   window.once('ready-to-show', () => window.show())
   window.on('close', (event) => {
     if (app.isQuitting || isKiosk || !tray) return
+    const others = getOpenWindows().filter((item) => item !== window)
+    // 마지막 창만 트레이로 숨김. 나머지 창은 실제 종료해 2창 슬롯을 비움
+    if (others.length > 0) return
     event.preventDefault()
     window.hide()
     window.setSkipTaskbar(true)
@@ -299,6 +313,7 @@ ipcMain.handle('print-html-document', async (_, payload = {}) => {
       printBackground: true,
       color: true,
       landscape: payload.landscape === true,
+      ...(payload.margins && typeof payload.margins === 'object' ? { margins: payload.margins } : {}),
       ...(silent ? { pageSize: payload.pageSize || 'A4' } : {}),
       ...(silent && Number.isFinite(scaleFactor) ? { scaleFactor: Math.max(10, Math.min(200, scaleFactor)) } : {}),
       ...(silent && Number.isFinite(copies) ? { copies: Math.max(1, Math.min(999, Math.round(copies))) } : {}),
@@ -354,6 +369,9 @@ ipcMain.handle('print-report', async (_, requestedOptions = {}) => {
     printBackground: true,
     color: true,
     landscape: requestedOptions.landscape !== false,
+    ...(requestedOptions.margins && typeof requestedOptions.margins === 'object'
+      ? { margins: requestedOptions.margins }
+      : {}),
     ...(silent ? { pageSize: requestedOptions.pageSize || 'A4' } : {}),
     ...(silent && Number.isFinite(scaleFactor) ? { scaleFactor: Math.max(10, Math.min(200, scaleFactor)) } : {}),
     ...(silent && Number.isFinite(copies) ? { copies: Math.max(1, Math.min(999, Math.round(copies))) } : {}),
@@ -512,6 +530,11 @@ function setupAutoUpdater() {
 if (gotSingleInstanceLock) {
   app.on('second-instance', () => {
     const openWindows = getOpenWindows()
+    const hidden = getHiddenWindows()[0]
+    if (hidden) {
+      showWindow(hidden)
+      return
+    }
     if (openWindows.length < MAX_WINDOWS) createWindow()
     else showWindow(openWindows[openWindows.length - 1])
   })

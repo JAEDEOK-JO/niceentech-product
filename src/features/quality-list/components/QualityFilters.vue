@@ -7,6 +7,7 @@ defineProps<{
   showAllRecords: boolean
   currentDateLabel: string
   calendarValue: string
+  total?: number
   loading?: boolean
 }>()
 
@@ -41,12 +42,13 @@ function openCalendar() {
       <h1 class="quality-title">
         <template v-if="showAllRecords">
           <span class="quality-title-accent">검수리스트</span>
-          <span class="quality-title-date"> 전체 검색결과</span>
+          <span class="quality-title-date">전체 검색결과</span>
         </template>
         <template v-else>
           <span class="quality-title-date">{{ currentDateLabel }}</span>
           <span class="quality-title-accent">검수리스트</span>
         </template>
+        <span class="quality-title-total">총합 : {{ total ?? 0 }}개</span>
       </h1>
     </div>
 
@@ -108,9 +110,14 @@ function openCalendar() {
 <style scoped>
 .quality-title {
   margin: 0;
-  font-size: 1.5rem;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: baseline;
+  gap: 10px;
+  font-size: calc(1.5rem - 1px);
   font-weight: 800;
   color: #0f172a;
+  white-space: nowrap;
 }
 
 .quality-title-accent {
@@ -118,8 +125,14 @@ function openCalendar() {
 }
 
 .quality-title-date {
-  margin-right: 10px;
   color: #0f172a;
+}
+
+.quality-title-total {
+  margin-left: 4px;
+  font-size: calc(1.15rem - 1px);
+  font-weight: 700;
+  color: #1e293b;
 }
 
 .icon-button {
@@ -136,7 +149,7 @@ function openCalendar() {
   align-items: center;
   gap: 8px;
   padding: 0 8px;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   color: #334155;
 }

@@ -16,6 +16,7 @@ import { useProfile } from '@/composables/useProfile'
 import { isAdminRole, isRootAdmin } from '@/utils/adminAccess'
 import {
   fetchAttendanceRequests,
+  fetchPendingAttendanceRequests,
   fetchMyAttendanceRequests,
   createAttendanceRequest,
   updateAttendanceRequest,
@@ -32,7 +33,6 @@ import {
   fetchDepartments,
   fetchEmployeeCount,
   fetchEmployees,
-  fetchAttendanceMonthlySummary,
   fetchApprovedAttendanceRequestsByMonth,
   createEmployee,
   updateEmployee,
@@ -54,7 +54,6 @@ import {
   type AttendanceFormState,
   type AttendanceFilters,
   type AttendanceAnnualQuota,
-  type AttendanceMonthlySummary,
   type AttendanceDashboardStats,
   type Employee,
   type DailyWorkHour,
@@ -114,6 +113,8 @@ const filters = reactive<AttendanceFilters>({
 
 // ─── 신청 목록 상태 ────────────────────────────────────────────────────────────
 const items = ref<AttendanceRequest[]>([])
+/** 승인 대기 전용 (연·월 필터 없음) */
+const pendingItems = ref<AttendanceRequest[]>([])
 const departments = ref<string[]>([])
 const quota = ref<AttendanceAnnualQuota | null>(null)
 const employeeCount = ref(0)
@@ -124,15 +125,15 @@ const stats = computed<AttendanceDashboardStats>(() => {
   return {
     employeeCount: employeeCount.value,
     thisMonthTotal: items.value.filter((i) => i.startDate.startsWith(ym)).length,
-    pendingCount: items.value.filter(isDeptHeadPending).length,
+    pendingCount: pendingItems.value.filter(isDeptHeadPending).length,
     approvedCount: items.value.filter((i) => i.status === '승인').length,
     myRemainingDays: quota.value?.remainingDays ?? 0,
   }
 })
 
-const approvalPendingCount = computed(() => items.value.filter(isDeptHeadPending).length)
-const gyeongyuPendingCount = computed(() => items.value.filter(isGyeongyuPending).length)
-const daepyoPendingCount = computed(() => items.value.filter(isFinalApprovalPending).length)
+const approvalPendingCount = computed(() => pendingItems.value.filter(isDeptHeadPending).length)
+const gyeongyuPendingCount = computed(() => pendingItems.value.filter(isGyeongyuPending).length)
+const daepyoPendingCount = computed(() => pendingItems.value.filter(isFinalApprovalPending).length)
 
 // ─── 직원 목록 상태 ────────────────────────────────────────────────────────────
 const employees = ref<Employee[]>([])
@@ -278,12 +279,7 @@ async function setDailyWorkDate(workDate: string) {
 const summaryYear = ref(thisYear)
 const summaryMonth = ref(thisMonth)
 const summaryLoading = ref(false)
-const monthlySummaries = ref<AttendanceMonthlySummary[]>([])
-const monthlySummaryRequests = ref<AttendanceRequest[]>([])
-const summaryDetailVisible = ref(false)
-const summaryDetailUserName = ref('')
-const summaryDetailDepartment = ref('')
-const summaryDetailRequests = ref<AttendanceRequest[]>([])
+const summaryRequests = ref<AttendanceRequest[]>([])
 
 // ─── 신청 폼 상태 ──────────────────────────────────────────────────────────────
 const formVisible = ref(false)
@@ -354,6 +350,19 @@ async function loadItems({ silent = false } = {}) {
   }
 }
 
+async function loadPendingItems({ silent = false } = {}) {
+  if (!isAdmin.value) {
+    pendingItems.value = []
+    return
+  }
+  try {
+    pendingItems.value = await fetchPendingAttendanceRequests()
+  } catch {
+    if (!silent) showToast('승인 대기 목록을 불러오지 못했습니다.', 'error')
+    pendingItems.value = []
+  }
+}
+
 async function loadQuota() {
   if (!currentUserId.value) return
   try {
@@ -384,22 +393,18 @@ async function loadEmployees() {
 
 async function loadMonthlySummary({ silent = false } = {}) {
   if (!isAdmin.value) {
-    monthlySummaries.value = []
-    monthlySummaryRequests.value = []
+    summaryRequests.value = []
     return
   }
 
   if (!silent) summaryLoading.value = true
   try {
-    const [summaries, requests] = await Promise.all([
-      fetchAttendanceMonthlySummary(summaryYear.value, summaryMonth.value),
-      fetchApprovedAttendanceRequestsByMonth(summaryYear.value, summaryMonth.value),
-    ])
-    monthlySummaries.value = summaries
-    monthlySummaryRequests.value = requests
+    summaryRequests.value = await fetchApprovedAttendanceRequestsByMonth(
+      summaryYear.value,
+      summaryMonth.value,
+    )
   } catch {
-    monthlySummaries.value = []
-    monthlySummaryRequests.value = []
+    summaryRequests.value = []
     showToast('근태요약을 불러오지 못했습니다.', 'error')
   } finally {
     if (!silent) summaryLoading.value = false
@@ -413,27 +418,16 @@ function markLocalAttendanceMutation() {
 }
 
 async function refreshAttendanceAfterMutation() {
-  await Promise.all([loadItems({ silent: true }), loadQuota(), loadMonthlySummary({ silent: true }), loadDailyWorkRequests()])
+  await Promise.all([
+    loadItems({ silent: true }),
+    loadPendingItems({ silent: true }),
+    loadQuota(),
+    loadMonthlySummary({ silent: true }),
+    loadDailyWorkRequests(),
+  ])
 }
 
-function openSummaryDetail(summary: AttendanceMonthlySummary) {
-  summaryDetailUserName.value = summary.userName
-  summaryDetailDepartment.value = summary.department
-  summaryDetailRequests.value = monthlySummaryRequests.value.filter(
-    (item) => item.userName === summary.userName && item.department === summary.department,
-  )
-  summaryDetailVisible.value = true
-}
-
-function closeSummaryDetail() {
-  summaryDetailVisible.value = false
-  summaryDetailUserName.value = ''
-  summaryDetailDepartment.value = ''
-  summaryDetailRequests.value = []
-}
-
-async function openSummaryRequestDetail(item: AttendanceRequest) {
-  closeSummaryDetail()
+async function openSummaryRequest(item: AttendanceRequest) {
   await openDetail(item)
 }
 
@@ -448,7 +442,16 @@ watch([summaryYear, summaryMonth, isAdmin], () => {
 
 watch(() => profile.value, async (p) => {
   if (!p) return
-  await Promise.all([loadItems(), loadQuota(), loadMeta(), loadEmployees(), loadMonthlySummary(), loadDailyWorkHours(), loadDailyWorkRequests()])
+  await Promise.all([
+    loadItems(),
+    loadPendingItems(),
+    loadQuota(),
+    loadMeta(),
+    loadEmployees(),
+    loadMonthlySummary(),
+    loadDailyWorkHours(),
+    loadDailyWorkRequests(),
+  ])
 }, { immediate: true })
 
 // ─── 실시간 구독 ───────────────────────────────────────────────────────────────
@@ -458,6 +461,7 @@ onMounted(() => {
   channel = subscribeAttendanceRequests(() => {
     if (Date.now() < suppressRealtimeRefreshUntil) return
     void loadItems({ silent: true })
+    void loadPendingItems({ silent: true })
     void loadQuota()
     void loadMonthlySummary({ silent: true })
     void loadDailyWorkRequests()
@@ -821,6 +825,7 @@ async function handleDeleteEmployee(id: number) {
 <template>
   <AttendanceView
     :items="items"
+    :pending-items="pendingItems"
     :filters="filters"
     :departments="departments"
     :quota="quota"
@@ -830,11 +835,7 @@ async function handleDeleteEmployee(id: number) {
     :summary-year="summaryYear"
     :summary-month="summaryMonth"
     :summary-loading="summaryLoading"
-    :monthly-summaries="monthlySummaries"
-    :summary-detail-visible="summaryDetailVisible"
-    :summary-detail-user-name="summaryDetailUserName"
-    :summary-detail-department="summaryDetailDepartment"
-    :summary-detail-requests="summaryDetailRequests"
+    :summary-requests="summaryRequests"
     :current-user-id="currentUserId"
     :is-admin="isAdmin"
     :is-root-admin="isRootAdminUser"
@@ -860,9 +861,7 @@ async function handleDeleteEmployee(id: number) {
     @update:form-data="formData = $event"
     @update:reject-reason="rejectReason = $event"
     @update:reject-evidence-urls="rejectEvidenceUrls = $event"
-    @open-summary-detail="openSummaryDetail"
-    @close-summary-detail="closeSummaryDetail"
-    @open-summary-request-detail="openSummaryRequestDetail"
+    @open-summary-request="openSummaryRequest"
     @open-form="openForm"
     @close-form="closeForm"
     @view-history="handleViewHistory"

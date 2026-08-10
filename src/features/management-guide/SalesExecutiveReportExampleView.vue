@@ -8,6 +8,10 @@ import { normalizeCompanyType } from '@/constants/companyTypes'
 import { useDialog } from '@/composables/useDialog'
 import ReportPrintSettingsDialog from './ReportPrintSettingsDialog.vue'
 import { printManagementReport } from './reportPrint'
+import {
+  buildBuildingTypeHeadRatioItems,
+  calcNonApartmentHeadRatio,
+} from './salesReportBuildingTypeRatio'
 
 const { confirm, alert } = useDialog()
 
@@ -465,38 +469,24 @@ const yearlyMonthlySales = computed(() =>
 )
 const yearlySalesMax = computed(() => Math.max(...yearlyMonthlySales.value.map((item) => item.value), 0))
 const yearlyBarUnitHeight = (value) => (yearlySalesMax.value ? (value / yearlySalesMax.value) * 160 : 0)
-const nonApartmentRatio = computed(() => {
-  const total = salesBaselineRows.value.length
-  if (!total) return 0
-  return Math.round((salesBaselineRows.value.filter((row) => isNonApartment(row)).length / total) * 100)
-})
+const nonApartmentRatio = computed(() =>
+  calcNonApartmentHeadRatio(confirmedRows.value, { toNumber, isNonApartment }),
+)
 const buildingTypeToneClasses = [
   'border-emerald-200 bg-emerald-50 text-emerald-700',
   'border-sky-200 bg-sky-50 text-sky-700',
   'border-violet-200 bg-violet-50 text-violet-700',
   'border-amber-200 bg-amber-50 text-amber-700',
 ]
-const buildingTypeSummaryItems = computed(() => {
-  const typedRows = salesBaselineRows.value.filter((row) => Boolean(getNormalizedCompanyType(row)))
-  const total = typedRows.length
-  if (!total) return []
-
-  const counts = new Map()
-  for (const row of typedRows) {
-    const type = getNormalizedCompanyType(row)
-    if (!type) continue
-    counts.set(type, (counts.get(type) ?? 0) + 1)
-  }
-
-  return [...counts.entries()]
-    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'ko'))
-    .slice(0, 4)
-    .map(([label, count], index) => ({
-      label,
-      ratioText: formatPercent(Math.round((count / total) * 100)),
-      tone: buildingTypeToneClasses[index % buildingTypeToneClasses.length],
-    }))
-})
+const buildingTypeSummaryItems = computed(() =>
+  buildBuildingTypeHeadRatioItems(confirmedRows.value, {
+    toNumber,
+    getNormalizedCompanyType,
+    formatPercent,
+    toneClasses: buildingTypeToneClasses,
+    limit: 4,
+  }),
+)
 const targetSummary = computed(() => ({
   monthlyTarget: formatCurrency(MONTHLY_TARGET),
   achievementRate: formatPercent(salesProgress.value),

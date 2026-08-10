@@ -67,6 +67,12 @@
   margin-bottom: 16px;
 }
 
+.quality-filters .ghost-button,
+.quality-filters .primary-button,
+.quality-filters .search-input {
+  font-size: 13px;
+}
+
 .filter-left,
 .filter-right,
 .inline-field,
@@ -132,7 +138,7 @@
 
 .tiny-button {
   padding: 6px 10px;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .tiny-button.danger {

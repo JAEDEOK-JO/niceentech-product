@@ -11,14 +11,13 @@ import {
   isFinalApprovalPending,
   isGyeongyuPending,
 } from '../utils/attendanceApprover'
+import { getDeptHeadDisplayName } from '../utils/attendanceApprovalAccess'
 import {
   formatLeaveDaysCountLabel,
   getLeaveApplicationDocumentTitle,
 } from '../utils/attendanceLeaveType'
 
 const GYEONGYU_DISPLAY_NAME = '이지형'
-const BUSEOJANG_PROFILE_NAME = 'duko777@niceentech.kr'
-const BUSEOJANG_DISPLAY_NAME = '조재덕'
 const DAEPYO_PROFILE_NAME = '__daepyo__'
 const DAEPYO_DISPLAY_NAME = '이용필'
 
@@ -59,9 +58,11 @@ const managerDisplayName = computed(() => {
   return DEPARTMENT_MANAGER_BY_DEPARTMENT[department] ?? '쩌민튼'
 })
 
+const buseojangDisplayName = computed(() => getDeptHeadDisplayName(props.item.department))
+
 const approvalSigners = computed(() => [
   { role: '담당', profileName: managerDisplayName.value, displayName: managerDisplayName.value },
-  { role: '부서장', profileName: BUSEOJANG_PROFILE_NAME, displayName: BUSEOJANG_DISPLAY_NAME },
+  { role: '부서장', profileName: buseojangDisplayName.value, displayName: buseojangDisplayName.value },
   { role: '대표이사', profileName: DAEPYO_PROFILE_NAME, displayName: DAEPYO_DISPLAY_NAME },
 ] as const)
 
@@ -71,7 +72,7 @@ const isBuseojanApproved = computed(() => isDeptHeadApproved(props.item))
 const shouldShowSignature = (name: string) => {
   if (!name) return false
   if (name === managerDisplayName.value) return true
-  if (name === BUSEOJANG_PROFILE_NAME) return isBuseojanApproved.value
+  if (name === buseojangDisplayName.value) return isBuseojanApproved.value
   if (name === DAEPYO_PROFILE_NAME) return isApproved.value && !!props.item.daepyoBy
   return false
 }
@@ -87,7 +88,7 @@ const formatSignerDate = (value: string | null) => {
 }
 const getSignerDate = (profileName: string) => {
   if (profileName === managerDisplayName.value) return formatSignerDate(props.item.createdAt)
-  if (profileName === BUSEOJANG_PROFILE_NAME && isBuseojanApproved.value) return formatSignerDate(props.item.approvedAt)
+  if (profileName === buseojangDisplayName.value && isBuseojanApproved.value) return formatSignerDate(props.item.approvedAt)
   if (profileName === DAEPYO_PROFILE_NAME && isApproved.value) return formatSignerDate(props.item.daepyoAt)
   return ''
 }
@@ -224,7 +225,10 @@ const statusLabel = computed(() => {
           <th>처리상태</th>
           <td colspan="3">
             <span class="status-badge" :class="statusClass">{{ statusLabel }}</span>
-            <span v-if="isBuseojanApproved && item.approvedBy" class="meta-text">({{ item.approvedBy }})</span>
+            <span
+              v-if="isBuseojanApproved && item.approvedBy"
+              class="meta-text"
+            >({{ item.approvedBy }})</span>
             <span v-if="item.status === '승인' && item.daepyoBy" class="meta-text">({{ DAEPYO_DISPLAY_NAME }})</span>
             <span v-if="item.status === '반려' && item.rejectReason" class="reject-text">— {{ item.rejectReason }}</span>
           </td>

@@ -26,7 +26,10 @@
 - `idx_company_list_manager_id`: BTREE (`manager_id`)
 
 ### 트리거
-- 없음
+- 없음 (`company_list` 자체)
+- 연관: `product_list` 트리거 `trg_sync_company_progressed_head`
+  - `shipment` / `head` / `company_info` 변경 시 `progressed_head_count` 자동 가감
+  - 출하완료(`shipment=true`) 시 `product_list.head`만큼 증가, 출하취소 시 감소
 
 ## 컬럼 목록
 
@@ -48,6 +51,7 @@
 | business_registration_number | text | N |  | 사업자등록번호 |
 | registration_month | date | N |  | 등록 월 |
 | total_head_count | bigint | N |  | 현장 총헤드수 |
+| progressed_head_count | bigint | Y | `0` | 진행된 헤드수량 (출하완료 `product_list.head` 합계, 트리거 자동 갱신) |
 | total_screw_count | bigint | N |  | 현장 총나사수 |
 | total_supipe_count | bigint | N |  | 현장 총STS/SU수 |
 | site_completed | boolean | Y | `false` | 현장 종료 여부 |

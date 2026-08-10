@@ -13,6 +13,30 @@ const normalizeScale = (value) => {
   return Math.max(10, Math.min(200, Math.round(scale)))
 }
 
+const parseMarginToPx = (margin = '8mm') => {
+  const value = String(margin).trim()
+  const pxMatch = value.match(/^([\d.]+)px$/i)
+  if (pxMatch) return Math.max(0, Math.round(Number(pxMatch[1])))
+
+  const mmMatch = value.match(/^([\d.]+)mm$/i)
+  if (mmMatch) return Math.max(0, Math.round((Number(mmMatch[1]) * 96) / 25.4))
+
+  return null
+}
+
+/** Electron webContents.print용 여백 (CSS @page만으로는 silent 인쇄에서 반영되지 않음) */
+export const resolveElectronMargins = (margin = '8mm') => {
+  const px = parseMarginToPx(margin)
+  if (px == null) return { marginType: 'default' }
+  return {
+    marginType: 'custom',
+    top: px,
+    bottom: px,
+    left: px,
+    right: px,
+  }
+}
+
 const applyPrintPageStyle = ({ margin = '8mm' } = {}) => {
   const styleId = 'niceentech-dynamic-print-page'
   let style = document.getElementById(styleId)
@@ -51,7 +75,9 @@ export const printCurrentPage = async (isPrinting, options = {}, pageOptions = {
     scaleFactor: normalizeScale(options.scaleFactor ?? DEFAULT_PRINT_OPTIONS.scaleFactor),
   }
 
-  applyPrintPageStyle(pageOptions)
+  const margin = pageOptions.margin ?? '8mm'
+  applyPrintPageStyle({ margin })
+  const margins = pageOptions.margins ?? resolveElectronMargins(margin)
   isPrinting.value = true
   await nextTick()
 
@@ -59,6 +85,7 @@ export const printCurrentPage = async (isPrinting, options = {}, pageOptions = {
     if (window.electronAPI?.printReport) {
       const result = await window.electronAPI.printReport({
         ...printOptions,
+        margins,
         silent: true,
       })
       if (!result || result.success) return
@@ -68,6 +95,7 @@ export const printCurrentPage = async (isPrinting, options = {}, pageOptions = {
       const fallbackResult = await window.electronAPI.printReport({
         printBackground: true,
         landscape: printOptions.landscape,
+        margins,
         silent: false,
       })
       if (fallbackResult?.success || isCanceledPrint(fallbackResult)) return

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { AttendanceRequest } from '../types/attendance'
 import { formatLeaveDaysCountLabel } from '../utils/attendanceLeaveType'
+import { getAttendanceStatusLabel } from '../utils/attendanceApprover'
 import AttendanceEvidenceThumb from './AttendanceEvidenceThumb.vue'
 
 const props = defineProps<{
@@ -106,7 +107,7 @@ function actionsFor(item: AttendanceRequest): ActionDef[] {
 
 function statusLabel(item: AttendanceRequest) {
   if (item.printedAt && item.status === '승인') return '인쇄완료'
-  return item.status
+  return getAttendanceStatusLabel(item.status)
 }
 
 function statusClass(item: AttendanceRequest) {

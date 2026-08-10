@@ -16,6 +16,7 @@ import {
 } from '../types/attendance'
 import { normalizeEmployeePassword } from '../utils/employeePassword'
 import { normalizeEvidenceUrls, removeAttendanceEvidenceUrls } from '../utils/attendanceEvidence'
+import { PENDING_ATTENDANCE_STATUSES } from '../utils/attendanceApprover'
 // 연차 차감 일수 계산 (연차/병가만 일수 차감)
 const DEDUCTED_LEAVE_TYPES: string[] = ['연차', '반차(오전)', '반차(오후)', '병가']
 const normalizeAttendanceApproverName = (value: string) => String(value ?? '').replace(/\(t\)/gi, '').trim()
@@ -54,6 +55,18 @@ export async function fetchAttendanceRequests(
   }
 
   const { data, error } = await query
+  if (error) throw error
+  return (data ?? []).map((row) => mapAttendanceRequest(row as Record<string, unknown>))
+}
+
+/** 승인 대기 건만 조회 (연·월 필터 없음 — 이전 달 미승인 누락 방지) */
+export async function fetchPendingAttendanceRequests(): Promise<AttendanceRequest[]> {
+  const { data, error } = await supabase
+    .from('attendance_requests')
+    .select('*')
+    .in('status', [...PENDING_ATTENDANCE_STATUSES])
+    .order('created_at', { ascending: false })
+
   if (error) throw error
   return (data ?? []).map((row) => mapAttendanceRequest(row as Record<string, unknown>))
 }
@@ -515,13 +528,14 @@ export async function fetchApprovedAttendanceRequestsByMonth(
   const startDate = `${year}-${monthText}-01`
   const endDate = `${year}-${monthText}-${String(new Date(year, safeMonth, 0).getDate()).padStart(2, '0')}`
 
+  // 휴가 기간이 해당 월과 겹치는 승인 건 (캘린더 일자 표시용)
   const { data, error } = await supabase
     .from('attendance_requests')
     .select('*')
     .eq('status', '승인')
-    .gte('start_date', startDate)
     .lte('start_date', endDate)
-    .order('start_date', { ascending: false })
+    .gte('end_date', startDate)
+    .order('start_date', { ascending: true })
     .order('created_at', { ascending: false })
 
   if (error) throw error
