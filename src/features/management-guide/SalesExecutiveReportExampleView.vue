@@ -12,6 +12,11 @@ import {
   buildBuildingTypeHeadRatioItems,
   calcNonApartmentHeadRatio,
 } from './salesReportBuildingTypeRatio'
+import {
+  filterExpectedAllRows,
+  filterExpectedMonthRows,
+  sumOrderPieceCounts,
+} from './salesReportExpectedOrders'
 
 const { confirm, alert } = useDialog()
 
@@ -25,7 +30,6 @@ const SALES_CATEGORY_TABS = [
   { key: 'screw', label: '나사', field: 'salesAmountScrew', dbField: 'sales_amount_screw' },
   { key: 'supipe', label: 'STS/SU', field: 'salesAmountSupipe', dbField: 'sales_amount_supipe' },
 ]
-const SALES_REPORT_BASELINE_START = '2026-01-01'
 const emit = defineEmits(['go-back'])
 const props = defineProps({
   showBackButton: { type: Boolean, default: true },
@@ -100,10 +104,6 @@ const formatMonthTitle = (date) => `${date.getFullYear()}년 ${String(date.getMo
 const sanitizeMoneyInput = (value) => String(value ?? '').replace(/[^\d]/g, '')
 const getWeekLabel = (weekIndex) => ['첫째주', '둘째주', '셋째주', '넷째주', '다섯째주'][weekIndex - 1] ?? `${weekIndex}주차`
 const isCurrentMonthRow = (row) => String(row?.registration_month ?? '').slice(0, 7) === selectedSalesReportMonthValue.value.slice(0, 7)
-const isSalesBaselineRow = (row) => {
-  const raw = String(row?.registration_month ?? '').trim()
-  return Boolean(raw) && raw >= SALES_REPORT_BASELINE_START
-}
 const getNormalizedCompanyType = (row) => normalizeCompanyType(row?.company_type)
 const isNonApartment = (row) => getNormalizedCompanyType(row) !== '' && getNormalizedCompanyType(row) !== '아파트'
 const formatRegistrationMonth = (value) => {
@@ -418,9 +418,9 @@ const deleteAsEntry = async (rowId) => {
 }
 
 const currentMonthRows = computed(() => companyRows.value.filter((row) => isCurrentMonthRow(row)))
-const salesBaselineRows = computed(() => companyRows.value.filter((row) => isSalesBaselineRow(row)))
 const confirmedRows = computed(() => currentMonthRows.value.filter((row) => Boolean(row?.order_confirmed)))
-const expectedRows = computed(() => salesBaselineRows.value.filter((row) => !Boolean(row?.order_confirmed)))
+const expectedRows = computed(() => filterExpectedMonthRows(currentMonthRows.value))
+const expectedAllRows = computed(() => filterExpectedAllRows(companyRows.value))
 const selectedSalesCumulativeRows = computed(() =>
   currentSalesWeekRows.value.filter((row) => toNumber(row?.week_index) <= currentSalesWeekIndex.value),
 )
@@ -442,12 +442,18 @@ const currentSalesWeekRow = computed(() =>
   currentSalesWeekRows.value.find((row) => toNumber(row?.week_index) === currentSalesWeekIndex.value) ?? null,
 )
 const currentSalesWeekLabel = computed(() => `${selectedSalesReportMonthLabel.value} ${currentSalesWeekIndex.value}주차`)
-const confirmedHeadTotal = computed(() => confirmedRows.value.reduce((sum, row) => sum + toNumber(row?.total_head_count), 0))
-const expectedHeadTotal = computed(() => expectedRows.value.reduce((sum, row) => sum + toNumber(row?.total_head_count), 0))
-const confirmedScrewTotal = computed(() => confirmedRows.value.reduce((sum, row) => sum + toNumber(row?.total_screw_count), 0))
-const confirmedSupipeTotal = computed(() => confirmedRows.value.reduce((sum, row) => sum + toNumber(row?.total_supipe_count), 0))
-const expectedScrewTotal = computed(() => expectedRows.value.reduce((sum, row) => sum + toNumber(row?.total_screw_count), 0))
-const expectedSupipeTotal = computed(() => expectedRows.value.reduce((sum, row) => sum + toNumber(row?.total_supipe_count), 0))
+const confirmedCounts = computed(() => sumOrderPieceCounts(confirmedRows.value, toNumber))
+const expectedCounts = computed(() => sumOrderPieceCounts(expectedRows.value, toNumber))
+const expectedAllCounts = computed(() => sumOrderPieceCounts(expectedAllRows.value, toNumber))
+const confirmedHeadTotal = computed(() => confirmedCounts.value.head)
+const expectedHeadTotal = computed(() => expectedCounts.value.head)
+const confirmedScrewTotal = computed(() => confirmedCounts.value.screw)
+const confirmedSupipeTotal = computed(() => confirmedCounts.value.supipe)
+const expectedScrewTotal = computed(() => expectedCounts.value.screw)
+const expectedSupipeTotal = computed(() => expectedCounts.value.supipe)
+const expectedAllHeadTotal = computed(() => expectedAllCounts.value.head)
+const expectedAllScrewTotal = computed(() => expectedAllCounts.value.screw)
+const expectedAllSupipeTotal = computed(() => expectedAllCounts.value.supipe)
 const formatPieces = (value) => `${Number(value || 0).toLocaleString('ko-KR')}개`
 const yearlyMonthlySales = computed(() =>
   Array.from({ length: reportMonth + 1 }, (_, index) => {
@@ -470,7 +476,7 @@ const yearlyMonthlySales = computed(() =>
 const yearlySalesMax = computed(() => Math.max(...yearlyMonthlySales.value.map((item) => item.value), 0))
 const yearlyBarUnitHeight = (value) => (yearlySalesMax.value ? (value / yearlySalesMax.value) * 160 : 0)
 const nonApartmentRatio = computed(() =>
-  calcNonApartmentHeadRatio(confirmedRows.value, { toNumber, isNonApartment }),
+  calcNonApartmentHeadRatio(currentMonthRows.value, { toNumber, isNonApartment }),
 )
 const buildingTypeToneClasses = [
   'border-emerald-200 bg-emerald-50 text-emerald-700',
@@ -479,7 +485,7 @@ const buildingTypeToneClasses = [
   'border-amber-200 bg-amber-50 text-amber-700',
 ]
 const buildingTypeSummaryItems = computed(() =>
-  buildBuildingTypeHeadRatioItems(confirmedRows.value, {
+  buildBuildingTypeHeadRatioItems(currentMonthRows.value, {
     toNumber,
     getNormalizedCompanyType,
     formatPercent,
@@ -497,9 +503,11 @@ const targetSummary = computed(() => ({
 const asTotalCost = computed(() => asRows.value.reduce((sum, row) => sum + toNumber(row?.cost), 0))
 const confirmedCombinedTotal = computed(() => confirmedHeadTotal.value + confirmedScrewTotal.value + confirmedSupipeTotal.value)
 const expectedCombinedTotal = computed(() => expectedHeadTotal.value + expectedScrewTotal.value + expectedSupipeTotal.value)
+const expectedAllCombinedTotal = computed(() => expectedAllHeadTotal.value + expectedAllScrewTotal.value + expectedAllSupipeTotal.value)
 const summaryCards = computed(() => [
   { label: '신규 수주', value: formatPieces(confirmedCombinedTotal.value), note: `헤드 ${formatPieces(confirmedHeadTotal.value)} · 나사 ${formatPieces(confirmedScrewTotal.value)} · STS/SU ${formatPieces(confirmedSupipeTotal.value)}`, tone: 'bg-emerald-50 border-emerald-200 text-emerald-800', clickable: false },
-  { label: '신규 수주 예정', value: formatPieces(expectedCombinedTotal.value), note: `헤드 ${formatPieces(expectedHeadTotal.value)} · 나사 ${formatPieces(expectedScrewTotal.value)} · STS/SU ${formatPieces(expectedSupipeTotal.value)}`, tone: 'bg-indigo-50 border-indigo-200 text-indigo-800', clickable: false },
+  { label: '신규 수주 예정 (월별)', value: formatPieces(expectedCombinedTotal.value), note: `헤드 ${formatPieces(expectedHeadTotal.value)} · 나사 ${formatPieces(expectedScrewTotal.value)} · STS/SU ${formatPieces(expectedSupipeTotal.value)}`, tone: 'bg-indigo-50 border-indigo-200 text-indigo-800', clickable: false },
+  { label: '신규 수주 예정 (전체)', value: formatPieces(expectedAllCombinedTotal.value), note: `헤드 ${formatPieces(expectedAllHeadTotal.value)} · 나사 ${formatPieces(expectedAllScrewTotal.value)} · STS/SU ${formatPieces(expectedAllSupipeTotal.value)}`, tone: 'bg-violet-50 border-violet-200 text-violet-800', clickable: false },
   { label: 'AS 발생 건수', value: `${asRows.value.length}건`, note: `${selectedSalesReportMonthLabel.value} 접수 누계`, tone: 'bg-rose-50 border-rose-200 text-rose-800', clickable: true },
   { label: 'AS 발생 비용', value: formatCurrency(asTotalCost.value), note: `${selectedSalesReportMonthLabel.value} 접수 비용 합계`, tone: 'bg-amber-50 border-amber-200 text-amber-800', clickable: false },
 ])
@@ -738,7 +746,7 @@ onBeforeUnmount(revokeAsPreviewUrls)
           </section>
 
           <section class="rounded-2xl border border-slate-200 bg-white p-2">
-            <div class="sales-print-grid-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            <div class="sales-print-grid-5 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
               <button v-for="card in summaryCards" :key="card.label" type="button" class="rounded-2xl border p-4 text-left" :class="[card.tone, card.clickable ? 'cursor-pointer transition hover:shadow-sm' : 'cursor-default']" @click="card.clickable ? goAsListPage() : null">
                 <p class="text-[13px] font-bold">{{ card.label }}</p>
                 <p class="mt-2 text-2xl font-extrabold">{{ card.value }}</p>
@@ -806,8 +814,8 @@ onBeforeUnmount(revokeAsPreviewUrls)
           <section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
             <div class="flex items-center justify-between gap-3">
               <div>
-                <p class="text-[13px] font-extrabold text-slate-900">신규 수주 예정 목록</p>
-                <p class="mt-1 text-[12px] text-slate-500">2026년 1월 이후 등록 예정</p>
+                <p class="text-[13px] font-extrabold text-slate-900">신규 수주 예정 목록 (월별)</p>
+                <p class="mt-1 text-[12px] text-slate-500">{{ selectedSalesReportMonthLabel }} 등록 예정</p>
               </div>
               <span class="rounded-full bg-indigo-100 px-3 py-1 text-[11px] font-bold text-indigo-700">{{ expectedRows.length }}건</span>
             </div>
@@ -815,8 +823,27 @@ onBeforeUnmount(revokeAsPreviewUrls)
               <table class="min-w-full border-separate border-spacing-0 text-sm">
                 <thead><tr class="bg-slate-50 text-slate-600"><th class="border border-slate-200 px-3 py-2 text-center">등록월</th><th class="border border-slate-200 px-3 py-2 text-center">회사</th><th class="border border-slate-200 px-3 py-2 text-center">현장</th><th class="border border-slate-200 px-3 py-2 text-center">예상 헤드수</th><th class="border border-slate-200 px-3 py-2 text-center">건물종류</th></tr></thead>
                 <tbody>
-                  <tr v-if="expectedRows.length === 0" class="bg-white"><td colspan="5" class="border border-slate-200 px-3 py-8 text-center text-slate-500">2026년 1월 이후 수주예정이 없습니다.</td></tr>
+                  <tr v-if="expectedRows.length === 0" class="bg-white"><td colspan="5" class="border border-slate-200 px-3 py-8 text-center text-slate-500">이번 달 수주예정이 없습니다.</td></tr>
                   <tr v-for="row in expectedRows" :key="row.id" class="bg-white"><td class="border border-slate-200 px-3 py-2 text-center">{{ formatRegistrationMonth(row.registration_month) }}</td><td class="border border-slate-200 px-3 py-2 text-center">{{ row.company || '-' }}</td><td class="border border-slate-200 px-3 py-2 text-center">{{ row.place || '-' }}</td><td class="border border-slate-200 px-3 py-2 text-center font-semibold text-slate-900">{{ formatHead(row.total_head_count) }}</td><td class="border border-slate-200 px-3 py-2 text-center">{{ getNormalizedCompanyType(row) || '-' }}</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <p class="text-[13px] font-extrabold text-slate-900">신규 수주 예정 목록 (전체)</p>
+                <p class="mt-1 text-[12px] text-slate-500">2026년 1월 이후 미확정</p>
+              </div>
+              <span class="rounded-full bg-violet-100 px-3 py-1 text-[11px] font-bold text-violet-700">{{ expectedAllRows.length }}건</span>
+            </div>
+            <div class="mt-4 overflow-x-auto">
+              <table class="min-w-full border-separate border-spacing-0 text-sm">
+                <thead><tr class="bg-slate-50 text-slate-600"><th class="border border-slate-200 px-3 py-2 text-center">등록월</th><th class="border border-slate-200 px-3 py-2 text-center">회사</th><th class="border border-slate-200 px-3 py-2 text-center">현장</th><th class="border border-slate-200 px-3 py-2 text-center">예상 헤드수</th><th class="border border-slate-200 px-3 py-2 text-center">건물종류</th></tr></thead>
+                <tbody>
+                  <tr v-if="expectedAllRows.length === 0" class="bg-white"><td colspan="5" class="border border-slate-200 px-3 py-8 text-center text-slate-500">수주예정이 없습니다.</td></tr>
+                  <tr v-for="row in expectedAllRows" :key="row.id" class="bg-white"><td class="border border-slate-200 px-3 py-2 text-center">{{ formatRegistrationMonth(row.registration_month) }}</td><td class="border border-slate-200 px-3 py-2 text-center">{{ row.company || '-' }}</td><td class="border border-slate-200 px-3 py-2 text-center">{{ row.place || '-' }}</td><td class="border border-slate-200 px-3 py-2 text-center font-semibold text-slate-900">{{ formatHead(row.total_head_count) }}</td><td class="border border-slate-200 px-3 py-2 text-center">{{ getNormalizedCompanyType(row) || '-' }}</td></tr>
                 </tbody>
               </table>
             </div>
@@ -1083,8 +1110,8 @@ onBeforeUnmount(revokeAsPreviewUrls)
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
 
-  .sales-print-grid-4 {
-    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  .sales-print-grid-5 {
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
   }
 }
 </style>
