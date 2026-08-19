@@ -364,7 +364,7 @@ export function useProductionPlan(session) {
     planError.value = ''
 
     const legacyBaseColumns =
-      'id,no,company_info,uid,initial,company,place,area,memo,full_text,work_type,hole,head,groove,weight,name,test_date,welding_schedule_date,welding_schedule_inspector,drawing,is_drawing,drawing_date,delivery_due_date,delay_time,delay_text,complete,complete_date,shipment,not_test,hold,outsourcing,paper,calculation,ahn,stamp,worker_t,worker_t_time,worker_t_time_final,worker_main,worker_main_time,worker_main_time_final,worker_nasa,worker_nasa_time,worker_nasa_time_final,worker_welding,worker_welding_time,worker_welding_time_final,marking_weld_a_status,marking_weld_a_started_on,marking_weld_a_completed_on,marking_weld_b_status,marking_weld_b_started_on,marking_weld_b_completed_on,marking_laser_1_status,marking_laser_1_started_on,marking_laser_1_completed_on,marking_laser_2_status,marking_laser_2_started_on,marking_laser_2_completed_on,cutting_status,beveling_status,beveling_started_on,beveling_completed_on,main_status,main_started_on,main_completed_on,nasa_status,nasa_started_on,nasa_completed_on,welding_status,welding_started_on,welding_completed_on,welding_inspector'
+      'id,no,company_info,uid,initial,company,place,area,memo,full_text,work_type,hole,head,groove,weight,name,test_date,welding_schedule_date,welding_schedule_inspector,drawing,is_drawing,drawing_date,delivery_due_date,delay_time,delay_text,complete,complete_date,shipment,not_test,hold,outsourcing,paper,calculation,ahn,stamp,nasa_mark,worker_t,worker_t_time,worker_t_time_final,worker_main,worker_main_time,worker_main_time_final,worker_nasa,worker_nasa_time,worker_nasa_time_final,worker_welding,worker_welding_time,worker_welding_time_final,marking_weld_a_status,marking_weld_a_started_on,marking_weld_a_completed_on,marking_weld_b_status,marking_weld_b_started_on,marking_weld_b_completed_on,marking_laser_1_status,marking_laser_1_started_on,marking_laser_1_completed_on,marking_laser_2_status,marking_laser_2_started_on,marking_laser_2_completed_on,cutting_status,beveling_status,beveling_started_on,beveling_completed_on,main_status,main_started_on,main_completed_on,nasa_status,nasa_started_on,nasa_completed_on,welding_status,welding_started_on,welding_completed_on,welding_inspector'
     const baseColumns = legacyBaseColumns.replace('groove,weight', 'groove,inch,weight')
     const withVirtualColumns = `${baseColumns},virtual_drawing_distributed`
     const legacyWithVirtualColumns = `${legacyBaseColumns},virtual_drawing_distributed`
@@ -382,14 +382,25 @@ export function useProductionPlan(session) {
         .order('area', { ascending: true })
     }
 
-    let { data, error } = await runQuery(withVirtualColumns)
+    const stripNasaMark = (columns) => String(columns).replace(',nasa_mark,', ',')
+    const runQueryWithNasaMarkFallback = async (columns) => {
+      let result = await runQuery(columns)
+      if (result.error && String(result.error.message ?? '').includes('nasa_mark')) {
+        usedNasaMarkFallback = true
+        result = await runQuery(stripNasaMark(columns))
+      }
+      return result
+    }
+
     let usedLegacyInchFallback = false
+    let usedNasaMarkFallback = false
+    let { data, error } = await runQueryWithNasaMarkFallback(withVirtualColumns)
     if (error && String(error.message ?? '').includes('inch')) {
       usedLegacyInchFallback = true
-      ;({ data, error } = await runQuery(legacyWithVirtualColumns))
+      ;({ data, error } = await runQueryWithNasaMarkFallback(legacyWithVirtualColumns))
     }
     if (error && String(error.message ?? '').includes('virtual_drawing_distributed')) {
-      ;({ data, error } = await runQuery(usedLegacyInchFallback ? legacyBaseColumns : baseColumns))
+      ;({ data, error } = await runQueryWithNasaMarkFallback(usedLegacyInchFallback ? legacyBaseColumns : baseColumns))
     }
 
     if (!silent) planLoading.value = false
@@ -400,9 +411,11 @@ export function useProductionPlan(session) {
       return
     }
 
-    planRows.value = usedLegacyInchFallback
-      ? (data ?? []).map((row) => ({ ...row, inch: null }))
-      : data ?? []
+    planRows.value = (data ?? []).map((row) => ({
+      ...row,
+      ...(usedLegacyInchFallback ? { inch: null } : {}),
+      ...(usedNasaMarkFallback ? { nasa_mark: false } : {}),
+    }))
     await refreshCncProductListIds()
   }
 

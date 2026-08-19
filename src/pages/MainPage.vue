@@ -56,12 +56,7 @@ const goRegister = () => {
   })
 }
 const goStats = () => {
-  router.push({
-    name: 'stats',
-    query: {
-      testDate: selectedTuesdayIso.value,
-    },
-  })
+  router.push({ name: 'stats' })
 }
 const goCnc = () => {
   router.push({ name: 'cnc' })
@@ -398,6 +393,14 @@ const handleCellAction = async ({ row, columnKey, reset = false }) => {
     await updatePlanRowFields({
       rowId: row.id,
       updates: { stamp: !Boolean(row.stamp) },
+    })
+    return
+  }
+
+  if (columnKey === 'head') {
+    await updatePlanRowFields({
+      rowId: row.id,
+      updates: { nasa_mark: !Boolean(row.nasa_mark) },
     })
     return
   }

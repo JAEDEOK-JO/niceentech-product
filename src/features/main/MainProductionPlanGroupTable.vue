@@ -18,7 +18,7 @@ const props = defineProps({
   showFullDates: { type: Boolean, default: false },
 })
 
-const clickableColumns = ['initial', 'design_distributed', 'name', 'company', 'place', 'area', 'drawing', 'worker_t', 'worker_nasa', 'worker_main', 'worker_welding', 'inch']
+const clickableColumns = ['initial', 'design_distributed', 'name', 'company', 'place', 'area', 'drawing', 'worker_t', 'worker_nasa', 'worker_main', 'worker_welding', 'inch', 'head']
 const tableBorderStyle = {
   borderColor: 'rgba(0, 0, 0, 0.28)',
   borderWidth: '0.1px',
@@ -119,9 +119,14 @@ const tableWidthStyle = {
           </button>
         </div>
         <div class="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-slate-700">
-          <p class="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 font-semibold whitespace-nowrap">
+          <button
+            type="button"
+            class="inline-flex items-center rounded-full px-2.5 py-1 font-semibold whitespace-nowrap"
+            :class="row.nasa_mark ? 'bg-orange-100 text-orange-900' : 'bg-slate-100 text-slate-700'"
+            @click="onCellClick(row, 'head')"
+          >
             헤드 {{ displayCellText(row, 'head') || '' }}
-          </p>
+          </button>
           <p class="inline-flex items-center rounded-full bg-sky-50 px-2.5 py-1 font-semibold text-sky-700 whitespace-nowrap">
             홀 {{ displayCellText(row, 'hole') || '' }}
           </p>

@@ -214,6 +214,8 @@ export const getBodyCellClass = (row, column) => {
     classes.push('bg-blue-300')
   } else if (column.key === 'initial' && Boolean(row?.stamp)) {
     classes.push('bg-yellow-200')
+  } else if (column.key === 'head' && Boolean(row?.nasa_mark)) {
+    classes.push('bg-orange-100', 'text-orange-900')
   } else if (column.key === 'drawing' && Boolean(row?.is_drawing)) {
     classes.push('bg-orange-100', 'text-orange-800')
   } else if (column.key === 'drawing') {

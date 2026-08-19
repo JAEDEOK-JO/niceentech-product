@@ -82,6 +82,7 @@
 | worker_welding_time_final | text | N |  | 용접공정 최종시간 |
 | company_info | bigint | N |  | FK -> `company_list.id` |
 | stamp | boolean | N | `false` | 도장/스탬프 여부 |
+| nasa_mark | boolean | N | `false` | 나사 표시 여부 |
 | worker_main_time | text | N | `''::text` | 메인공정 처리시간 |
 | worker_main_time_final | text | N | `''::text` | 메인공정 최종시간 |
 | worker_main | text | N | `''::text` | 메인공정 담당 상태 |
