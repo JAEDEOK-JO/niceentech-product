@@ -1,5 +1,8 @@
+import { nextTick } from 'vue'
 import { resolveElectronMargins } from '@/features/printing/pagePrint'
 import { buildShipmentSpecPrintHtml } from './shipmentSpecPrintHtml'
+
+const STYLE_ID = 'shipment-spec-print-page'
 
 const isCanceledPrint = (result) => (
   result?.errorType === 'Print job canceled' ||
@@ -18,7 +21,36 @@ const getDefaultPrinterName = async () => {
   }
 }
 
-export const printShipmentSpec = async (isPrinting, { landscape = false } = {}) => {
+const applyShipmentSpecPageStyle = (landscape) => {
+  if (typeof document === 'undefined') return
+  let style = document.getElementById(STYLE_ID)
+  if (!style) {
+    style = document.createElement('style')
+    style.id = STYLE_ID
+    document.head.appendChild(style)
+  }
+  style.textContent = `
+@media print {
+  @page {
+    size: A4 ${landscape ? 'landscape' : 'portrait'};
+    margin: 0;
+  }
+}`
+}
+
+const clearShipmentSpecPageStyle = () => {
+  if (typeof document === 'undefined') return
+  document.getElementById(STYLE_ID)?.remove()
+}
+
+const printInBrowser = async (landscape) => {
+  applyShipmentSpecPageStyle(landscape)
+  await nextTick()
+  window.print()
+  clearShipmentSpecPageStyle()
+}
+
+export const printShipmentSpec = async (isPrinting, { landscape = false, deviceName = '' } = {}) => {
   if (typeof window === 'undefined') return
 
   const root = document.querySelector('.shipment-spec-print-root')
@@ -30,12 +62,12 @@ export const printShipmentSpec = async (isPrinting, { landscape = false } = {}) 
   isPrinting.value = true
   try {
     if (!window.electronAPI?.printHtmlDocument) {
-      window.alert('인쇄는 앱에서만 됩니다.')
+      await printInBrowser(landscape)
       return
     }
 
     const html = await buildShipmentSpecPrintHtml(root, landscape)
-    const deviceName = await getDefaultPrinterName()
+    const printerName = String(deviceName || '').trim() || await getDefaultPrinterName()
     const result = await window.electronAPI.printHtmlDocument({
       html,
       landscape,
@@ -43,7 +75,7 @@ export const printShipmentSpec = async (isPrinting, { landscape = false } = {}) 
       silent: true,
       scaleFactor: 100,
       margins: resolveElectronMargins('0mm'),
-      ...(deviceName ? { deviceName } : {}),
+      ...(printerName ? { deviceName: printerName } : {}),
     })
 
     if (result?.success || isCanceledPrint(result)) return

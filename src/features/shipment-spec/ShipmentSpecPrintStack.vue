@@ -13,6 +13,7 @@ defineProps({
       v-for="(sheet, index) in sheets"
       :key="index"
       class="shipment-spec-print-item"
+      :class="{ 'is-landscape': landscape }"
     >
       <ShipmentSpecForm :form="sheet" :landscape="landscape" />
     </div>

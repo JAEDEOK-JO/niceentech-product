@@ -50,19 +50,22 @@ const handleClose = () => {
   closeDialog()
 }
 
-const runPrint = async (row, remarks, landscape) => {
+const runPrint = async (row, remarks, landscape, deviceName = '') => {
   printLandscape.value = Boolean(landscape)
   printSheets.value = buildShipmentSpecPrintSheets(row, remarks)
   await nextTick()
   await new Promise((resolve) => setTimeout(resolve, 200))
   try {
-    await printShipmentSpec(isPrinting, { landscape: printLandscape.value })
+    await printShipmentSpec(isPrinting, {
+      landscape: printLandscape.value,
+      deviceName,
+    })
   } finally {
     printSheets.value = []
   }
 }
 
-const handleDialogPrint = async () => {
+const handleDialogPrint = async (options = {}) => {
   const remarks = remarksForPrint()
   const landscape = orientation.value === 'landscape'
   try {
@@ -72,7 +75,7 @@ const handleDialogPrint = async () => {
     window.alert(error?.message ?? '저장 실패')
     return
   }
-  await runPrint(selectedRow.value, remarks, landscape)
+  await runPrint(selectedRow.value, remarks, landscape, options.deviceName)
 }
 </script>
 
