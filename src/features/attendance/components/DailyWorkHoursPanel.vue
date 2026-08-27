@@ -22,7 +22,7 @@ const emit = defineEmits<{
   (e: 'refresh'): void
   (e: 'delete', payload: { workDate: string; employeeId: number }): void
   (e: 'deleteAll', payload: { workDate: string; employeeIds: number[] }): void
-  (e: 'update', payload: { workDate: string; employeeId: number; endTime: string }): void
+  (e: 'save', records: { workDate: string; employeeId: number; endTime: string }[]): void
   (e: 'selectDate', workDate: string): void
 }>()
 
@@ -59,7 +59,6 @@ interface CalendarDay {
 interface SelectedDetailKey {
   workDate: string
   department: string
-  endTime: string
 }
 
 const selectedDetail = ref<SelectedDetailKey | null>(null)
@@ -228,7 +227,6 @@ function openDetail(group: BadgeGroup) {
   selectedDetail.value = {
     workDate: group.workDate,
     department: group.department,
-    endTime: group.endTime,
   }
 }
 
@@ -239,19 +237,25 @@ function closeDetail() {
 const selectedDetailGroup = computed<BadgeGroup | null>(() => {
   if (!selectedDetail.value) return null
   const key = selectedDetail.value
-  const group = badgesByDate.value
-    .get(key.workDate)
-    ?.find((item) => item.department === key.department && item.endTime === key.endTime)
+  const groups = (badgesByDate.value.get(key.workDate) ?? []).filter((item) => item.department === key.department)
+  const detailRows = groups
+    .flatMap((item) => item.rows)
+    .slice()
+    .sort((left, right) => {
+      const time = left.endTime.localeCompare(right.endTime)
+      if (time !== 0) return time
+      return left.name.localeCompare(right.name, 'ko')
+    })
+  const times = [...new Set(detailRows.map((row) => row.endTime))]
 
-  if (group) return group
   return {
     workDate: key.workDate,
     department: key.department,
-    endTime: key.endTime,
-    label: labelOfTime(key.endTime),
-    count: 0,
+    endTime: times[0] ?? '',
+    label: times.map((time) => labelOfTime(time)).join(' · '),
+    count: detailRows.length,
     total: getDepartmentTotal(key.department, key.workDate),
-    rows: [],
+    rows: detailRows,
   }
 })
 
@@ -263,8 +267,8 @@ function handleDeleteAll(payload: { workDate: string; employeeIds: number[] }) {
   emit('deleteAll', payload)
 }
 
-function handleUpdate(payload: { workDate: string; employeeId: number; endTime: string }) {
-  emit('update', payload)
+function handleSave(records: { workDate: string; employeeId: number; endTime: string }[]) {
+  emit('save', records)
 }
 
 function setMobileDayRef(workDate: string, el: Element | null) {
@@ -473,7 +477,7 @@ watch(
       :employees="employees"
       :requests="requests"
       @close="closeDetail"
-      @update="handleUpdate"
+      @save="handleSave"
       @delete="handleDelete"
       @delete-all="handleDeleteAll"
     />

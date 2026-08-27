@@ -12,6 +12,12 @@ import {
   preserveWorkerDoneStatus,
 } from '@/utils/productionStatus'
 import { fetchCncProductListIdSet } from '@/features/cnc/services/cnc.service'
+import {
+  DEFAULT_PLAN_SORT_DIR,
+  DEFAULT_PLAN_SORT_KEY,
+  nextPlanSort,
+  sortPlanRows,
+} from '@/features/main/productionPlanSort'
 
 const PRODUCT_LIST_TABLE = 'product_list'
 const workTypeGroups = ['용접/무용접', '전실/입상', '나사', '기타']
@@ -217,39 +223,6 @@ const isActualDistributedRow = (row) => Boolean(row?.drawing_date)
 const isVirtualDistributedRow = (row) =>
   !isActualDistributedRow(row) && Boolean(row?.virtual_drawing_distributed)
 const isDistributedRow = (row) => isActualDistributedRow(row) || isVirtualDistributedRow(row)
-const isCompletedRow = (row) => Boolean(row?.complete)
-
-const isEffectivelyCompleted = (row) =>
-  Boolean(row?.complete) ||
-  isWorkerDoneStatus(row?.worker_t) ||
-  isWorkerDoneStatus(row?.worker_main)
-
-const sortRowsByPriority = (rows) => {
-  return [...rows].sort((a, b) => {
-    const rank = (row) => {
-      const distributed = isDistributedRow(row)
-      const completed = isEffectivelyCompleted(row)
-      // 0: 배포됨(작업안됨), 1: 작업완료, 2: 도면배포 안됨(미배포)
-      if (distributed && !completed) return 0
-      if (completed) return 1
-      return 2
-    }
-
-    const compareText = (left, right) =>
-      String(left ?? '')
-        .trim()
-        .localeCompare(String(right ?? '').trim(), 'ko')
-
-    const aRank = rank(a)
-    const bRank = rank(b)
-    if (aRank !== bRank) return aRank - bRank
-    const companyCompare = compareText(a?.company, b?.company)
-    if (companyCompare !== 0) return companyCompare
-    const placeCompare = compareText(a?.place, b?.place)
-    if (placeCompare !== 0) return placeCompare
-    return compareText(a?.area, b?.area)
-  })
-}
 
 const canControlStage = (workMan, stageKey) => {
   const normalized = normalizeWorkMan(workMan)
@@ -282,6 +255,8 @@ export function useProductionPlan(session) {
   const searchText = ref('')
   const searchAllDates = ref(false)
   const realtimeConnected = ref(false)
+  const sortKey = ref(DEFAULT_PLAN_SORT_KEY)
+  const sortDir = ref(DEFAULT_PLAN_SORT_DIR)
   let productListChannel = null
 
   const weekOffset = computed(() => {
@@ -433,7 +408,7 @@ export function useProductionPlan(session) {
     }
 
     return workTypeGroups.map((group) => {
-      const sortedRows = sortRowsByPriority(map[group])
+      const sortedRows = sortPlanRows(map[group], sortKey.value, sortDir.value)
       const indexedRows = sortedRows.map((row, index) => ({
         ...row,
         no: index + 1,
@@ -616,8 +591,10 @@ export function useProductionPlan(session) {
       return { ok: false, reason: 'cross_group_not_allowed' }
     }
 
-    const groupRows = sortRowsByPriority(
+    const groupRows = sortPlanRows(
       planRows.value.filter((r) => normalizeWorkType(r.work_type) === sourceGroup),
+      sortKey.value,
+      sortDir.value,
     )
     const from = groupRows.findIndex((r) => r.id === sourceRowId)
     const to = groupRows.findIndex((r) => r.id === targetRowId)
@@ -645,6 +622,12 @@ export function useProductionPlan(session) {
     }
     planRows.value = nextRows
     return { ok: true }
+  }
+
+  const togglePlanSort = (columnKey) => {
+    const next = nextPlanSort(sortKey.value, sortDir.value, columnKey)
+    sortKey.value = next.key
+    sortDir.value = next.dir
   }
 
   const updateRowMenu = async ({
@@ -1065,6 +1048,9 @@ export function useProductionPlan(session) {
     resetWeek,
     setSelectedTuesday,
     groupedRows,
+    sortKey,
+    sortDir,
+    togglePlanSort,
     totals,
     toggleWorkStatus,
     reorderByNo,

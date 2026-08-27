@@ -27,6 +27,7 @@ import { isDeptHeadPending, isFinalApprovalPending, isGyeongyuPending } from '..
 import { formatLeaveDaysCountLabel, isHalfDayLeaveType, LEAVE_TYPE_ABSENCE, LEAVE_TYPE_HOME, LEAVE_TYPE_OUTING } from '../utils/attendanceLeaveType'
 
 type AdminTab = 'requests' | 'employees' | 'summary' | 'analysis' | 'approval' | 'daepyo' | 'gyeongyu' | 'workhours'
+type UserTab = 'leave' | 'workhours'
 
 const props = defineProps<{
   items: AttendanceRequest[]
@@ -100,14 +101,13 @@ const emit = defineEmits<{
   (e: 'createEmployee', data: EmployeeFormData): void
   (e: 'updateEmployee', payload: { id: number; data: EmployeeFormData }): void
   (e: 'deleteEmployee', id: number): void
-  (e: 'workTimeEntry'): void
   (e: 'openFormForEmployee', employee: Employee): void
   (e: 'saveDailyWorkHours', records: { employeeId: number; endTime: string }[]): void
   (e: 'refreshDailyWorkHours'): void
   (e: 'deleteDailyWorkHour', payload: { workDate: string; employeeId: number }): void
   (e: 'deleteDailyWorkHoursBulk', payload: { workDate: string; employeeIds: number[] }): void
   (e: 'selectDailyWorkDate', workDate: string): void
-  (e: 'updateDailyWorkHour', payload: { workDate: string; employeeId: number; endTime: string }): void
+  (e: 'updateDailyWorkHours', records: { workDate: string; employeeId: number; endTime: string }[]): void
   (e: 'viewHistory', payload: { name: string; department: string }): void
 }>()
 
@@ -141,6 +141,12 @@ function onKeypadSuccess(emp: Employee) {
 
 // 관리자 탭
 const activeTab = ref<AdminTab>('requests')
+const userTab = ref<UserTab>('leave')
+
+const userTabBtnClass = (tab: UserTab) =>
+  userTab.value === tab
+    ? 'bg-slate-900 text-white'
+    : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'
 
 const tabBtnClass = (tab: AdminTab) =>
   activeTab.value === tab
@@ -341,7 +347,7 @@ watch(
         >작업시간</button>
       </div>
 
-      <!-- ═══ 금일 작업시간 탭 (관리자) ═══ -->
+      <!-- ═══ 작업시간 달력 (관리자) ═══ -->
       <DailyWorkHoursPanel
         v-if="isAdmin && activeTab === 'workhours'"
         :employees="employees"
@@ -353,7 +359,7 @@ watch(
         @refresh="emit('refreshDailyWorkHours')"
         @delete="emit('deleteDailyWorkHour', $event)"
         @delete-all="emit('deleteDailyWorkHoursBulk', $event)"
-        @update="emit('updateDailyWorkHour', $event)"
+        @save="emit('updateDailyWorkHours', $event)"
         @select-date="emit('selectDailyWorkDate', $event)"
       />
 
@@ -445,8 +451,38 @@ watch(
 
       <!-- ═══ 일반 사용자 뷰 ═══ -->
       <template v-if="!isAdmin">
+        <div class="mb-5 flex flex-wrap gap-1 rounded-xl border border-slate-200 bg-white p-1 w-fit">
+          <button
+            type="button"
+            class="rounded-lg px-3.5 py-2 text-sm font-bold transition-colors"
+            :class="userTabBtnClass('leave')"
+            @click="userTab = 'leave'"
+          >휴가 신청</button>
+          <button
+            type="button"
+            class="rounded-lg px-3.5 py-2 text-sm font-bold transition-colors"
+            :class="userTabBtnClass('workhours')"
+            @click="userTab = 'workhours'"
+          >작업시간</button>
+        </div>
+
+        <DailyWorkHoursPanel
+          v-if="userTab === 'workhours'"
+          :employees="employees"
+          :requests="dailyWorkRequests"
+          :work-hours="dailyWorkHours"
+          :work-date="todayWorkDate"
+          :loading="dailyWorkHoursLoading"
+          @open-input="openWorkHoursDialog"
+          @refresh="emit('refreshDailyWorkHours')"
+          @delete="emit('deleteDailyWorkHour', $event)"
+          @delete-all="emit('deleteDailyWorkHoursBulk', $event)"
+          @save="emit('updateDailyWorkHours', $event)"
+          @select-date="emit('selectDailyWorkDate', $event)"
+        />
+
         <!-- 내 연차 현황 -->
-        <div v-if="quota" class="mb-5 rounded-2xl border border-slate-200 bg-white p-4">
+        <div v-if="userTab === 'leave' && quota" class="mb-5 rounded-2xl border border-slate-200 bg-white p-4">
           <div class="mb-2 flex items-center justify-between text-sm">
             <span class="font-bold text-slate-700">내 연차 현황</span>
             <span class="text-slate-500">{{ quota.usedDays }} / {{ quota.totalDays }}일 사용</span>
@@ -461,7 +497,7 @@ watch(
         </div>
 
         <!-- 직원 명단 -->
-        <div class="rounded-2xl border border-slate-200 bg-white p-5">
+        <div v-if="userTab === 'leave'" class="rounded-2xl border border-slate-200 bg-white p-5">
           <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
             <h2 class="text-base font-extrabold text-slate-800">
               {{ selectedDirectoryDept ? `${selectedDirectoryDept} 직원 명단` : '직원 명단' }}

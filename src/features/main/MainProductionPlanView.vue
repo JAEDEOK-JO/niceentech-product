@@ -10,6 +10,7 @@ import { useDialog } from '@/composables/useDialog'
 import { isAdminRole, isProductionAdmin } from '@/utils/adminAccess'
 import { WELDING_INSPECTORS, getWeldingInspectorClass } from '@/utils/productionStatus'
 import { sanitizeDecimalOne } from '@/features/main/productionPlanNumbers'
+import { PLAN_SORT_COLUMNS } from '@/features/main/productionPlanSort'
 import { WELDING_SCHEDULE_PERMISSION_ERROR } from '@/features/welding-schedule/utils/weldingSchedulePermission'
 import CncPlanRegisterDialog from '@/features/cnc/components/CncPlanRegisterDialog.vue'
 import { vVirtualKeyboard } from '@/features/virtual-keyboard/directives/vVirtualKeyboard'
@@ -25,6 +26,8 @@ const props = defineProps({
   planLoading: { type: Boolean, default: false },
   planError: { type: String, default: '' },
   groupedRows: { type: Array, default: () => [] },
+  sortKey: { type: String, default: 'company' },
+  sortDir: { type: String, default: 'asc' },
   currentWorkMan: { type: String, default: '' },
   currentRole: { type: String, default: '' },
   canManageWeldingSchedule: { type: Boolean, default: false },
@@ -57,6 +60,7 @@ const emit = defineEmits([
   'update-inch',
   'register-cnc',
   'cancel-cnc',
+  'toggle-plan-sort',
 ])
 
 const overallTotals = computed(() =>
@@ -1157,6 +1161,18 @@ const selectDrawingFile = (file) => {
       <div v-else-if="planError" class="py-16 text-center text-sm text-red-600">{{ planError }}</div>
       <div v-else-if="hasActiveSearch && visibleGroups.length === 0" class="py-16 text-center text-sm text-slate-500">검색 결과가 없습니다.</div>
       <div v-else class="production-plan-groups-scroll mt-6 space-y-6">
+        <div class="flex flex-wrap gap-1 md:hidden">
+          <button
+            v-for="column in PLAN_SORT_COLUMNS"
+            :key="column.key"
+            type="button"
+            class="rounded-lg px-2.5 py-1.5 text-xs font-bold"
+            :class="sortKey === column.key ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'"
+            @click="emit('toggle-plan-sort', column.key)"
+          >
+            {{ column.label }}{{ sortKey === column.key ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '' }}
+          </button>
+        </div>
         <MainProductionPlanGroupTable
           v-for="(groupData, groupIndex) in visibleGroups"
           :key="groupData.group"
@@ -1164,6 +1180,9 @@ const selectDrawingFile = (file) => {
           :group-index="groupIndex"
           :overall-totals="overallTotals"
           :show-full-dates="searchAllDates"
+          :sort-key="sortKey"
+          :sort-dir="sortDir"
+          @sort="emit('toggle-plan-sort', $event)"
           @cell-click="handleCellClick"
           @cell-long-press="handleCellLongPress"
           @open-row-menu="openRowMenu"

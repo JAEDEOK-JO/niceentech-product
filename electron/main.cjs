@@ -265,8 +265,8 @@ ipcMain.handle('print-html-document', async (_, payload = {}) => {
 
   const printWindow = new BrowserWindow({
     show: false,
-    width: 820,
-    height: 1160,
+    width: payload.landscape === true ? 1160 : 820,
+    height: payload.landscape === true ? 820 : 1160,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -294,6 +294,7 @@ ipcMain.handle('print-html-document', async (_, payload = {}) => {
     const copies = Number(payload.copies)
     const silent = payload.silent === true
     const deviceName = String(payload.deviceName || '').trim()
+    const collate = payload.collate === true ? true : payload.collate === false ? false : undefined
     const pageRanges = Array.isArray(payload.pageRanges)
       ? payload.pageRanges
         .map((range) => ({
@@ -313,10 +314,12 @@ ipcMain.handle('print-html-document', async (_, payload = {}) => {
       printBackground: true,
       color: true,
       landscape: payload.landscape === true,
+      preferCSSPageSize: true,
       ...(payload.margins && typeof payload.margins === 'object' ? { margins: payload.margins } : {}),
       ...(silent ? { pageSize: payload.pageSize || 'A4' } : {}),
       ...(silent && Number.isFinite(scaleFactor) ? { scaleFactor: Math.max(10, Math.min(200, scaleFactor)) } : {}),
       ...(silent && Number.isFinite(copies) ? { copies: Math.max(1, Math.min(999, Math.round(copies))) } : {}),
+      ...(silent && typeof collate === 'boolean' ? { collate } : {}),
       ...(silent && pageRanges.length ? { pageRanges } : {}),
       ...(silent && deviceName ? { deviceName } : {}),
     }
@@ -351,6 +354,7 @@ ipcMain.handle('print-report', async (_, requestedOptions = {}) => {
   const copies = Number(requestedOptions.copies)
   const silent = requestedOptions.silent !== false
   const deviceName = String(requestedOptions.deviceName || '').trim()
+  const collate = requestedOptions.collate === true ? true : requestedOptions.collate === false ? false : undefined
   const pageRanges = Array.isArray(requestedOptions.pageRanges)
     ? requestedOptions.pageRanges
       .map((range) => ({
@@ -375,6 +379,7 @@ ipcMain.handle('print-report', async (_, requestedOptions = {}) => {
     ...(silent ? { pageSize: requestedOptions.pageSize || 'A4' } : {}),
     ...(silent && Number.isFinite(scaleFactor) ? { scaleFactor: Math.max(10, Math.min(200, scaleFactor)) } : {}),
     ...(silent && Number.isFinite(copies) ? { copies: Math.max(1, Math.min(999, Math.round(copies))) } : {}),
+    ...(silent && typeof collate === 'boolean' ? { collate } : {}),
     ...(silent && pageRanges.length ? { pageRanges } : {}),
     ...(silent && deviceName ? { deviceName } : {}),
   }

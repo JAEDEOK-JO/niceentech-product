@@ -1,4 +1,6 @@
 <script setup>
+import { formatPositiveDecimal } from '@/features/main/productionPlanNumbers'
+
 defineProps({
   items: { type: Array, required: true },
   qtyUnit: { type: String, default: '헤드' },
@@ -8,6 +10,10 @@ defineProps({
 function qtyText(qty) {
   const n = Number(qty || 0)
   return n > 0 ? n.toLocaleString('ko-KR') : ''
+}
+
+function inchText(value) {
+  return formatPositiveDecimal(value, { fixed: true })
 }
 </script>
 
@@ -47,7 +53,7 @@ function qtyText(qty) {
             class="border border-slate-200 px-2 py-2 text-center font-semibold text-slate-900"
             :class="item.isSelected ? 'bg-slate-50' : ''"
           >
-            {{ qtyText(item.inch) }}
+            {{ inchText(item.inch) }}
           </td>
         </tr>
       </tbody>

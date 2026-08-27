@@ -1,0 +1,28 @@
+.shipment-spec-print-root {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+}
+
+@media print {
+  .shipment-spec-chrome,
+  .shipment-spec-print-dialog {
+    display: none !important;
+  }
+
+  .shipment-spec-print-root {
+    position: static;
+    left: auto;
+    top: auto;
+  }
+
+  .shipment-spec-print-item {
+    break-after: page;
+    page-break-after: always;
+  }
+
+  .shipment-spec-print-item:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+}

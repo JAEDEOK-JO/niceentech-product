@@ -13,11 +13,13 @@ import QualityCountCheckPage from '@/pages/QualityCountCheckPage.vue'
 import QualityCalculationPage from '@/pages/QualityCalculationPage.vue'
 import WeldingSchedulePage from '@/pages/WeldingSchedulePage.vue'
 import ShipmentSchedulePage from '@/pages/ShipmentSchedulePage.vue'
+import ShipmentSpecPage from '@/pages/ShipmentSpecPage.vue'
 import InventoryPage from '@/pages/InventoryPage.vue'
 import MyPage from '@/pages/MyPage.vue'
 import SettingsPage from '@/pages/SettingsPage.vue'
 import NotificationsPage from '@/pages/NotificationsPage.vue'
 import StatsPage from '@/pages/StatsPage.vue'
+import DailyWorkSummaryPage from '@/pages/DailyWorkSummaryPage.vue'
 import ManagementGuidePage from '@/pages/ManagementGuidePage.vue'
 import DesignExecutiveReportExamplePage from '@/pages/DesignExecutiveReportExamplePage.vue'
 import SalesExecutiveReportExamplePage from '@/pages/SalesExecutiveReportExamplePage.vue'
@@ -125,6 +127,12 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
+    path: '/shipment-spec',
+    name: 'shipment-spec',
+    component: ShipmentSpecPage,
+    meta: { requiresAuth: true },
+  },
+  {
     path: '/inventory',
     name: 'inventory',
     component: InventoryPage,
@@ -182,6 +190,12 @@ const routes = [
     path: '/stats',
     name: 'stats',
     component: StatsPage,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/stats/summary',
+    name: 'stats-summary',
+    component: DailyWorkSummaryPage,
     meta: { requiresAuth: true },
   },
   {

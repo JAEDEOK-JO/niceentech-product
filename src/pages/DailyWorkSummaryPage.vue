@@ -3,62 +3,43 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { Printer } from 'lucide-vue-next'
 import Button from '@/components/ui/button/Button.vue'
-import DailyWorkJournalLists from '@/features/stats/dailyWorkJournal/DailyWorkJournalLists.vue'
-import { useDailyWorkJournal } from '@/features/stats/dailyWorkJournal/useDailyWorkJournal'
+import DailyWorkSummaryBoard from '@/features/stats/dailyWorkJournal/DailyWorkSummaryBoard.vue'
+import { useDailyWorkSummary } from '@/features/stats/dailyWorkJournal/useDailyWorkSummary'
 import { formatIsoDate } from '@/features/stats/dailyWorkJournal/dates'
 import PrintSettingsDialog from '@/features/printing/PrintSettingsDialog.vue'
 import { printCurrentPage } from '@/features/printing/pagePrint'
 
 const router = useRouter()
 const {
-  tabs,
   loading,
   error,
-  activeTabKey,
-  activeTab,
   selectedDate,
   pageTitle,
-  lists,
-  weekCompleted,
-  inProgressQty,
-  completedQty,
-  inProgressInch,
-  completedInch,
+  canMoveNext,
+  processSummaries,
+  weekColumns,
+  weekProcesses,
+  delayedItems,
   moveDay,
   resetToday,
-  canMoveNext,
-  setTab,
-} = useDailyWorkJournal()
+} = useDailyWorkSummary()
 
 const isPrintSettingsOpen = ref(false)
 const isPrinting = ref(false)
-
-function tabButtonClass(tab) {
-  const active = tab.key === activeTabKey.value
-  if (!active) return 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-  if (tab.accent === 'emerald') return 'bg-emerald-600 text-white'
-  if (tab.accent === 'cyan') return 'bg-cyan-600 text-white'
-  if (tab.accent === 'amber') return 'bg-amber-600 text-white'
-  return 'bg-violet-600 text-white'
-}
 
 function goHome() {
   router.push('/main')
 }
 
-function goMain() {
-  router.push('/main')
-}
-
-function goSummary() {
-  router.push({ path: '/stats/summary', query: { date: formatIsoDate(selectedDate.value) } })
+function goJournal() {
+  router.push({ path: '/stats', query: { date: formatIsoDate(selectedDate.value) } })
 }
 
 function openPrintSettings() {
   isPrintSettingsOpen.value = true
 }
 
-async function printJournal(options = {}) {
+async function printSummary(options = {}) {
   isPrintSettingsOpen.value = false
   await printCurrentPage(isPrinting, options, { margin: '6mm' })
 }
@@ -72,44 +53,26 @@ async function printJournal(options = {}) {
         <Button class="h-8 px-2.5 text-xs" variant="outline" @click="moveDay(-1)">이전날</Button>
         <Button class="h-8 px-2.5 text-xs" variant="outline" @click="resetToday">오늘</Button>
         <Button class="h-8 px-2.5 text-xs" variant="outline" :disabled="!canMoveNext" @click="moveDay(1)">다음날</Button>
-        <div class="flex shrink-0 gap-1">
-          <button
-            v-for="tab in tabs"
-            :key="tab.key"
-            type="button"
-            class="rounded-lg px-3 py-1.5 text-xs font-bold transition"
-            :class="tabButtonClass(tab)"
-            @click="setTab(tab.key)"
-          >
-            {{ tab.label }}
-          </button>
-        </div>
         <div class="ml-auto flex items-center gap-1">
-          <Button class="h-8 px-2.5 text-xs" variant="outline" @click="goSummary">요약</Button>
           <Button class="h-8 px-2.5 text-xs" variant="outline" :disabled="isPrinting" @click="openPrintSettings">
             <Printer class="mr-1 h-3.5 w-3.5" />
             인쇄
           </Button>
+          <Button class="h-8 px-2.5 text-xs" variant="outline" @click="goJournal">작업일지</Button>
           <Button class="h-8 px-2.5 text-xs" variant="outline" @click="goHome">홈</Button>
-          <Button class="h-8 px-2.5 text-xs" variant="outline" @click="goMain">메인</Button>
         </div>
       </div>
     </header>
 
-    <h1 class="journal-print-title">
-      {{ pageTitle }} <span class="journal-print-tab">{{ activeTab.label }}</span>
-    </h1>
+    <h1 class="journal-print-title">{{ pageTitle }}</h1>
 
     <main class="min-h-0 flex-1 overflow-y-auto">
       <div class="mx-auto max-w-7xl px-4 py-4 md:px-6">
-        <DailyWorkJournalLists
-          :tab="activeTab"
-          :lists="lists"
-          :week-completed="weekCompleted"
-          :in-progress-qty="inProgressQty"
-          :completed-qty="completedQty"
-          :in-progress-inch="inProgressInch"
-          :completed-inch="completedInch"
+        <DailyWorkSummaryBoard
+          :process-summaries="processSummaries"
+          :week-columns="weekColumns"
+          :week-processes="weekProcesses"
+          :delayed-items="delayedItems"
           :loading="loading"
           :error="error"
         />
@@ -119,7 +82,7 @@ async function printJournal(options = {}) {
     <PrintSettingsDialog
       :open="isPrintSettingsOpen"
       @close="isPrintSettingsOpen = false"
-      @print="printJournal"
+      @print="printSummary"
     />
   </section>
 </template>
@@ -141,10 +104,6 @@ async function printJournal(options = {}) {
     font-size: 22px;
     font-weight: 800;
     line-height: 1.3;
-  }
-
-  .journal-print-tab {
-    color: #e65100;
   }
 
   .journal-page {

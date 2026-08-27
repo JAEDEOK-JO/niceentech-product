@@ -6,7 +6,7 @@ import { useAuth } from '@/composables/useAuth'
 import { useProfile } from '@/composables/useProfile'
 import { supabase } from '@/lib/supabase'
 import { isAdminRole, isDesignDepartment } from '@/utils/adminAccess'
-import { sanitizeDecimalOne, sanitizeInteger } from '@/features/main/productionPlanNumbers'
+import { roundToOneDecimal, sanitizeDecimalOne, sanitizeInteger } from '@/features/main/productionPlanNumbers'
 
 const route = useRoute()
 const router = useRouter()
@@ -262,7 +262,7 @@ const performSubmit = async () => {
     head: form.head === '' ? null : Number(form.head),
     hole: form.hole === '' ? null : Number(form.hole),
     groove: form.groove === '' ? null : Number(form.groove),
-    inch: form.inch === '' ? null : Number(form.inch),
+    inch: form.inch === '' ? null : roundToOneDecimal(form.inch),
     weight: form.weight === '' ? null : Number(form.weight),
     delivery_due_date: form.deliveryDueDate || null,
     memo: String(form.memo).trim() || '',

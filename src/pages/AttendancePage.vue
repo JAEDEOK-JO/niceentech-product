@@ -255,13 +255,14 @@ async function handleDeleteDailyWorkHoursBulk(payload: { workDate: string; emplo
   }
 }
 
-async function handleUpdateDailyWorkHour(payload: { workDate: string; employeeId: number; endTime: string }) {
+async function handleUpdateDailyWorkHours(records: { workDate: string; employeeId: number; endTime: string }[]) {
+  if (records.length === 0) return
   try {
-    await upsertDailyWorkHoursBulk([payload])
+    await upsertDailyWorkHoursBulk(records)
     await loadDailyWorkHours({ silent: true })
-    showToast('작업시간이 수정되었습니다.')
+    showToast(`${records.length}명 수정되었습니다.`)
   } catch (err) {
-    console.error('[handleUpdateDailyWorkHour]', err)
+    console.error('[handleUpdateDailyWorkHours]', err)
     showToast('수정 중 오류가 발생했습니다.', 'error')
   }
 }
@@ -897,7 +898,7 @@ async function handleDeleteEmployee(id: number) {
     @refresh-daily-work-hours="loadDailyWorkHours"
     @delete-daily-work-hour="handleDeleteDailyWorkHour"
     @delete-daily-work-hours-bulk="handleDeleteDailyWorkHoursBulk"
-    @update-daily-work-hour="handleUpdateDailyWorkHour"
+    @update-daily-work-hours="handleUpdateDailyWorkHours"
     @select-daily-work-date="setDailyWorkDate"
   />
 </template>

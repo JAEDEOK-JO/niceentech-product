@@ -1,9 +1,9 @@
-import { formatPositiveDecimal } from '@/features/main/productionPlanNumbers'
+import { formatPositiveDecimal, roundToOneDecimal } from '@/features/main/productionPlanNumbers'
+import { decimalOnDate, isDateInSpan, qtyOnDate } from './allocateQty'
 import {
   formatDayLabel,
   formatMonthDay,
   getInclusiveDayCount,
-  isSameDay,
   parseFlexibleDate,
   startOfDay,
   toNumber,
@@ -38,7 +38,7 @@ function getQty(row, tab) {
 }
 
 function getInch(row) {
-  return Math.max(0, toNumber(row?.inch))
+  return Math.max(0, roundToOneDecimal(row?.inch))
 }
 
 function getStartedDate(row, tab) {
@@ -81,10 +81,12 @@ function isProcessTarget(row, tab) {
   return getQty(row, tab) > 0
 }
 
-function toListItem(row, tab, { startedDate, selectedDate }) {
+function toListItem(row, tab, { startedDate, selectedDate, qty, inch }) {
   const elapsedDays = startedDate
     ? getInclusiveDayCount(startedDate, selectedDate)
     : null
+  const itemQty = Math.max(0, Math.floor(toNumber(qty)))
+  const itemInch = Math.max(0, roundToOneDecimal(inch))
   return {
     id: row.id,
     drawingNo: getDrawingNo(row),
@@ -92,10 +94,10 @@ function toListItem(row, tab, { startedDate, selectedDate }) {
     place: String(row?.place ?? '').trim() || '-',
     area: String(row?.area ?? '').trim() || '-',
     siteLabel: buildSiteLabel(row) || '-',
-    qty: getQty(row, tab),
-    qtyText: getQty(row, tab) > 0 ? getQty(row, tab).toLocaleString('ko-KR') : '',
-    inch: getInch(row),
-    inchText: tab.showInch ? formatPositiveDecimal(row?.inch) : '',
+    qty: itemQty,
+    qtyText: itemQty > 0 ? itemQty.toLocaleString('ko-KR') : '',
+    inch: itemInch,
+    inchText: tab.showInch ? formatPositiveDecimal(itemInch, { fixed: true }) : '',
     startedLabel: startedDate ? formatDayLabel(startedDate) : '',
     elapsedDays,
   }
@@ -112,9 +114,16 @@ export function buildDailyWorkLists(rows, tab, selectedDate) {
     const status = getProcessStatus(row, tab)
     const startedDate = getStartedDate(row, tab)
     const completedDate = getCompletedDate(row, tab, selected)
+    const totalQty = getQty(row, tab)
+    const totalInch = getInch(row)
 
-    if (completedDate && isSameDay(completedDate, selected)) {
-      completed.push(toListItem(row, tab, { startedDate, selectedDate: selected }))
+    if (completedDate && isDateInSpan(startedDate, completedDate, selected)) {
+      completed.push(toListItem(row, tab, {
+        startedDate,
+        selectedDate: selected,
+        qty: qtyOnDate(totalQty, startedDate, completedDate, selected),
+        inch: tab.showInch ? decimalOnDate(totalInch, startedDate, completedDate, selected) : 0,
+      }))
       continue
     }
 
@@ -122,7 +131,12 @@ export function buildDailyWorkLists(rows, tab, selectedDate) {
     if (completedDate && completedDate.getTime() <= selected.getTime()) continue
     if (startedDate && startedDate.getTime() > selected.getTime()) continue
 
-    inProgress.push(toListItem(row, tab, { startedDate, selectedDate: selected }))
+    inProgress.push(toListItem(row, tab, {
+      startedDate,
+      selectedDate: selected,
+      qty: totalQty,
+      inch: totalInch,
+    }))
   }
 
   inProgress.sort((left, right) => {
@@ -140,7 +154,7 @@ export function sumListQty(items) {
 }
 
 export function sumListInch(items) {
-  return (items ?? []).reduce((sum, item) => sum + toNumber(item?.inch), 0)
+  return roundToOneDecimal((items ?? []).reduce((sum, item) => sum + toNumber(item?.inch), 0))
 }
 
 export function buildWeeklyCompletedQty(rows, tab, weekDates) {

@@ -1,0 +1,188 @@
+.shipment-spec-sheet {
+  box-sizing: border-box;
+  display: flex;
+  width: 210mm;
+  height: 297mm;
+  min-height: 297mm;
+  max-height: 297mm;
+  flex-direction: column;
+  background: #fff;
+  color: #111;
+  padding: 12mm 14mm 10mm;
+}
+
+.sheet-header {
+  flex-shrink: 0;
+  text-align: center;
+}
+
+.sheet-title {
+  margin: 0;
+  font-size: 50px;
+  font-weight: 900;
+  letter-spacing: 0.55em;
+  text-indent: 0.55em;
+}
+
+.sheet-address {
+  margin: 10px 0 16px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.sheet-table {
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  border-collapse: collapse;
+  border: 3px solid #111;
+  table-layout: fixed;
+}
+
+.sheet-table .label-col {
+  width: 48mm;
+}
+
+.sheet-table th,
+.sheet-table td {
+  border: 1.5px solid #111;
+  vertical-align: middle;
+}
+
+.sheet-table th {
+  padding: 0 8px;
+  height: 24mm;
+  font-size: 24px;
+  font-weight: 900;
+  letter-spacing: 0.28em;
+  text-align: center;
+}
+
+.sheet-table td {
+  padding: 0 14px;
+  font-size: 30px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.sheet-table .drawing-row td {
+  font-size: 42px;
+  font-weight: 900;
+  color: #f97316;
+}
+
+.sheet-table .area-row th,
+.sheet-table .area-row td {
+  height: 48mm;
+}
+
+.sheet-table .area-row td {
+  padding: 8px 14px;
+  line-height: 1.35;
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+
+.sheet-table .remarks-row th,
+.sheet-table .remarks-row td {
+  height: auto;
+  vertical-align: middle;
+}
+
+.sheet-table .remarks-row th {
+  letter-spacing: 0.12em;
+}
+
+.sheet-table .remarks-row td {
+  padding: 10px 14px;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+
+.sheet-footer {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 8mm;
+}
+
+.sheet-logo {
+  display: block;
+  width: 42px;
+  height: 42px;
+  object-fit: contain;
+}
+
+.sheet-company {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.shipment-spec-sheet.is-landscape {
+  width: 297mm;
+  height: 210mm;
+  min-height: 210mm;
+  max-height: 210mm;
+  padding: 8mm 12mm 7mm;
+}
+
+.shipment-spec-sheet.is-landscape .sheet-title {
+  font-size: 40px;
+}
+
+.shipment-spec-sheet.is-landscape .sheet-address {
+  margin: 6px 0 10px;
+}
+
+.shipment-spec-sheet.is-landscape .sheet-table {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.shipment-spec-sheet.is-landscape .sheet-table th {
+  height: 18mm;
+}
+
+.shipment-spec-sheet.is-landscape .sheet-table .area-row th,
+.shipment-spec-sheet.is-landscape .sheet-table .area-row td {
+  height: 28mm;
+}
+
+.shipment-spec-sheet.is-landscape .sheet-table .remarks-row th,
+.shipment-spec-sheet.is-landscape .sheet-table .remarks-row td {
+  height: auto;
+}
+
+.shipment-spec-sheet.is-landscape .sheet-footer {
+  margin-top: 6mm;
+}
+
+.shipment-spec-sheet.is-landscape .sheet-logo {
+  width: 36px;
+  height: 36px;
+}
+
+@media print {
+  .shipment-spec-sheet {
+    width: 210mm;
+    height: 297mm;
+    min-height: 297mm;
+    max-height: 297mm;
+    padding: 12mm 14mm 10mm;
+  }
+
+  .shipment-spec-sheet.is-landscape {
+    width: 297mm;
+    height: 210mm;
+    min-height: 210mm;
+    max-height: 210mm;
+    padding: 8mm 12mm 7mm;
+  }
+}

@@ -1,11 +1,15 @@
 <script setup>
-import { computed, ref } from 'vue'
-import Button from '@/components/ui/button/Button.vue'
-import { departments } from '@/features/management-guide/managementGuideData'
-import SalesExecutiveReportExampleView from '@/features/management-guide/SalesExecutiveReportExampleView.vue'
+import { computed, nextTick, ref } from 'vue'
+import BatchPrintStack from '@/features/management-guide/BatchPrintStack.vue'
+import {
+  printBatchManagementReports,
+  waitForBatchReportsReady,
+} from '@/features/management-guide/batchPrintReports'
 import DesignExecutiveReportExampleView from '@/features/management-guide/DesignExecutiveReportExampleView.vue'
+import { departments } from '@/features/management-guide/managementGuideData'
 import OperationsExecutiveReportExampleView from '@/features/management-guide/OperationsExecutiveReportExampleView.vue'
 import ProductionExecutiveReportExampleView from '@/features/management-guide/ProductionExecutiveReportExampleView.vue'
+import SalesExecutiveReportExampleView from '@/features/management-guide/SalesExecutiveReportExampleView.vue'
 import TotalExecutiveReportView from '@/features/management-guide/total-report/TotalExecutiveReportView.vue'
 
 const emit = defineEmits(['go-home'])
@@ -13,6 +17,21 @@ const emit = defineEmits(['go-home'])
 const tabs = [...departments, { key: 'total', name: '총보고서', tone: 'slate' }]
 
 const activeTab = ref(tabs[0].key)
+const isBatchPrinting = ref(false)
+const isPrinting = ref(false)
+const batchPrintRoot = ref(null)
+
+const runBatchPrint = async () => {
+  if (isBatchPrinting.value) return
+  isBatchPrinting.value = true
+  await nextTick()
+  await waitForBatchReportsReady(batchPrintRoot.value)
+  try {
+    await printBatchManagementReports(isPrinting)
+  } finally {
+    isBatchPrinting.value = false
+  }
+}
 
 const currentDepartment = computed(
   () => tabs.find((department) => department.key === activeTab.value) ?? tabs[0],
@@ -81,10 +100,23 @@ const currentView = computed(() => {
           >
             {{ department.name }}
           </button>
+          <button
+            type="button"
+            class="rounded-2xl border border-slate-900 bg-slate-900 px-4 py-2 text-sm font-bold text-white transition hover:bg-slate-800 disabled:opacity-50"
+            :disabled="isBatchPrinting"
+            @click="runBatchPrint"
+          >
+            일괄출력
+          </button>
         </div>
 
-        <div class="management-report-panel mt-5 overflow-hidden rounded-3xl border" :class="getTone(currentDepartment.tone).panel">
-          <component :is="currentView" :show-back-button="false" />
+        <div
+          ref="batchPrintRoot"
+          class="management-report-panel mt-5 overflow-hidden rounded-3xl border"
+          :class="getTone(currentDepartment.tone).panel"
+        >
+          <component v-if="!isBatchPrinting" :is="currentView" :show-back-button="false" />
+          <BatchPrintStack v-else />
         </div>
       </section>
     </main>

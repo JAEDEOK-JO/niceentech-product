@@ -46,6 +46,7 @@ const navItems = computed(() => {
     { key: 'quality-list', label: '검수리스트', to: { name: 'quality-list' } },
     { key: 'welding-schedule', label: '용접일정', to: { name: 'welding-schedule' } },
     { key: 'shipment-schedule', label: '출하일정', to: { name: 'shipment-schedule' } },
+    { key: 'shipment-spec', label: '출하명세서', to: { name: 'shipment-spec' } },
     { key: 'inventory', label: '입출고내역', to: { name: 'inventory' } },
     { key: 'reports', label: '보고서', to: { name: 'reports' } },
   ]
@@ -74,6 +75,7 @@ const activeSection = computed(() => {
   if (route.path.startsWith('/reports')) return 'reports'
   if (route.path.startsWith('/quality')) return 'quality-list'
   if (route.path.startsWith('/welding-schedule')) return 'welding-schedule'
+  if (route.path.startsWith('/shipment-spec')) return 'shipment-spec'
   if (route.path.startsWith('/shipment-schedule')) return 'shipment-schedule'
   if (route.path.startsWith('/inventory')) return 'inventory'
   if (route.path.startsWith('/main')) return 'main'

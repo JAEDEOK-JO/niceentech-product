@@ -23,7 +23,7 @@ function qtyLabel(qty, unit) {
 }
 
 function inchLabel(value) {
-  const text = formatPositiveDecimal(value)
+  const text = formatPositiveDecimal(value, { fixed: true })
   return text ? `${text}인치` : ''
 }
 

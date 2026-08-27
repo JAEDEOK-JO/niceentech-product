@@ -23,7 +23,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'close'): void
-  (e: 'update', payload: { workDate: string; employeeId: number; endTime: string }): void
+  (e: 'save', records: { workDate: string; employeeId: number; endTime: string }[]): void
   (e: 'delete', payload: { workDate: string; employeeId: number }): void
   (e: 'deleteAll', payload: { workDate: string; employeeIds: number[] }): void
 }>()
@@ -68,16 +68,29 @@ const homeLeaveRows = computed(() => absenceRows.value.filter((row) => row.absen
 watch(
   () => props.rows,
   (rows) => {
+    if (editMode.value) {
+      const next = new Map(localTimes.value)
+      const ids = new Set(rows.map((row) => row.employeeId))
+      for (const id of [...next.keys()]) {
+        if (!ids.has(id)) next.delete(id)
+      }
+      for (const row of rows) {
+        if (!next.has(row.employeeId)) next.set(row.employeeId, row.endTime)
+      }
+      localTimes.value = next
+      return
+    }
     localTimes.value = new Map(rows.map((row) => [row.employeeId, row.endTime]))
-    editMode.value = false
   },
   { immediate: true },
 )
 
 watch(
-  () => props.visible,
-  (visible) => {
-    if (!visible) editMode.value = false
+  () => [props.visible, props.workDate, props.department] as const,
+  ([visible]) => {
+    editMode.value = false
+    if (!visible) return
+    localTimes.value = new Map(props.rows.map((row) => [row.employeeId, row.endTime]))
   },
 )
 
@@ -95,11 +108,36 @@ function getEmployeeTypeClass(employeeId: number) {
     : 'bg-slate-200 text-slate-700'
 }
 
+function currentTime(employeeId: number, fallback: string) {
+  return localTimes.value.get(employeeId) ?? fallback
+}
+
 function updateTime(employeeId: number, endTime: string) {
   const next = new Map(localTimes.value)
   next.set(employeeId, endTime)
   localTimes.value = next
-  emit('update', { workDate: props.workDate, employeeId, endTime })
+}
+
+function applyAll(endTime: string) {
+  const next = new Map(localTimes.value)
+  for (const row of props.rows) next.set(row.employeeId, endTime)
+  localTimes.value = next
+}
+
+function changedRecords() {
+  return props.rows
+    .map((row) => {
+      const endTime = currentTime(row.employeeId, row.endTime)
+      if (endTime === row.endTime) return null
+      return { workDate: props.workDate, employeeId: row.employeeId, endTime }
+    })
+    .filter((record): record is { workDate: string; employeeId: number; endTime: string } => record !== null)
+}
+
+function finishEdit() {
+  const records = changedRecords()
+  editMode.value = false
+  if (records.length > 0) emit('save', records)
 }
 
 function deleteAll() {
@@ -120,15 +158,21 @@ function deleteAll() {
         <div class="flex items-start justify-between border-b border-slate-200 p-5">
           <div>
             <h2 class="text-lg font-extrabold text-slate-900">{{ department }} 작업자</h2>
-            <p class="mt-1 text-sm font-semibold text-slate-500">{{ workDate }} · {{ timeLabel }} · {{ rows.length }}명</p>
+            <p class="mt-1 text-sm font-semibold text-slate-500">{{ workDate }} · {{ rows.length }}명</p>
           </div>
           <div class="flex items-center gap-2">
             <button
-              v-if="rows.length > 0"
+              v-if="rows.length > 0 && !editMode"
               type="button"
               class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-extrabold text-slate-700 hover:bg-slate-50"
-              @click="editMode = !editMode"
-            >{{ editMode ? '완료' : '수정' }}</button>
+              @click="editMode = true"
+            >수정</button>
+            <button
+              v-if="editMode"
+              type="button"
+              class="rounded-lg bg-slate-900 px-3 py-2 text-xs font-extrabold text-white hover:bg-slate-700"
+              @click="finishEdit"
+            >완료</button>
             <button
               v-if="editMode && rows.length > 0"
               type="button"
@@ -155,7 +199,18 @@ function deleteAll() {
             <div v-if="rows.length === 0" class="rounded-xl border border-dashed border-slate-200 py-8 text-center text-sm text-slate-400">
               표시할 작업자가 없습니다.
             </div>
-            <div v-else class="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-4">
+            <template v-else>
+            <div v-if="editMode" class="mb-3 flex flex-wrap items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 p-2">
+              <span class="px-1 text-xs font-bold text-slate-600">일괄</span>
+              <button
+                v-for="option in WORK_END_TIME_OPTIONS"
+                :key="option.value"
+                type="button"
+                class="rounded-lg bg-white px-2.5 py-1.5 text-xs font-extrabold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100"
+                @click="applyAll(option.value)"
+              >{{ option.label }}</button>
+            </div>
+            <div v-if="!editMode" class="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-4">
               <div
                 v-for="row in rows"
                 :key="row.employeeId"
@@ -172,36 +227,50 @@ function deleteAll() {
                       >{{ getEmployeeTypeLabel(row.employeeId) }}</span>
                     </div>
                   </div>
-                  <span
-                    v-if="!editMode"
-                    class="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-extrabold text-slate-700"
-                  >
+                  <span class="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-extrabold text-slate-700">
                     {{ getEndTimeLabel(row.endTime) }}
                   </span>
                 </div>
-
-                <div v-if="editMode" class="mt-2 flex flex-wrap items-center gap-1.5">
-                  <select
-                    class="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-300"
-                    :value="localTimes.get(row.employeeId) ?? row.endTime"
-                    @change="updateTime(row.employeeId, ($event.target as HTMLSelectElement).value)"
-                  >
-                    <option
-                      v-for="option in WORK_END_TIME_OPTIONS"
-                      :key="option.value"
-                      :value="option.value"
-                    >
-                      {{ option.label }}
-                    </option>
-                  </select>
+              </div>
+            </div>
+            <div v-if="editMode" class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <div
+                v-for="row in rows"
+                :key="row.employeeId"
+                class="rounded-xl border border-slate-200 bg-white px-3 py-2.5"
+              >
+                <div class="flex min-w-0 items-start justify-between gap-2">
+                  <div class="min-w-0 flex-1">
+                    <p class="truncate text-sm font-extrabold text-slate-900">{{ row.name }}</p>
+                    <div class="mt-0.5 grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-1.5">
+                      <p class="truncate text-[11px] font-bold text-slate-400">{{ row.assignedDepartment }}</p>
+                      <span
+                        class="shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-extrabold"
+                        :class="getEmployeeTypeClass(row.employeeId)"
+                      >{{ getEmployeeTypeLabel(row.employeeId) }}</span>
+                    </div>
+                  </div>
                   <button
                     type="button"
                     class="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-extrabold text-red-600 hover:bg-red-100"
                     @click="emit('delete', { workDate, employeeId: row.employeeId })"
                   >삭제</button>
                 </div>
+                <div class="mt-2 flex gap-1">
+                  <button
+                    v-for="option in WORK_END_TIME_OPTIONS"
+                    :key="option.value"
+                    type="button"
+                    class="flex-1 rounded-lg border px-2 py-1.5 text-xs font-extrabold"
+                    :class="currentTime(row.employeeId, row.endTime) === option.value
+                      ? 'border-slate-900 bg-slate-900 text-white'
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'"
+                    @click="updateTime(row.employeeId, option.value)"
+                  >{{ option.label }}</button>
+                </div>
               </div>
             </div>
+            </template>
           </section>
 
           <section>

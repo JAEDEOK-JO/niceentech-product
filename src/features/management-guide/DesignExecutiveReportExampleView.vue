@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import Button from '@/components/ui/button/Button.vue'
 import ReportPrintSettingsDialog from './ReportPrintSettingsDialog.vue'
 import { printManagementReport } from './reportPrint'
+import { getDistributionWeekRange, getUpcomingThursday } from './designReportDistributionWeek'
 
 const PRODUCT_LIST_TABLE = 'product_list'
 
@@ -142,11 +143,12 @@ const getWeekdayIndex = (date) => {
   const day = date.getDay()
   return day === 0 ? 6 : day - 1
 }
-const getPreviousWorkWeekStart = (date) => addDays(startOfDay(date), -7)
 const formatMonthDayWeekday = (date) =>
   `${date.getMonth() + 1}/${date.getDate()}(${WEEKDAY_LABELS[getWeekdayIndex(date)]})`
 
 const thisWeekTuesday = computed(() => getUpcomingTuesday(new Date()))
+const thisWeekThursday = computed(() => getUpcomingThursday(new Date()))
+const distributionWeekRange = computed(() => getDistributionWeekRange(thisWeekThursday.value))
 const monthRange = computed(() => {
   const base = thisWeekTuesday.value
   return {
@@ -177,33 +179,31 @@ const monthlyDeliveryStats = computed(() => {
     delayedCount: Math.max(0, displayedMeasuredCount - displayedOnTimeCount),
   }
 })
-const weeklyDistributionCharts = computed(() =>
-  targetWeeks.value.map((week) => {
-    const startDate = getPreviousWorkWeekStart(week.date)
-    const endDate = addDays(startDate, 6)
-    const headSums = Array.from({ length: 7 }, () => 0)
-    for (const row of distributionRows.value) {
-      const drawingDate = getDrawingDistributedAt(row)
-      if (!drawingDate) continue
-      const drawingDay = startOfDay(drawingDate)
-      if (drawingDay.getTime() < startDate.getTime() || drawingDay.getTime() > endDate.getTime()) continue
-      const diffDays = Math.floor((drawingDay.getTime() - startDate.getTime()) / (24 * 60 * 60 * 1000))
-      if (diffDays < 0 || diffDays > 6) continue
-      headSums[diffDays] += toNumber(row?.head)
-    }
-    const dailyCounts = WORK_WEEK_DAY_OFFSETS.map((offset) => {
-      const targetDate = addDays(startDate, offset)
-      return {
-        label: WEEKDAY_LABELS[getWeekdayIndex(targetDate)],
-        dateLabel: formatMonthDayWeekday(targetDate),
-        headQty: headSums[offset],
-      }
-    })
-    const maxHeadQty = Math.max(...dailyCounts.map((item) => item.headQty), 0)
-    const totalHeadQty = dailyCounts.reduce((sum, item) => sum + item.headQty, 0)
+const weeklyDistributionCharts = computed(() => {
+  const { start: startDate, end: endDate } = distributionWeekRange.value
+  const headSums = Array.from({ length: 7 }, () => 0)
+  for (const row of distributionRows.value) {
+    const drawingDate = getDrawingDistributedAt(row)
+    if (!drawingDate) continue
+    const drawingDay = startOfDay(drawingDate)
+    if (drawingDay.getTime() < startDate.getTime() || drawingDay.getTime() > endDate.getTime()) continue
+    const diffDays = Math.floor((drawingDay.getTime() - startDate.getTime()) / (24 * 60 * 60 * 1000))
+    if (diffDays < 0 || diffDays > 6) continue
+    headSums[diffDays] += toNumber(row?.head)
+  }
+  const dailyCounts = WORK_WEEK_DAY_OFFSETS.map((offset) => {
+    const targetDate = addDays(startDate, offset)
     return {
-      key: week.key,
-      title: formatKoreanDate(week.date),
+      label: WEEKDAY_LABELS[getWeekdayIndex(targetDate)],
+      dateLabel: formatMonthDayWeekday(targetDate),
+      headQty: headSums[offset],
+    }
+  })
+  const maxHeadQty = Math.max(...dailyCounts.map((item) => item.headQty), 0)
+  const totalHeadQty = dailyCounts.reduce((sum, item) => sum + item.headQty, 0)
+  return [
+    {
+      key: 'thursday-week',
       totalHeadQty,
       maxHeadQty,
       days: dailyCounts.map((item) => ({
@@ -213,9 +213,9 @@ const weeklyDistributionCharts = computed(() =>
         percentOfWeek: totalHeadQty > 0 ? Math.round((item.headQty / totalHeadQty) * 100) : 0,
         isPeak: maxHeadQty > 0 && item.headQty === maxHeadQty,
       })),
-    }
-  }),
-)
+    },
+  ]
+})
 
 const buildWeekSummary = (week) => {
   const targetRows = weekRowsMap.value[week.key] ?? []
@@ -335,8 +335,7 @@ const fetchRows = async () => {
 
   const testDates = targetWeeks.value.map((week) => formatKoreanDate(week.date))
   const { start, end } = monthRange.value
-  const distributionWeekStart = getPreviousWorkWeekStart(targetWeeks.value[0]?.date ?? thisWeekTuesday.value)
-  const distributionWeekEnd = addDays(distributionWeekStart, 7)
+  const { start: distributionWeekStart, endExclusive: distributionWeekEnd } = getDistributionWeekRange(thisWeekThursday.value)
   const baseColumns =
     'id,no,initial,company,place,area,work_type,head,test_date,drawing_date,shipment_date,delivery_due_date,is_drawing,calculation,complete,delay_text'
   const withVirtualColumns = `${baseColumns},virtual_drawing_distributed`
@@ -403,7 +402,7 @@ onMounted(async () => {
       <div class="mx-auto flex max-w-7xl items-start justify-between gap-4 px-4 py-4 md:px-6">
         <div class="min-w-0">
           <p class="text-[11px] font-bold tracking-[0.12em] text-slate-500">설계부 보고자료</p>
-          <h1 class="mt-1 text-lg font-extrabold text-slate-900 md:text-xl">설계부 화요일 회의 보고</h1>
+          <h1 class="mt-1 text-lg font-extrabold text-slate-900 md:text-xl">설계부 목요일 회의 보고</h1>
         </div>
         <div class="flex shrink-0 gap-2">
           <Button class="shrink-0" variant="outline" @click="openPrintSettings">인쇄</Button>
@@ -442,7 +441,7 @@ onMounted(async () => {
 
       <template v-else>
         <div v-show="currentPage === 1 || isPrinting" class="report-page report-page-break mt-6 space-y-6">
-          <div class="report-print-title">설계부 화요일 회의 보고 · 1페이지 요약본</div>
+          <div class="report-print-title">설계부 목요일 회의 보고 · 1페이지 요약본</div>
           <section class="rounded-3xl border border-sky-200 bg-gradient-to-r from-sky-100 via-blue-50 to-indigo-100 p-6 text-slate-900 shadow-sm">
             <div class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
               <div>
@@ -542,7 +541,7 @@ onMounted(async () => {
         </div>
 
         <div v-show="currentPage === 2 || isPrinting" class="report-page mt-6 space-y-6">
-          <div class="report-print-title">설계부 화요일 회의 보고 · 2페이지 디테일</div>
+          <div class="report-print-title">설계부 목요일 회의 보고 · 2페이지 디테일</div>
           <section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
             <div class="flex items-center justify-between gap-3">
               <div>

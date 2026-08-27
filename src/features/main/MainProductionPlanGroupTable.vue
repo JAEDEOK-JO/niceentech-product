@@ -10,12 +10,15 @@ import {
   totalTableWidth,
 } from '@/features/main/mainProductionPlanConfig'
 import { getWorkTypeBadgeClass } from '@/utils/productionStatus'
+import { isPlanSortColumn } from '@/features/main/productionPlanSort'
 
 const props = defineProps({
   groupData: { type: Object, required: true },
   groupIndex: { type: Number, required: true },
   overallTotals: { type: Object, required: true },
   showFullDates: { type: Boolean, default: false },
+  sortKey: { type: String, default: 'company' },
+  sortDir: { type: String, default: 'asc' },
 })
 
 const clickableColumns = ['initial', 'design_distributed', 'name', 'company', 'place', 'area', 'drawing', 'worker_t', 'worker_nasa', 'worker_main', 'worker_welding', 'inch', 'head']
@@ -24,7 +27,7 @@ const tableBorderStyle = {
   borderWidth: '0.1px',
 }
 
-const emit = defineEmits(['open-row-menu', 'cell-click', 'cell-long-press'])
+const emit = defineEmits(['open-row-menu', 'cell-click', 'cell-long-press', 'sort'])
 
 const LONG_PRESS_MS = 700
 let longPressTimer = null
@@ -202,7 +205,15 @@ const tableWidthStyle = {
               :class="column.align === 'center' ? 'text-center' : 'text-left'"
               :style="[getColumnStyle(column), tableBorderStyle]"
             >
-              {{ column.label }}
+              <button
+                v-if="isPlanSortColumn(column.key)"
+                type="button"
+                class="inline-flex h-full w-full items-center justify-center gap-0.5 bg-transparent p-0 font-extrabold text-inherit"
+                @click="emit('sort', column.key)"
+              >
+                {{ column.label }}{{ sortKey === column.key ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '' }}
+              </button>
+              <template v-else>{{ column.label }}</template>
             </th>
           </tr>
         </thead>

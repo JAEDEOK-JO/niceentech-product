@@ -41,6 +41,16 @@ function buildOpenWindowFilter(isoDate) {
     .join(',')
 }
 
+function buildWeekSpanFilter(dates) {
+  if (!dates.length) return ''
+  const weekStart = formatIsoDate(dates[0])
+  const weekEnd = formatIsoDate(dates[dates.length - 1])
+  return DAILY_WORK_TABS
+    .filter((tab) => tab.startedField && tab.completedField)
+    .map((tab) => `and(${tab.startedField}.lte.${weekEnd},${tab.completedField}.gte.${weekStart})`)
+    .join(',')
+}
+
 function buildWeekCompletedFilter(dates) {
   const parts = []
   const isoList = dates.map((date) => formatIsoDate(date)).join(',')
@@ -67,6 +77,7 @@ export async function fetchDailyWorkRows(selectedDate, weekDates = []) {
   const selectColumns = DAILY_WORK_ROW_COLUMNS
   const openWindowFilter = buildOpenWindowFilter(isoDate)
   const weekFilter = weekDates.length > 0 ? buildWeekCompletedFilter(weekDates) : ''
+  const weekSpanFilter = weekDates.length > 0 ? buildWeekSpanFilter(weekDates) : ''
 
   const requests = [
     supabase.from(PRODUCT_LIST_TABLE).select(selectColumns).or(buildInProgressFilter()).order('id', { ascending: true }),
@@ -80,6 +91,11 @@ export async function fetchDailyWorkRows(selectedDate, weekDates = []) {
   if (weekFilter) {
     requests.push(
       supabase.from(PRODUCT_LIST_TABLE).select(selectColumns).or(weekFilter).order('id', { ascending: true }),
+    )
+  }
+  if (weekSpanFilter) {
+    requests.push(
+      supabase.from(PRODUCT_LIST_TABLE).select(selectColumns).or(weekSpanFilter).order('id', { ascending: true }),
     )
   }
 

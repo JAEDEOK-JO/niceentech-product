@@ -9,6 +9,7 @@ import { canManageWeldingSchedule } from '@/features/welding-schedule/utils/weld
 import { isAdminRole, isDesignDepartment, normalizeDepartment } from '@/utils/adminAccess'
 import { supabase } from '@/lib/supabase'
 import { createCncItem, deleteCncItemByProductListId } from '@/features/cnc/services/cnc.service'
+import { roundToOneDecimal } from '@/features/main/productionPlanNumbers'
 
 const router = useRouter()
 const route = useRoute()
@@ -26,6 +27,9 @@ const {
   resetWeek,
   setSelectedTuesday,
   groupedRows,
+  sortKey,
+  sortDir,
+  togglePlanSort,
   updatePlanRowFields,
   deletePlanRow,
   fetchDrawingFiles,
@@ -120,7 +124,7 @@ const handleUpdateInch = async ({ row, value }) => {
   await updatePlanRowFields({
     rowId: row.id,
     updates: {
-      inch: safeValue === '' ? null : Number(safeValue),
+      inch: safeValue === '' ? null : roundToOneDecimal(safeValue),
     },
   })
 }
@@ -586,9 +590,12 @@ watch(
     :plan-loading="planLoading"
     :plan-error="planError"
     :grouped-rows="groupedRows"
+    :sort-key="sortKey"
+    :sort-dir="sortDir"
     :current-work-man="profile?.work_man || ''"
     :current-role="profile?.role || ''"
     :can-manage-welding-schedule="canManageWeldingSchedulePermission"
+    @toggle-plan-sort="togglePlanSort"
     @move-week="moveWeek"
     @reset-week="resetWeek"
     @go-register="goRegister"
