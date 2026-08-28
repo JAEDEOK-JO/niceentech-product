@@ -21,6 +21,8 @@ export const remarksForBadges = (value) => (
   parseShipmentSpecRemarks(value).map((text) => text.trim()).filter(Boolean)
 )
 
+export const hasShipmentSpecOutput = (value) => remarksForBadges(value).length > 0
+
 export const saveShipmentSpecOutput = async (rowId, remarks, landscape) => {
   const { error } = await supabase
     .from(PRODUCT_LIST_TABLE)

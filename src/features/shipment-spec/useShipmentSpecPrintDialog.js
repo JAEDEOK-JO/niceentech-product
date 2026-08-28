@@ -31,10 +31,8 @@ export const useShipmentSpecPrintDialog = () => {
     orientation.value = 'portrait'
   }
 
-  const addRemarkField = (index) => {
-    const next = [...remarkFields.value]
-    next.splice(index + 1, 0, createRemarkField())
-    remarkFields.value = next
+  const addRemarkField = () => {
+    remarkFields.value = [...remarkFields.value, createRemarkField()]
   }
 
   const removeRemarkField = (index) => {

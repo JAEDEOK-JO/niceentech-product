@@ -1,5 +1,5 @@
 <script setup>
-import { remarksForBadges } from './shipmentSpecOutput'
+import { hasShipmentSpecOutput, remarksForBadges } from './shipmentSpecOutput'
 
 defineProps({
   rows: { type: Array, default: () => [] },
@@ -42,7 +42,10 @@ const text = (value) => {
           <tr
             v-for="row in rows"
             :key="row.id"
-            class="cursor-pointer hover:bg-slate-50"
+            class="cursor-pointer"
+            :class="hasShipmentSpecOutput(row.shipment_spec_remarks)
+              ? 'bg-emerald-50 hover:bg-emerald-100 [&>td]:bg-emerald-50 hover:[&>td]:bg-emerald-100'
+              : 'hover:bg-slate-50'"
             @click="emit('select', row)"
           >
             <td class="border border-slate-200 px-3 py-2 text-center text-slate-800">{{ text(row.initial) }}</td>

@@ -2,6 +2,7 @@
 import { watch } from 'vue'
 import Button from '@/components/ui/button/Button.vue'
 import ShipmentSpecPrinterSelect from './ShipmentSpecPrinterSelect.vue'
+import ShipmentSpecRemarkFields from './ShipmentSpecRemarkFields.vue'
 import { useShipmentSpecPrinters } from './useShipmentSpecPrinters'
 
 const props = defineProps({
@@ -73,25 +74,12 @@ const handlePrint = () => {
           />
         </div>
 
-        <div class="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4">
-          <div
-            v-for="(field, index) in remarkFields"
-            :key="field.id"
-            class="flex items-start gap-2"
-          >
-            <textarea
-              v-model="field.text"
-              rows="2"
-              class="min-h-[44px] w-full resize-y rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-900 outline-none focus:border-slate-400"
-            />
-            <Button class="h-9 w-9 shrink-0 px-0 text-base" variant="outline" @click="emit('add', index)">+</Button>
-            <Button
-              v-if="remarkFields.length > 1"
-              class="h-9 w-9 shrink-0 px-0 text-base"
-              variant="outline"
-              @click="emit('remove', index)"
-            >−</Button>
-          </div>
+        <div class="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+          <ShipmentSpecRemarkFields
+            :remark-fields="remarkFields"
+            @add="emit('add')"
+            @remove="emit('remove', $event)"
+          />
         </div>
 
         <div class="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">
