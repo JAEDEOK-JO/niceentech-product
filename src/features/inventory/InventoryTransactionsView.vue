@@ -683,6 +683,13 @@ watch(activeMaterialLedgerTab, async () => {
             <ClipboardList class="h-4 w-4" />
             등록
           </button>
+          <button
+            type="button"
+            class="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-extrabold text-slate-700 hover:bg-slate-50"
+            @click="router.push({ name: 'inventory-ui-test' })"
+          >
+            UI테스트
+          </button>
         </div>
       </div>
 

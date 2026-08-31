@@ -15,6 +15,7 @@ import WeldingSchedulePage from '@/pages/WeldingSchedulePage.vue'
 import ShipmentSchedulePage from '@/pages/ShipmentSchedulePage.vue'
 import ShipmentSpecPage from '@/pages/ShipmentSpecPage.vue'
 import InventoryPage from '@/pages/InventoryPage.vue'
+import InventoryUiTestPage from '@/pages/InventoryUiTestPage.vue'
 import MyPage from '@/pages/MyPage.vue'
 import SettingsPage from '@/pages/SettingsPage.vue'
 import NotificationsPage from '@/pages/NotificationsPage.vue'
@@ -136,6 +137,12 @@ const routes = [
     path: '/inventory',
     name: 'inventory',
     component: InventoryPage,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/inventory/ui-test',
+    name: 'inventory-ui-test',
+    component: InventoryUiTestPage,
     meta: { requiresAuth: true },
   },
   {
