@@ -64,22 +64,80 @@ function buildFullText(form: QualityFormState): string {
     .replace(/\s+/g, ' ')
 }
 
-async function fetchNextSortValue(testDate: string): Promise<number> {
-  const latestSort = await supabase
-    .from('quality_list')
-    .select('sort')
-    .eq('test_date', testDate)
-    .not('sort', 'is', null)
-    .order('sort', { ascending: false })
-    .limit(1)
-    .maybeSingle()
+const FIRST_LOT_ROUND = '1차'
 
-  if (latestSort.data?.sort != null) {
-    return Number(latestSort.data.sort) + 1
+function emptyLotFields() {
+  return {
+    lot_round: FIRST_LOT_ROUND,
+    lot_nameH: null,
+    lot_numH: null,
+    lot_number_startH: 0,
+    lot_number_endH: 0,
   }
+}
 
-  const fallback = await supabase.from('quality_list').select('id').eq('test_date', testDate)
-  return fallback.data?.length ?? 0
+function hasLotExpansion(row: QualityListRow): boolean {
+  return (
+    Boolean(String(row.lotNameH ?? '').trim()) ||
+    Number(row.lotNumH) > 0 ||
+    Number(row.lotNumStartH) > 0
+  )
+}
+
+async function lotFieldsForTransfer(row: QualityListRow, newTestDate: string) {
+  if (!hasLotExpansion(row)) return emptyLotFields()
+
+  const firstRoundLots = await fetchLotInfos(newTestDate, FIRST_LOT_ROUND)
+  const withLotNum = firstRoundLots.filter((info) => Number(info.lotNum) > 0)
+  if (withLotNum.length === 0) return emptyLotFields()
+
+  const sameType = withLotNum.filter((info) => info.lotType === row.lotType)
+  const picked = (sameType.length > 0 ? sameType : withLotNum)[0]
+
+  return {
+    lot_round: FIRST_LOT_ROUND,
+    lot_nameH: picked.lotName || null,
+    lot_numH: Number(picked.lotNum),
+    lot_number_startH: Number(row.lotNumStartH) || 0,
+    lot_number_endH: Number(row.lotNumEndH) || 0,
+  }
+}
+
+function transferFullText(
+  row: QualityListRow,
+  lot: { lot_nameH: string | null; lot_numH: number | null },
+) {
+  return `${row.company} ${row.place} ${row.area} ${row.initial} ${lot.lot_nameH ?? ''} ${lot.lot_numH ?? ''}`
+    .trim()
+    .replace(/\s+/g, ' ')
+}
+
+function companyIdOf(row: QualityListRow): number | null {
+  return row.companyId && row.companyId > 0 ? row.companyId : null
+}
+
+async function fetchNextSortValue(testDate: string): Promise<number> {
+  const [latestSort, countResult] = await Promise.all([
+    supabase
+      .from('quality_list')
+      .select('sort')
+      .eq('test_date', testDate)
+      .not('sort', 'is', null)
+      .order('sort', { ascending: false, nullsFirst: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from('quality_list')
+      .select('id', { count: 'exact', head: true })
+      .eq('test_date', testDate),
+  ])
+
+  if (latestSort.error) throw latestSort.error
+  if (countResult.error) throw countResult.error
+
+  const maxSort = latestSort.data?.sort == null ? -1 : Number(latestSort.data.sort)
+  const count = countResult.count ?? 0
+  return Math.max(maxSort + 1, count)
 }
 
 async function fetchCompanyId(company: string, place: string): Promise<number | null> {
@@ -171,9 +229,23 @@ export async function updateQualityItem(id: number, payload: Record<string, unkn
 }
 
 export async function reorderQualityItems(items: QualityListRow[]) {
-  const payload = items.map((item, index) => ({ id: item.id, sort: index }))
-  const response = await supabase.from('quality_list').upsert(payload)
-  if (response.error) throw response.error
+  const results = await Promise.all(
+    items.map((item, index) =>
+      supabase
+        .from('quality_list')
+        .update({ sort: index })
+        .eq('id', item.id)
+        .select('id'),
+    ),
+  )
+
+  const failed = results.find((result) => result.error)
+  if (failed?.error) throw failed.error
+
+  const missed = results.find((result) => !result.data?.length)
+  if (missed) {
+    throw new Error('순서를 서버에 저장하지 못했습니다.')
+  }
 }
 
 export async function updateCancelCount(
@@ -203,70 +275,57 @@ export async function updateLotRange(row: QualityListRow, lotStart: number) {
   })
 }
 
-export async function moveQualityItemDate(id: number, newTestDate: string) {
-  await updateQualityItem(id, { test_date: newTestDate })
+export async function moveQualityItemDate(row: QualityListRow, newTestDate: string) {
+  if (row.testDate === newTestDate) {
+    throw new Error('같은 날짜로는 이동할 수 없습니다.')
+  }
+  const nextSort = await fetchNextSortValue(newTestDate)
+  const lotFields = await lotFieldsForTransfer(row, newTestDate)
+  await updateQualityItem(row.id, {
+    test_date: newTestDate,
+    sort: nextSort,
+    ...lotFields,
+    full_text: transferFullText(row, lotFields),
+  })
 }
 
 export async function copyQualityItem(row: QualityListRow, newTestDate: string) {
-  const companyId = row.companyId ?? (await fetchCompanyId(row.company, row.place))
-  const nextSort = await fetchNextSortValue(newTestDate)
-
-  const newData: Record<string, unknown> = {
-    company_id: companyId,
-    company: row.company,
-    place: row.place,
-    area: row.area,
-    initial: row.initial,
-    test_date: newTestDate,
-    lot_round: row.lotRound,
-    lot_type: row.lotType,
-    lot_nameH: row.lotNameH,
-    lot_numH: row.lotNumH,
-    lot_number_startH: row.lotNumStartH,
-    lot_number_endH: row.lotNumEndH,
-    totalH: row.totalH,
-    lot_ksd: row.lotKsd,
-    lot_ksd_num: row.lotKsdNum,
-    lot_certification: row.lotCertification,
-    a25: 0,
-    a32: row.a32,
-    a32_cancel: row.a32Cancel,
-    a32_return: row.a32Return,
-    a40: row.a40,
-    a40_cancel: row.a40Cancel,
-    a40_return: row.a40Return,
-    a50: row.a50,
-    a50_cancel: row.a50Cancel,
-    a50_return: row.a50Return,
-    a65: row.a65,
-    a65_cancel: row.a65Cancel,
-    a65_return: row.a65Return,
-    m65: row.m65,
-    m65_cancel: row.m65Cancel,
-    m65_return: row.m65Return,
-    m80: row.m80,
-    m80_cancel: row.m80Cancel,
-    m80_return: row.m80Return,
-    m100: row.m100,
-    m100_cancel: row.m100Cancel,
-    m100_return: row.m100Return,
-    m125: row.m125,
-    m125_cancel: row.m125Cancel,
-    m125_return: row.m125Return,
-    m150: row.m150,
-    m150_cancel: row.m150Cancel,
-    m150_return: row.m150Return,
-    m200: row.m200,
-    m200_cancel: row.m200Cancel,
-    m200_return: row.m200Return,
-    total: row.total,
-    print: row.print,
-    welding_check: row.weldingCheck,
-    sort: nextSort,
-    full_text: `${row.company} ${row.place} ${row.area} ${row.initial} ${row.lotNameH} ${row.lotNumH}`.trim(),
+  if (row.testDate === newTestDate) {
+    throw new Error('같은 날짜로는 복사할 수 없습니다.')
   }
 
-  const response = await supabase.from('quality_list').insert(newData)
+  const form = buildFormFromRow(row)
+  form.testDate = newTestDate
+  const companyId = companyIdOf(row) ?? (await fetchCompanyId(row.company, row.place))
+  if (!companyId) {
+    throw new Error('회사 정보가 연결되지 않았습니다. 회사/현장을 다시 선택해 주세요.')
+  }
+
+  const totalH = totalFromForm(form)
+  const lotFields = await lotFieldsForTransfer(row, newTestDate)
+  const payload: Record<string, unknown> = {
+    company_id: companyId,
+    company: form.company,
+    place: form.place,
+    area: form.area,
+    initial: form.initial,
+    test_date: newTestDate,
+    lot_type: form.lotType,
+    lot_ksd: form.lotKsd,
+    lot_certification: form.lotCertification,
+    lot_ksd_num: form.lotKsdNum,
+    totalH,
+    print: MAIN_FIELDS.some((field) => Number(form[field]) !== 0),
+    full_text: transferFullText(row, lotFields),
+    sort: await fetchNextSortValue(newTestDate),
+    ...lotFields,
+  }
+
+  for (const key of ALL_COUNT_FIELDS) {
+    payload[key] = Number(form[key] ?? 0)
+  }
+
+  const response = await supabase.from('quality_list').insert(payload).select('id').single()
   if (response.error) throw response.error
 }
 

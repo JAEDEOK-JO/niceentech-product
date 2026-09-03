@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { useQualityRowReorder } from '../composables/useQualityRowReorder'
 import type { QualityCountField } from '../services/quality.service'
 import type { QualityListRow } from '../types/quality'
+import { formatLotEnd } from '../utils/print/format'
 
 const props = defineProps<{
   items: QualityListRow[]
   loading?: boolean
   showAllRecords?: boolean
+  canReorder?: boolean
 }>()
 
 function formatShortDate(testDate: string): string {
@@ -22,7 +25,23 @@ const emit = defineEmits<{
   stamp: [item: QualityListRow]
   updateCancel: [item: QualityListRow, field: QualityCountField, value: number]
   updateRange: [item: QualityListRow, lotStart: number]
+  reorder: [items: QualityListRow[]]
+  transfer: [item: QualityListRow]
 }>()
+
+const {
+  displayItems,
+  draggingId,
+  isReordering,
+  onHandlePointerDown,
+  onHandlePointerMove,
+  onHandlePointerUp,
+  consumeClickSuppression,
+} = useQualityRowReorder({
+  getItems: () => props.items,
+  enabled: () => Boolean(props.canReorder) && !props.loading,
+  onReorder: (next) => emit('reorder', next),
+})
 
 const rangeInputs = ref<Record<number, string>>({})
 const expandedCards = ref<Record<number, boolean>>({})
@@ -54,6 +73,7 @@ function openMenuDialog(item: QualityListRow) { menuDialogItem.value = item }
 function closeMenuDialog() { menuDialogItem.value = null }
 
 function toggleCard(item: QualityListRow) {
+  if (isReordering.value || consumeClickSuppression()) return
   expandedCards.value = {
     ...expandedCards.value,
     [item.id]: !expandedCards.value[item.id],
@@ -110,19 +130,32 @@ const mobileCountRows: CountCol[][] = [
   <section class="qt-wrap">
     <div v-if="loading" class="qt-empty">로딩 중...</div>
     <div v-else-if="items.length === 0" class="qt-empty">검수리스트가 없습니다.</div>
-    <div v-else class="qt-list">
-      <div class="qt-mobile-cards">
+    <div v-else class="qt-list" :class="{ 'qt-list--reordering': isReordering }">
+      <div class="qt-mobile-cards" data-quality-reorder-list>
         <article
-          v-for="(item, index) in items"
+          v-for="(item, index) in displayItems"
           :key="item.id"
           class="qt-card"
-          :class="{ 'qt-card--open': isCardExpanded(item) }"
+          :class="{
+            'qt-card--open': isCardExpanded(item),
+            'qt-card--dragging': draggingId === item.id,
+          }"
+          :data-quality-row-id="item.id"
           @click="toggleCard(item)"
         >
           <div class="qt-card-head">
             <div class="qt-card-title">
-              <span class="qt-card-index">No. {{ index + 1 }}</span>
-              <strong>{{ item.company }} {{ item.place }}</strong>
+              <span
+                class="qt-card-index"
+                :class="{ 'qt-n--ready': canReorder }"
+                @pointerdown="onHandlePointerDown($event, item)"
+                @pointermove="onHandlePointerMove"
+                @pointerup="onHandlePointerUp"
+                @pointercancel="onHandlePointerUp"
+                @click.stop
+                @contextmenu.prevent
+              >No. {{ index + 1 }}</span>
+              <strong @click.stop="emit('transfer', item)">{{ item.company }} {{ item.place }}</strong>
               <span v-if="item.area">{{ item.area }}</span>
               <span v-if="showAllRecords && item.testDate" class="qt-card-date">{{ formatShortDate(item.testDate) }}</span>
             </div>
@@ -137,7 +170,7 @@ const mobileCountRows: CountCol[][] = [
             <span class="qt-card-lot-name">{{ item.lotNameH || '-' }}</span>
             <span class="qt-card-lot-num">({{ item.lotNumH ? String(item.lotNumH).slice(-3) : '---' }})</span>
             <span class="qt-card-lot-start">{{ rangeInputs[item.id] || 0 }}</span>
-            <span>~ {{ item.lotNumEndH || '' }}</span>
+            <span>~ {{ formatLotEnd(item.lotNumEndH) }}</span>
           </div>
 
           <div class="qt-card-toggle">
@@ -187,13 +220,26 @@ const mobileCountRows: CountCol[][] = [
             <th class="th-base">메뉴</th>
           </tr>
         </thead>
-        <tbody>
-          <tr v-for="(item, index) in items" :key="item.id">
-            <td class="td-center">{{ index + 1 }}</td>
+        <tbody data-quality-reorder-list>
+          <tr
+            v-for="(item, index) in displayItems"
+            :key="item.id"
+            :class="{ 'qt-row--dragging': draggingId === item.id }"
+            :data-quality-row-id="item.id"
+          >
+            <td
+              class="td-center td-n"
+              :class="{ 'qt-n--ready': canReorder }"
+              @pointerdown="onHandlePointerDown($event, item)"
+              @pointermove="onHandlePointerMove"
+              @pointerup="onHandlePointerUp"
+              @pointercancel="onHandlePointerUp"
+              @contextmenu.prevent
+            >{{ index + 1 }}</td>
             <td class="td-center td-initial" :title="item.initial || ''">
               <span class="td-initial-text">{{ item.initial }}</span>
             </td>
-            <td class="td-center td-place">
+            <td class="td-center td-place" @click="emit('transfer', item)">
               {{ item.company }} {{ item.place }}{{ item.area ? ' ' + item.area : '' }}
               <span v-if="showAllRecords && item.testDate" class="place-date">{{ formatShortDate(item.testDate) }}</span>
             </td>
@@ -210,7 +256,7 @@ const mobileCountRows: CountCol[][] = [
                   @keydown.enter="saveRange(item)"
                   @keydown="(e) => ['e','E','+','-','.'].includes(e.key) && e.preventDefault()"
                 />
-                <span class="lot-end">~ {{ item.lotNumEndH || '' }}</span>
+                <span class="lot-end">~ {{ formatLotEnd(item.lotNumEndH) }}</span>
               </div>
             </td>
             <td
@@ -223,6 +269,7 @@ const mobileCountRows: CountCol[][] = [
                 v-if="(item[col.cancelKey] as number) > 0 || (item[col.valueKey] as number) > 0"
                 type="button"
                 class="count-btn"
+                @pointerdown.stop
                 @click="promptCancel(item, col.field, item[col.cancelKey] as number)"
               >
                 {{ (item[col.valueKey] as number) || '' }}
@@ -230,8 +277,13 @@ const mobileCountRows: CountCol[][] = [
               <span v-else class="count-empty" />
             </td>
             <td class="td-center td-total">{{ item.totalH || '' }}</td>
-            <td class="td-center">
-              <button type="button" class="menu-txt-btn" @click="openMenuDialog(item)">메뉴</button>
+            <td class="td-center" :class="{ 'td-menu--done': item.noticeDownloaded }">
+              <button
+                type="button"
+                class="menu-txt-btn"
+                :class="{ 'menu-txt-btn--done': item.noticeDownloaded }"
+                @click="openMenuDialog(item)"
+              >메뉴</button>
             </td>
           </tr>
         </tbody>
@@ -251,7 +303,7 @@ const mobileCountRows: CountCol[][] = [
         </div>
         <div class="dialog-actions">
           <button type="button" class="da-btn da-btn--blue" @click="emit('edit', menuDialogItem); closeMenuDialog()">수정</button>
-          <button type="button" class="da-btn da-btn--green" @click="emit('notification', menuDialogItem); closeMenuDialog()">통보서</button>
+          <button type="button" class="da-btn da-btn--teal" @click="emit('notification', menuDialogItem); closeMenuDialog()">통보서</button>
           <button type="button" class="da-btn da-btn--purple" @click="emit('stamp', menuDialogItem); closeMenuDialog()">증지</button>
           <button type="button" class="da-btn da-btn--danger" @click="emit('delete', menuDialogItem); closeMenuDialog()">삭제</button>
         </div>
@@ -281,6 +333,30 @@ const mobileCountRows: CountCol[][] = [
   min-width: 0;
   min-height: 0;
   flex: 1;
+}
+
+.td-n {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.qt-n--ready {
+  cursor: grab;
+  touch-action: none;
+}
+
+.qt-row--dragging {
+  opacity: 0.55;
+  background: #eff6ff;
+}
+
+.qt-list--reordering :is(input, button) {
+  pointer-events: none;
+}
+
+.qt-row--dragging .td-n {
+  cursor: grabbing;
 }
 
 .qt-mobile-cards {
@@ -384,6 +460,7 @@ const mobileCountRows: CountCol[][] = [
   padding: 10px 8px;
   line-height: 1.5;
   text-align: left;
+  cursor: pointer;
 }
 
 .place-date {
@@ -509,6 +586,13 @@ const mobileCountRows: CountCol[][] = [
   white-space: nowrap;
 }
 .menu-txt-btn:hover { color: #374151; }
+.td-menu--done {
+  background: #ccfbf1;
+}
+.menu-txt-btn--done {
+  color: #0f766e;
+  font-weight: 800;
+}
 
 /* ── 다이얼로그 ── */
 .dialog-overlay {
@@ -577,6 +661,8 @@ const mobileCountRows: CountCol[][] = [
 }
 .da-btn--blue   { background: #dbeafe; border-color: #bfdbfe; color: #1e40af; }
 .da-btn--blue:hover   { background: #bfdbfe; }
+.da-btn--teal  { background: #ccfbf1; border-color: #5eead4; color: #0f766e; }
+.da-btn--teal:hover  { background: #99f6e4; }
 .da-btn--green  { background: #dcfce7; border-color: #bbf7d0; color: #166534; }
 .da-btn--green:hover  { background: #bbf7d0; }
 .da-btn--purple { background: #ede9fe; border-color: #ddd6fe; color: #5b21b6; }
@@ -610,6 +696,10 @@ const mobileCountRows: CountCol[][] = [
     cursor: pointer;
   }
 
+  .qt-card--dragging {
+    opacity: 0.55;
+  }
+
   .qt-card-head {
     display: flex;
     align-items: flex-start;
@@ -630,6 +720,7 @@ const mobileCountRows: CountCol[][] = [
   .qt-card-title strong {
     font-size: 14px;
     line-height: 1.3;
+    cursor: pointer;
   }
 
   .qt-card-index,
@@ -637,6 +728,13 @@ const mobileCountRows: CountCol[][] = [
     color: #64748b;
     font-size: 10px;
     font-weight: 800;
+  }
+
+  .qt-card-index {
+    width: fit-content;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
   }
 
   .qt-card-meta {

@@ -22,19 +22,19 @@ export const quantityClass = (value, { showZero = false } = {}) => {
 }
 
 const toNumber = (value) => {
-  const number = Number(value)
+  const number = Number(String(value ?? '').replace(/,/g, '').trim())
   return Number.isFinite(number) ? number : 0
 }
 
 export const sumIfPositive = (columns, materialId) =>
   columns.reduce((sum, column) => {
-    const number = toNumber(column.quantities?.[materialId])
+    const number = toNumber(column.quantities?.[materialId] ?? column.quantities?.[String(materialId)])
     return number > 0 ? sum + number : sum
   }, 0)
 
 export const sumIfNegative = (columns, materialId) =>
   columns.reduce((sum, column) => {
-    const number = toNumber(column.quantities?.[materialId])
+    const number = toNumber(column.quantities?.[materialId] ?? column.quantities?.[String(materialId)])
     return number < 0 ? sum + number : sum
   }, 0)
 
@@ -58,7 +58,7 @@ export const buildMaterialRows = (materialList) => {
       ...material,
       group,
       groupIndex,
-      groupTone: `tone-${groupIndex % 3}`,
+      groupTone: `tone-${groupIndex % 4}`,
       groupRowspan,
       renderSpecCell: !group || isGroupStart,
       specLabel: group || material.spec,

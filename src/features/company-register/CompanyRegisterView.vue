@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import Button from '@/components/ui/button/Button.vue'
 import Input from '@/components/ui/input/Input.vue'
 import { COMPANY_TYPE_OPTIONS } from '@/constants/companyTypes'
+import ApprovedMaterialTagsInput from '@/features/company/ApprovedMaterialTagsInput.vue'
 
 const props = defineProps({
   form: { type: Object, required: true },
@@ -397,6 +398,14 @@ const dialogTitle = computed(() => {
             <p class="mt-2 text-xs text-slate-500">
               {{ loadingManagers ? '담당자 목록 불러오는 중...' : '등록 후 생산등록 화면에서 담당자가 자동으로 채워집니다.' }}
             </p>
+          </div>
+
+          <div class="md:col-span-3">
+            <p class="mb-2 text-sm font-bold text-slate-700">승인자재</p>
+            <ApprovedMaterialTagsInput
+              :model-value="form.approvedMaterials"
+              @update:model-value="emit('update-form', 'approvedMaterials', $event)"
+            />
           </div>
         </div>
 

@@ -2,19 +2,15 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import CompanyRegisterView from '@/features/company-register/CompanyRegisterView.vue'
-import { useAuth } from '@/composables/useAuth'
-import { useProfile } from '@/composables/useProfile'
 import { supabase } from '@/lib/supabase'
 import { normalizeCompanyType } from '@/constants/companyTypes'
-import { isAdminRole, isDesignDepartment } from '@/utils/adminAccess'
+import { parseApprovedMaterialNames } from '@/features/company/approvedMaterials'
 import { useDialog } from '@/composables/useDialog'
 
 const { alert } = useDialog()
 
 const route = useRoute()
 const router = useRouter()
-const { session } = useAuth()
-const { profile } = useProfile(session)
 
 const managers = ref([])
 const loadingManagers = ref(false)
@@ -38,6 +34,7 @@ const createEmptyForm = () => ({
   startDate: '',
   endDate: '',
   managerId: '',
+  approvedMaterials: [],
   orderConfirmed: true,
   siteCompleted: false,
 })
@@ -54,7 +51,6 @@ const fullNamePreview = computed(() =>
     .filter(Boolean)
     .join(' '),
 )
-const canManageCompany = computed(() => isAdminRole(profile.value?.role) || isDesignDepartment(profile.value?.department))
 
 const goBack = () => {
   if (route.query.returnTo === 'company-list') {
@@ -133,6 +129,10 @@ const updateForm = (field, value) => {
   }
   if (field === 'orderConfirmed' || field === 'siteCompleted') {
     form[field] = Boolean(value)
+    return
+  }
+  if (field === 'approvedMaterials') {
+    form.approvedMaterials = parseApprovedMaterialNames(value)
     return
   }
   form[field] = String(value ?? '')
@@ -217,6 +217,7 @@ const submit = async () => {
     start_date: form.startDate ? Number(form.startDate) : 0,
     end_date: form.endDate ? Number(form.endDate) : 0,
     manager_id: form.managerId || null,
+    approved_materials: parseApprovedMaterialNames(form.approvedMaterials),
     order_confirmed: Boolean(form.orderConfirmed),
     site_completed: Boolean(form.siteCompleted),
   })
@@ -272,7 +273,6 @@ onMounted(async () => {
 
 <template>
   <CompanyRegisterView
-    v-if="canManageCompany"
     :form="form"
     :managers="managers"
     :loading-managers="loadingManagers"

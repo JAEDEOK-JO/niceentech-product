@@ -11,6 +11,7 @@ import {
 } from '@/features/main/mainProductionPlanConfig'
 import { getWorkTypeBadgeClass } from '@/utils/productionStatus'
 import { isPlanSortColumn } from '@/features/main/productionPlanSort'
+import { useMobileRowEdit } from '@/features/main/useMobileRowEdit'
 
 const props = defineProps({
   groupData: { type: Object, required: true },
@@ -28,6 +29,7 @@ const tableBorderStyle = {
 }
 
 const emit = defineEmits(['open-row-menu', 'cell-click', 'cell-long-press', 'sort'])
+const { isRowEditing, toggleEdit } = useMobileRowEdit()
 
 const LONG_PRESS_MS = 700
 let longPressTimer = null
@@ -42,6 +44,18 @@ const onCellPointerDown = (row, columnKey) => {
     longPressTriggered = true
     emit('cell-long-press', { row, columnKey })
   }, LONG_PRESS_MS)
+}
+const onMobileCellPointerDown = (row, columnKey) => {
+  if (!isRowEditing(row)) return
+  onCellPointerDown(row, columnKey)
+}
+const onMobileCellClick = (row, columnKey) => {
+  if (!isRowEditing(row)) return
+  onCellClick(row, columnKey)
+}
+const onMobileRowMenu = (row) => {
+  if (!isRowEditing(row)) return
+  emit('open-row-menu', row)
 }
 const onCellPointerUp = () => {
   if (longPressTimer) {
@@ -81,6 +95,7 @@ const tableWidthStyle = {
         v-for="row in groupData.rows"
         :key="`main-mobile-${groupData.group}-${row.id}`"
         class="rounded-xl border border-slate-200 bg-white p-3 shadow-sm"
+        :class="isRowEditing(row) ? 'ring-2 ring-slate-900' : ''"
       >
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0">
@@ -102,18 +117,18 @@ const tableWidthStyle = {
             <p>도착 {{ displayCellText(row, 'delivery_due_date') || '-' }}</p>
           </div>
         </div>
-        <div class="mt-3 grid grid-cols-4 gap-1.5">
+        <div class="mt-3 grid grid-cols-4 gap-1.5" :class="{ 'pointer-events-none': !isRowEditing(row) }">
           <button
             v-for="column in tableColumns.filter((column) => ['worker_t', 'worker_nasa', 'worker_main', 'worker_welding'].includes(column.key))"
             :key="`${row.id}-${column.key}`"
             type="button"
             class="min-w-0 rounded-lg border border-slate-200 px-1.5 py-2 text-center text-[10px] font-bold leading-tight sm:px-2 sm:py-3 sm:text-[11px]"
             :class="getWorkerStatusClass(row, column.key)"
-            @click="onCellClick(row, column.key)"
-            @mousedown="onCellPointerDown(row, column.key)"
+            @click="onMobileCellClick(row, column.key)"
+            @mousedown="onMobileCellPointerDown(row, column.key)"
             @mouseup="onCellPointerUp"
             @mouseleave="onCellPointerUp"
-            @touchstart="onCellPointerDown(row, column.key)"
+            @touchstart="onMobileCellPointerDown(row, column.key)"
             @touchend="onCellPointerUp"
             @touchcancel="onCellPointerUp"
           >
@@ -125,8 +140,11 @@ const tableWidthStyle = {
           <button
             type="button"
             class="inline-flex items-center rounded-full px-2.5 py-1 font-semibold whitespace-nowrap"
-            :class="row.nasa_mark ? 'bg-orange-100 text-orange-900' : 'bg-slate-100 text-slate-700'"
-            @click="onCellClick(row, 'head')"
+            :class="[
+              row.nasa_mark ? 'bg-orange-100 text-orange-900' : 'bg-slate-100 text-slate-700',
+              { 'pointer-events-none': !isRowEditing(row) },
+            ]"
+            @click="onMobileCellClick(row, 'head')"
           >
             헤드 {{ displayCellText(row, 'head') || '' }}
           </button>
@@ -139,31 +157,46 @@ const tableWidthStyle = {
           <button
             type="button"
             class="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-1 font-semibold text-amber-700 whitespace-nowrap"
-            @click="onCellClick(row, 'inch')"
+            :class="{ 'pointer-events-none': !isRowEditing(row) }"
+            @click="onMobileCellClick(row, 'inch')"
           >
             인치 {{ displayCellText(row, 'inch') || '' }}
           </button>
           <p class="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 font-semibold text-emerald-700 whitespace-nowrap">
             중량 {{ displayCellText(row, 'weight') || '' }}
           </p>
-          <button type="button" class="w-full bg-transparent px-0 py-0 text-left text-slate-600" @click="emit('open-row-menu', row)">
+          <button
+            type="button"
+            class="w-full bg-transparent px-0 py-0 text-left text-slate-600"
+            :class="{ 'pointer-events-none': !isRowEditing(row) }"
+            @click="onMobileRowMenu(row)"
+          >
             비고 {{ row.memo || '' }}
           </button>
-          <div class="flex w-full justify-end">
+          <div class="flex w-full items-center justify-end">
             <span class="inline-flex items-center rounded-full px-2.5 py-1 font-bold whitespace-nowrap" :class="getWorkTypeBadgeClass(row?.work_type)">
               {{ displayWorkType(row) }}
             </span>
             <button
               type="button"
               class="ml-2 inline-flex items-center rounded-full px-2.5 py-1 font-bold whitespace-nowrap"
-              :class="
+              :class="[
                 displayCellText(row, 'drawing') === '있음'
                   ? 'bg-orange-100 text-orange-800'
-                  : 'bg-white text-black'
-              "
-              @click="onCellClick(row, 'drawing')"
+                  : 'bg-white text-black',
+                { 'pointer-events-none': !isRowEditing(row) },
+              ]"
+              @click="onMobileCellClick(row, 'drawing')"
             >
               도면
+            </button>
+            <button
+              type="button"
+              class="ml-2 inline-flex items-center rounded-full px-2.5 py-1 font-bold whitespace-nowrap"
+              :class="isRowEditing(row) ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700'"
+              @click="toggleEdit(row)"
+            >
+              {{ isRowEditing(row) ? '완료' : '수정' }}
             </button>
           </div>
         </div>

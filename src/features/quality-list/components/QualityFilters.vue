@@ -23,9 +23,9 @@ const emit = defineEmits<{
   refresh: []
   create: []
   noticeUpload: []
-  export: []
   print: []
-  calculation: []
+  mainPipePrint: []
+  branchPipePrint: []
 }>()
 
 const calendarInput = ref<HTMLInputElement | null>(null)
@@ -73,8 +73,8 @@ function openCalendar() {
       />
       <div class="quality-print-actions">
         <button type="button" class="ghost-button" @click="emit('print')">리스트출력</button>
-        <button type="button" class="ghost-button" @click="emit('export')">메인관출력</button>
-        <button type="button" class="ghost-button" @click="emit('calculation')">가지관 출력</button>
+        <button type="button" class="ghost-button" @click="emit('mainPipePrint')">메인관출력</button>
+        <button type="button" class="ghost-button" @click="emit('branchPipePrint')">가지관 출력</button>
       </div>
       <button type="button" class="primary-button quality-create-button" @click="emit('create')">등록</button>
       <button type="button" class="ghost-button quality-notice-button" @click="emit('noticeUpload')">통보서</button>

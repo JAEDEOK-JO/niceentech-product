@@ -5,6 +5,7 @@ const path = require('path')
 const fs = require('fs')
 const { autoUpdater } = require('electron-updater')
 const supabaseListener = require('./supabase-listener.cjs')
+const { saveNoticeBundle } = require('./save-notice-bundle.cjs')
 
 let ENV = { SUPABASE_URL: '', SUPABASE_ANON_KEY: '' }
 try { ENV = require('./env.generated.cjs') } catch { /* generated at build time */ }
@@ -242,6 +243,18 @@ ipcMain.handle('get-printers', async () => {
 })
 
 // HTML 문자열을 임시 파일로 저장한 뒤 기본 브라우저로 연다
+ipcMain.handle('save-notice-bundle', async (_, payload = {}) => {
+  try {
+    return await saveNoticeBundle(payload)
+  } catch (error) {
+    console.error('[save-notice-bundle]', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    }
+  }
+})
+
 ipcMain.handle('open-html-report', async (_, payload = {}) => {
   const safeName = String(payload.filename || 'report.html').replace(/[^\w.-]/g, '_')
   const filePath = path.join(app.getPath('temp'), safeName)

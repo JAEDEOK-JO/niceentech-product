@@ -11,7 +11,6 @@ defineProps({
   companySearchLoading: { type: Boolean, default: false },
   companyDialogOpen: { type: Boolean, default: false },
   companySearchResults: { type: Array, default: () => [] },
-  canRegisterCompany: { type: Boolean, default: false },
   managerDialogOpen: { type: Boolean, default: false },
   managerOptions: { type: Array, default: () => [] },
   loadingManagers: { type: Boolean, default: false },
@@ -171,7 +170,6 @@ const selectCalendarDate = (day) => {
                 @keydown.enter="emit('company-search-enter')"
               />
               <Button
-                v-if="canRegisterCompany"
                 class="h-11 shrink-0 px-4 text-sm"
                 variant="outline"
                 @click="emit('go-company-register')"

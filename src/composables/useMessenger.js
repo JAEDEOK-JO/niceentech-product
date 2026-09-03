@@ -172,6 +172,25 @@ export const useMessenger = (session) => {
     return { ok: true }
   }
 
+  const sortMessages = (list) =>
+    [...list].sort((a, b) => {
+      const timeA = Date.parse(a?.created_at) || 0
+      const timeB = Date.parse(b?.created_at) || 0
+      if (timeA !== timeB) return timeA - timeB
+      return String(a?.id ?? '').localeCompare(String(b?.id ?? ''))
+    })
+
+  const mergeMessages = (primary, extra) => {
+    const map = new Map()
+    for (const msg of primary) {
+      if (msg?.id) map.set(msg.id, msg)
+    }
+    for (const msg of extra) {
+      if (msg?.id && !map.has(msg.id)) map.set(msg.id, msg)
+    }
+    return sortMessages([...map.values()])
+  }
+
   const fetchMessages = async (roomId) => {
     messagesLoading.value = true
     const { data, error: err } = await supabase
@@ -181,7 +200,10 @@ export const useMessenger = (session) => {
       .order('created_at', { ascending: true })
     messagesLoading.value = false
     if (err) { error.value = '메시지 조회 실패'; return }
-    messages.value = data ?? []
+    if (activeRoomId.value !== roomId) return
+    const fetched = data ?? []
+    const extras = messages.value.filter((msg) => msg.room_id === roomId)
+    messages.value = mergeMessages(fetched, extras)
   }
 
   const resolveFileType = (file) => {
@@ -355,19 +377,24 @@ export const useMessenger = (session) => {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `room_id=eq.${roomId}` },
         (payload) => {
-          const exists = messages.value.some((m) => m.id === payload.new.id)
-          if (!exists) messages.value = [...messages.value, payload.new]
+          if (activeRoomId.value !== roomId) return
+          const incoming = payload.new
+          if (!incoming?.id) return
+          const exists = messages.value.some((m) => m.id === incoming.id)
+          if (exists) return
+          messages.value = sortMessages([...messages.value, incoming])
         },
       )
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'chat_messages', filter: `room_id=eq.${roomId}` },
         (payload) => {
+          if (activeRoomId.value !== roomId) return
           const updated = payload.new
           if (!updated?.id) return
           const idx = messages.value.findIndex((m) => m.id === updated.id)
           if (idx < 0) {
-            messages.value = [...messages.value, updated]
+            messages.value = sortMessages([...messages.value, updated])
             return
           }
           const next = [...messages.value]
@@ -379,7 +406,10 @@ export const useMessenger = (session) => {
         'postgres_changes',
         { event: 'DELETE', schema: 'public', table: 'chat_messages', filter: `room_id=eq.${roomId}` },
         (payload) => {
-          messages.value = messages.value.filter((m) => m.id !== payload.old.id)
+          if (activeRoomId.value !== roomId) return
+          const removedId = payload.old?.id
+          if (!removedId) return
+          messages.value = messages.value.filter((m) => m.id !== removedId)
         },
       )
       .subscribe()
@@ -451,8 +481,8 @@ export const useMessenger = (session) => {
   const selectRoom = async (roomId) => {
     activeRoomId.value = roomId
     messages.value = []
-    await fetchMessages(roomId)
     subscribeToRoom(roomId)
+    await fetchMessages(roomId)
   }
 
   return {

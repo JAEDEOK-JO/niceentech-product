@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { fetchManagerNameById, mapInventoryCompanies } from '@/features/inventory/mapInventoryCompanies'
 
 const MATERIAL_TABLE = 'inventory_material_items'
 const COMPANY_MATERIAL_TABLE = 'inventory_company_material_items'
@@ -772,18 +773,36 @@ export async function removeCompanyInventoryMaterialItem(companyId, materialItem
   if (result.error) throwInventoryError(result.error)
 }
 
+const fetchInventoryCompanies = async () => {
+  const withMaterials = await supabase
+    .from('company_list')
+    .select('id,company,place,initial,manager_id,approved_materials')
+    .order('company', { ascending: true })
+    .order('place', { ascending: true })
+
+  if (!withMaterials.error) return withMaterials
+
+  const message = String(withMaterials.error.message ?? '').toLowerCase()
+  if (!message.includes('approved_materials')) throw withMaterials.error
+
+  return supabase
+    .from('company_list')
+    .select('id,company,place,initial,manager_id')
+    .order('company', { ascending: true })
+    .order('place', { ascending: true })
+}
+
 export async function fetchInventoryEntryData(materialType = RAW_MATERIAL_TYPE) {
   const normalizedType = normalizeMaterialType(materialType)
   const [companiesResult, materialsResult] = await Promise.all([
-    supabase
-      .from('company_list')
-      .select('id,company,place,initial')
-      .order('company', { ascending: true })
-      .order('place', { ascending: true }),
+    fetchInventoryCompanies(),
     fetchDefaultMaterialItems(normalizedType),
   ])
 
   if (companiesResult.error) throw companiesResult.error
+
+  const managerNameById = await fetchManagerNameById((companiesResult.data ?? []).map((row) => row.manager_id))
+  const companies = mapInventoryCompanies(companiesResult.data, managerNameById)
 
   if (materialsResult instanceof Error) throw materialsResult
 
@@ -796,14 +815,14 @@ export async function fetchInventoryEntryData(materialType = RAW_MATERIAL_TYPE) 
 
   if (normalizedType === SUBSIDIARY_MATERIAL_TYPE && materialItems.some((item) => item.isDefaultOnly)) {
     return {
-      companies: companiesResult.data ?? [],
+      companies,
       materialItems,
       setupWarning: companyMaterialSetupMessage,
     }
   }
 
   return {
-    companies: companiesResult.data ?? [],
+    companies,
     materialItems,
     setupWarning,
   }

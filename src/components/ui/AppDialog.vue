@@ -12,14 +12,14 @@ const { state, handleConfirm, handleCancel } = useDialog()
         class="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/60 px-4"
         @click.self="state.type === 'confirm' ? handleCancel() : handleConfirm()"
       >
-        <div class="w-full max-w-sm rounded-3xl bg-white shadow-2xl">
+        <div class="w-full max-w-md rounded-3xl bg-white shadow-2xl">
 
           <!-- 본문 -->
           <div class="px-6 pb-2 pt-6">
             <p v-if="state.title" class="mb-1 text-xs font-bold uppercase tracking-widest text-slate-400">
               {{ state.title }}
             </p>
-            <p class="text-base font-semibold leading-relaxed text-slate-800">{{ state.message }}</p>
+            <p class="whitespace-pre-line break-words text-base font-semibold leading-relaxed text-slate-800">{{ state.message }}</p>
           </div>
 
           <!-- 버튼 -->

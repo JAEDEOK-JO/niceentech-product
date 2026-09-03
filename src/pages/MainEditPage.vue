@@ -2,16 +2,11 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import MainRegisterView from '@/features/main-register/MainRegisterView.vue'
-import { useAuth } from '@/composables/useAuth'
-import { useProfile } from '@/composables/useProfile'
 import { supabase } from '@/lib/supabase'
-import { isAdminRole, isDesignDepartment } from '@/utils/adminAccess'
 import { roundToOneDecimal, sanitizeDecimalOne, sanitizeInteger } from '@/features/main/productionPlanNumbers'
 
 const route = useRoute()
 const router = useRouter()
-const { session } = useAuth()
-const { profile } = useProfile(session)
 
 const companySearchText = ref('')
 const companySearchLoading = ref(false)
@@ -23,7 +18,6 @@ const saveError = ref('')
 const targetDateLabel = ref('')
 const targetDateIso = ref('')
 
-const canRegisterCompany = computed(() => isAdminRole(profile.value?.role) || isDesignDepartment(profile.value?.department))
 const rowId = computed(() => String(route.params.id ?? '').trim())
 
 const form = reactive({
@@ -309,7 +303,6 @@ onMounted(async () => {
     :company-search-loading="companySearchLoading"
     :company-dialog-open="companyDialogOpen"
     :company-search-results="companySearchResults"
-    :can-register-company="canRegisterCompany"
     :form="form"
     :saving="saving"
     :save-error="saveError"

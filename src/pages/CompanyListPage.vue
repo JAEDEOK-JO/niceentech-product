@@ -6,6 +6,7 @@ import { useAuth } from '@/composables/useAuth'
 import { useProfile } from '@/composables/useProfile'
 import { supabase } from '@/lib/supabase'
 import { normalizeCompanyType } from '@/constants/companyTypes'
+import { parseApprovedMaterialNames } from '@/features/company/approvedMaterials'
 import { isAdminRole, isDesignDepartment } from '@/utils/adminAccess'
 import { useDialog } from '@/composables/useDialog'
 
@@ -69,6 +70,7 @@ const normalizeRow = (row) => ({
   endDate: formatCompactDateToIso(row.end_date),
   managerId: row.manager_id ? String(row.manager_id) : '',
   originalManagerId: row.manager_id ? String(row.manager_id) : '',
+  approvedMaterials: parseApprovedMaterialNames(row.approved_materials),
   orderConfirmed: row.order_confirmed == null ? true : Boolean(row.order_confirmed),
   siteCompleted: Boolean(row.site_completed),
 })
@@ -90,14 +92,28 @@ const syncProductListManager = async ({ companyInfo, managerId }) => {
   return { ok: true }
 }
 
+const companyListSelect =
+  'id,company,place,full_name,total_head_count,progressed_head_count,total_screw_count,total_supipe_count,director_name,director_phone,site_address,company_type,business_registration_number,registration_month,start_date,end_date,manager_id,approved_materials,order_confirmed,site_completed'
+const companyListSelectFallback =
+  'id,company,place,full_name,total_head_count,progressed_head_count,total_screw_count,total_supipe_count,director_name,director_phone,site_address,company_type,business_registration_number,registration_month,start_date,end_date,manager_id,order_confirmed,site_completed'
+
 const fetchRows = async () => {
   loading.value = true
   saveError.value = ''
 
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('company_list')
-    .select('id,company,place,full_name,total_head_count,progressed_head_count,total_screw_count,total_supipe_count,director_name,director_phone,site_address,company_type,business_registration_number,registration_month,start_date,end_date,manager_id,order_confirmed,site_completed')
+    .select(companyListSelect)
     .order('id', { ascending: false })
+
+  if (error && String(error.message ?? '').toLowerCase().includes('approved_materials')) {
+    const fallback = await supabase
+      .from('company_list')
+      .select(companyListSelectFallback)
+      .order('id', { ascending: false })
+    data = fallback.data
+    error = fallback.error
+  }
 
   loading.value = false
 
@@ -183,6 +199,10 @@ const updateRow = (rowId, field, value) => {
     target[field] = Boolean(value)
     return
   }
+  if (field === 'approvedMaterials') {
+    target.approvedMaterials = parseApprovedMaterialNames(value)
+    return
+  }
 
   target[field] = String(value ?? '')
 }
@@ -245,6 +265,7 @@ const saveRow = async (rowId) => {
       start_date: target.startDate ? formatIsoToCompactDate(target.startDate) : 0,
       end_date: target.endDate ? formatIsoToCompactDate(target.endDate) : 0,
       manager_id: target.managerId || null,
+      approved_materials: parseApprovedMaterialNames(target.approvedMaterials),
       order_confirmed: Boolean(target.orderConfirmed),
       site_completed: Boolean(target.siteCompleted),
     })

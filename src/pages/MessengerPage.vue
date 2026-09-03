@@ -3,11 +3,13 @@ import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useAuth } from '@/composables/useAuth'
 import { useMessenger } from '@/composables/useMessenger'
 import { useMessengerUnread } from '@/composables/useMessengerUnread'
+import { useChatScroll } from '@/features/messenger/composables/useChatScroll'
 import { useMentionInput } from '@/features/messenger/composables/useMentionInput'
 import { useRoomReadReceipts } from '@/features/messenger/composables/useRoomReadReceipts'
 import MentionMemberPicker from '@/features/messenger/components/MentionMemberPicker.vue'
 import ChatMentionText from '@/features/messenger/components/ChatMentionText.vue'
 import ChatReadCount from '@/features/messenger/components/ChatReadCount.vue'
+import ChatJumpToLatestButton from '@/features/messenger/components/ChatJumpToLatestButton.vue'
 import MessengerDrawingSearchDialog from '@/features/messenger/components/MessengerDrawingSearchDialog.vue'
 import MessengerProductionRequestDialog from '@/features/messenger/components/MessengerProductionRequestDialog.vue'
 import MessengerProductionRequestCard from '@/features/messenger/components/MessengerProductionRequestCard.vue'
@@ -64,6 +66,7 @@ const MAX_FILES = 10
 const ACCEPTED = 'image/*,video/*,application/pdf,.pdf,.jpg,.jpeg,.png,.gif,.webp,.heic,.heif,.bmp,.tiff,.mp4,.mov,.avi,.mkv,.webm'
 
 const messageListRef = ref(null)
+const { pinToBottom, onContentChange, pinnedToBottom, unseenCount } = useChatScroll(messageListRef)
 const fileInputRef = ref(null)
 const textareaRef = ref(null)
 const messageInput = ref('')
@@ -153,6 +156,12 @@ const getProductionRecheckPayload = (msg) => parseProductionRecheck(msg?.content
 const confirmingMessageId = ref('')
 const roomViewTab = ref('chat') // chat | open | done
 const workBoardPanelRef = ref(null)
+const showJumpToLatest = computed(() => (
+  Boolean(activeRoomId.value)
+  && roomViewTab.value === 'chat'
+  && !messagesLoading.value
+  && !pinnedToBottom.value
+))
 let scheduleTimer = null
 
 const handleWorkConfirm = async ({ messageId, optionId }) => {
@@ -282,13 +291,13 @@ const formatUnreadCount = (count) => {
   return normalized > 99 ? '99+' : String(normalized)
 }
 
-const scrollToBottom = async () => {
-  await nextTick()
-  if (messageListRef.value) messageListRef.value.scrollTop = messageListRef.value.scrollHeight
-}
+watch(activeRoomId, () => {
+  void pinToBottom()
+})
 
-watch(() => messages.value.length, scrollToBottom)
-watch(activeRoomId, scrollToBottom)
+watch(messagesLoading, (loading) => {
+  if (!loading && activeRoomId.value) void pinToBottom()
+})
 
 const formatTime = (iso) => {
   if (!iso) return ''
@@ -374,15 +383,17 @@ const clearPendingFiles = () => {
 }
 
 const handleSelectRoom = async (room) => {
+  if (isMobileViewport.value) {
+    sidebarOpen.value = false
+    await nextTick()
+  }
   await selectRoom(room.id)
   const result = await markRoomAsRead(room.id)
   if (result?.ok) {
     applyUserRead(myId.value, result.lastReadAt)
   }
   void refreshReads()
-  if (isMobileViewport.value) {
-    sidebarOpen.value = false
-  }
+  void pinToBottom()
 }
 
 const handleCreateRoom = async () => {
@@ -570,6 +581,8 @@ watch(
     const latestMessage = messages.value[messages.value.length - 1]
     if (!latestMessage) return
     if (!activeRoomId.value) return
+    if (messagesLoading.value) return
+    onContentChange({ force: latestMessage.sender_id === myId.value })
     if (latestMessage.sender_id === myId.value) return
     void syncActiveRoomReadState()
   },
@@ -728,7 +741,8 @@ onBeforeUnmount(() => {
       />
 
       <!-- 메시지 목록 -->
-      <div v-else ref="messageListRef" class="flex-1 overflow-y-auto px-3 py-4 md:px-4">
+      <div v-else class="relative min-h-0 flex-1">
+      <div ref="messageListRef" class="h-full overflow-y-auto px-3 py-4 md:px-4">
         <div v-if="!activeRoomId" class="flex h-full items-center justify-center">
           <div class="text-center text-slate-400">
             <svg viewBox="0 0 24 24" class="mx-auto mb-3 h-12 w-12 opacity-30" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -1025,6 +1039,12 @@ onBeforeUnmount(() => {
             </div>
           </template>
         </div>
+      </div>
+        <ChatJumpToLatestButton
+          v-if="showJumpToLatest"
+          :count="unseenCount"
+          @click="pinToBottom"
+        />
       </div>
 
       <!-- 파일 미리보기 (다중) -->

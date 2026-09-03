@@ -5,6 +5,7 @@ import { DEFAULT_PRINT_OPTIONS } from './pagePrint'
 
 const props = defineProps({
   open: { type: Boolean, default: false },
+  defaultLandscape: { type: Boolean, default: true },
 })
 
 const emit = defineEmits(['close', 'print'])
@@ -22,7 +23,7 @@ const scalePresets = [70, 80, 90, 100, 110, 120]
 
 const resetSettings = () => {
   scale.value = DEFAULT_PRINT_OPTIONS.scaleFactor
-  landscape.value = DEFAULT_PRINT_OPTIONS.landscape
+  landscape.value = props.defaultLandscape
   copies.value = 1
   pageRangeInput.value = ''
   pageRangeError.value = ''

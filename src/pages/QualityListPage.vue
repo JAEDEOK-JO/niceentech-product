@@ -4,7 +4,11 @@ import { useRoute, useRouter } from 'vue-router'
 import '@/features/quality-list/quality.css'
 import QualityFilters from '@/features/quality-list/components/QualityFilters.vue'
 import QualityTable from '@/features/quality-list/components/QualityTable.vue'
+import QualityDateTransferDialog from '@/features/quality-list/components/QualityDateTransferDialog.vue'
 import PrintSettingsDialog from '@/features/printing/PrintSettingsDialog.vue'
+import MainPipeGroupingDialog from '@/features/quality-list/components/print/MainPipeGroupingDialog.vue'
+import MainPipePrintTemplate from '@/features/quality-list/components/print/MainPipePrintTemplate.vue'
+import BranchPipePrintTemplate from '@/features/quality-list/components/print/BranchPipePrintTemplate.vue'
 import { printCurrentPage } from '@/features/printing/pagePrint'
 import { useDialog } from '@/composables/useDialog'
 
@@ -12,7 +16,6 @@ const { confirm, alert } = useDialog()
 import {
   copyQualityItem,
   deleteQualityItem,
-  downloadNoticePdf,
   fetchQualityList,
   moveQualityItemDate,
   removeSubscription,
@@ -23,14 +26,43 @@ import {
   updateReturnFlag,
   uploadNoticePdf,
 } from '@/features/quality-list/services/quality.service'
+import {
+  downloadJoinCertificatePdf,
+  fetchReceiptInfo,
+  formatNoticeError,
+  markNoticeDownloaded,
+  saveNoticeBundleToFolder,
+} from '@/features/quality-list/services/notice.service'
 import { formatIsoDate, formatQualityDate, getNextTuesday, moveByWeeks, parseQualityDate } from '@/features/quality-list/utils/date'
-import { exportQualityListToExcel, exportQualityStampToExcel } from '@/features/quality-list/utils/print'
+import { exportQualityStampToExcel } from '@/features/quality-list/utils/print'
 import {
   chunkQualityPrintPages,
   getQualityPrintRowNumber,
 } from '@/features/quality-list/utils/qualityPrintPaging'
+import {
+  applyMainPipeGrouping,
+  buildMainPipeGroups,
+  chunkMainPipePages,
+  toMainPipeCards,
+} from '@/features/quality-list/utils/print/main-pipe'
+import {
+  buildBranchPipeItems,
+  chunkBranchPipePages,
+} from '@/features/quality-list/utils/print/branch-pipe'
+import {
+  buildNoticeCertificateModel,
+  toCertificateListFileName,
+  toJoinCertificateFileName,
+} from '@/features/quality-list/utils/print/notice-certificate'
+import { buildNoticeCertificateHtml } from '@/features/quality-list/utils/print/notice-certificate-html'
 import type { QualityCountField } from '@/features/quality-list/services/quality.service'
 import type { QualityListRow } from '@/features/quality-list/types/quality'
+import type {
+  BranchPipeItem,
+  MainPipeGroupableGroup,
+  MainPipeGroupItem,
+  PrintEntryWithType,
+} from '@/features/quality-list/types/print'
 import { mapQualityListRow } from '@/features/quality-list/types/quality'
 
 const router = useRouter()
@@ -44,7 +76,15 @@ const loading = ref(false)
 const items = ref<QualityListRow[]>([])
 const isPrinting = ref(false)
 const isPrintSettingsOpen = ref(false)
+const printMode = ref<'list' | 'main' | 'branch'>('list')
+const isGroupingDialogOpen = ref(false)
+const groupingGroups = ref<MainPipeGroupableGroup[]>([])
+const pendingMainPipeItems = ref<MainPipeGroupItem[]>([])
+const mainPipeCards = ref<PrintEntryWithType[]>([])
+const branchPipeItems = ref<BranchPipeItem[]>([])
 const noticeFileInput = ref<HTMLInputElement | null>(null)
+const transferItem = ref<QualityListRow | null>(null)
+const transferBusy = ref(false)
 
 const currentDateLabel = computed(() =>
   showAllRecords.value ? '검수리스트 전체 검색결과' : formatQualityDate(currentTuesday.value),
@@ -58,6 +98,13 @@ const printTotal = computed(() =>
 )
 
 const printPages = computed(() => chunkQualityPrintPages(items.value))
+const mainPipePages = computed(() => chunkMainPipePages(mainPipeCards.value))
+const branchPipePages = computed(() => chunkBranchPipePages(branchPipeItems.value))
+const printDefaultLandscape = computed(() => printMode.value !== 'main')
+const printMargin = computed(() => {
+  if (printMode.value === 'main') return '16mm'
+  return '6mm'
+})
 
 const printCountColumns = [
   { label: '32A', key: 'a32', className: 'quality-print-inch' },
@@ -143,8 +190,9 @@ const channel = subscribeQualityList((payload) => {
       return
     }
     const next = [...items.value]
+    const sortChanged = items.value[index].sort !== mapped.sort
     next[index] = mapped
-    items.value = sortItems(next)
+    items.value = sortChanged ? sortItems(next) : next
   }
 })
 
@@ -215,29 +263,62 @@ async function handleNoticeUpload(event: Event) {
   }
 }
 
-function noticeFileNameOf(item: QualityListRow) {
-  const certification = String(item.lotCertification ?? '').replace(/^분기\s*/, '').trim()
-  const number = String(item.lotKsdNum ?? '').trim()
-  if (!certification || !number) return ''
-  return `${certification} ${number}.pdf`
-}
-
 async function onNoticeDownload(item: QualityListRow) {
-  const fileName = noticeFileNameOf(item)
-  if (!fileName) {
-    await alert('통보서 파일명을 만들 수 없습니다.')
-    return
-  }
-
   try {
-    await downloadNoticePdf(fileName)
-  } catch {
-    await alert(`${fileName} 통보서를 찾지 못했습니다.`)
-  }
-}
+    const receipt = await fetchReceiptInfo({
+      testDate: item.testDate,
+      lotNum: item.lotNumH,
+      lotType: item.lotType,
+    })
+    if (!receipt) {
+      await alert('접수번호 없음')
+      return
+    }
 
-function goCalculation() {
-  void router.push({ name: 'quality-calculation' })
+    let joinFile
+    try {
+      joinFile = await downloadJoinCertificatePdf({
+        lotCertification: item.lotCertification,
+        lotNumH: item.lotNumH,
+      })
+    } catch (error) {
+      console.error('[notice] storage download failed', error)
+      await alert(`통보서 파일 확인 중 오류가 발생했습니다\n${formatNoticeError(error)}`)
+      return
+    }
+
+    if (!joinFile) {
+      const fileName = toJoinCertificateFileName(item.lotCertification, item.lotNumH)
+      await alert(`통보서 파일(${fileName})을 찾을 수 없습니다`)
+      return
+    }
+
+    const model = buildNoticeCertificateModel(item, receipt.receiptNum, receipt.lotType)
+    const html = await buildNoticeCertificateHtml(model)
+    const saved = await saveNoticeBundleToFolder({
+      company: item.company,
+      place: item.place,
+      testDate: item.testDate,
+      joinFileName: joinFile.fileName,
+      joinBytes: joinFile.bytes,
+      listFileName: toCertificateListFileName(item.place, item.area),
+      html,
+    })
+
+    if (!saved.success) {
+      console.error('[notice] save failed', saved)
+      await alert(`통보서 생성 중 오류가 발생했습니다\n${formatNoticeError(saved.error)}`)
+      return
+    }
+
+    await markNoticeDownloaded(item.id)
+    items.value = items.value.map((row) => (
+      row.id === item.id ? { ...row, noticeDownloaded: true } : row
+    ))
+  } catch (error) {
+    console.error('[notice] generate failed', error)
+    await alert(`통보서 생성 중 오류가 발생했습니다\n${formatNoticeError(error)}`)
+  }
 }
 
 function goEdit(item: QualityListRow) {
@@ -253,16 +334,33 @@ async function onDelete(item: QualityListRow) {
   await deleteQualityItem(item.id)
 }
 
-async function onMoveDate(item: QualityListRow) {
-  const newTestDate = window.prompt('이동할 검사일을 입력하세요. 예: 2026년 04월 14일', item.testDate)
-  if (!newTestDate || newTestDate === item.testDate) return
-  await moveQualityItemDate(item.id, newTestDate)
+async function onMoveDate(item: QualityListRow, newTestDate: string) {
+  transferBusy.value = true
+  try {
+    await moveQualityItemDate(item, newTestDate)
+    transferItem.value = null
+  } catch (error) {
+    await alert(error instanceof Error ? error.message : '이동하지 못했습니다.')
+  } finally {
+    transferBusy.value = false
+  }
 }
 
-async function onCopyDate(item: QualityListRow) {
-  const newTestDate = window.prompt('복사할 검사일을 입력하세요. 예: 2026년 04월 14일', item.testDate)
-  if (!newTestDate) return
-  await copyQualityItem(item, newTestDate)
+function closeTransfer() {
+  if (transferBusy.value) return
+  transferItem.value = null
+}
+
+async function onCopyDate(item: QualityListRow, newTestDate: string) {
+  transferBusy.value = true
+  try {
+    await copyQualityItem(item, newTestDate)
+    transferItem.value = null
+  } catch (error) {
+    await alert(error instanceof Error ? error.message : '복사하지 못했습니다.')
+  } finally {
+    transferBusy.value = false
+  }
 }
 
 async function onUpdateRange(item: QualityListRow, lotStart: number) {
@@ -277,24 +375,18 @@ async function onToggleReturn(item: QualityListRow, field: QualityCountField, va
   await updateReturnFlag(item.id, field, value)
 }
 
-async function onMoveUp(index: number) {
-  if (index <= 0) return
-  const next = [...items.value]
-  ;[next[index - 1], next[index]] = [next[index], next[index - 1]]
-  await reorderQualityItems(next)
-  items.value = next
-}
+const canReorder = computed(() => !showAllRecords.value && !searchQuery.value.trim())
 
-async function onMoveDown(index: number) {
-  if (index >= items.value.length - 1) return
-  const next = [...items.value]
-  ;[next[index], next[index + 1]] = [next[index + 1], next[index]]
-  await reorderQualityItems(next)
-  items.value = next
-}
-
-function onExport() {
-  exportQualityListToExcel(items.value, `quality-list-${Date.now()}.xlsx`)
+async function onReorder(next: QualityListRow[]) {
+  const previous = items.value
+  const ordered = next.map((item, index) => ({ ...item, sort: index }))
+  items.value = ordered
+  try {
+    await reorderQualityItems(ordered)
+  } catch (error) {
+    items.value = previous
+    await alert(error instanceof Error ? error.message : '순서를 저장하지 못했습니다.')
+  }
 }
 
 function onStamp(item: QualityListRow) {
@@ -309,12 +401,58 @@ function getLotRoundStyle(round: string) {
 }
 
 function onPrint() {
+  printMode.value = 'list'
   isPrintSettingsOpen.value = true
+}
+
+function openPrintSettings() {
+  isPrintSettingsOpen.value = true
+}
+
+function startMainPipePrint(allItems: MainPipeGroupItem[], groupedIndices: Record<string, number[]>) {
+  mainPipeCards.value = toMainPipeCards(applyMainPipeGrouping(allItems, groupedIndices))
+  if (mainPipeCards.value.length === 0) {
+    void alert('출력할 메인관 데이터가 없습니다.')
+    return
+  }
+  printMode.value = 'main'
+  openPrintSettings()
+}
+
+async function handleMainPipePrint() {
+  const { allItems, groupable } = buildMainPipeGroups(items.value)
+  if (allItems.length === 0) {
+    await alert('출력할 메인관 데이터가 없습니다.')
+    return
+  }
+  if (groupable.length === 0) {
+    startMainPipePrint(allItems, {})
+    return
+  }
+  pendingMainPipeItems.value = allItems
+  groupingGroups.value = groupable
+  isGroupingDialogOpen.value = true
+}
+
+function onGroupingPrint(groupedIndices: Record<string, number[]>) {
+  isGroupingDialogOpen.value = false
+  startMainPipePrint(pendingMainPipeItems.value, groupedIndices)
+}
+
+async function handleBranchPipePrint() {
+  const list = buildBranchPipeItems(items.value)
+  if (list.length === 0) {
+    await alert('출력할 가지관 데이터가 없습니다.')
+    return
+  }
+  branchPipeItems.value = list
+  printMode.value = 'branch'
+  openPrintSettings()
 }
 
 async function printQualityListPage(options = {}) {
   isPrintSettingsOpen.value = false
-  await printCurrentPage(isPrinting, options, { margin: '2px' })
+  await printCurrentPage(isPrinting, options, { margin: printMargin.value })
 }
 
 onMounted(() => {
@@ -345,21 +483,39 @@ onBeforeUnmount(() => {
         @refresh="load"
         @create="goCreate"
         @notice-upload="openNoticeUpload"
-        @export="onExport"
         @print="onPrint"
-        @calculation="goCalculation"
+        @main-pipe-print="handleMainPipePrint"
+        @branch-pipe-print="handleBranchPipePrint"
       />
 
       <QualityTable
         :items="items"
         :loading="loading"
         :show-all-records="showAllRecords"
+        :can-reorder="canReorder"
         @edit="goEdit"
         @delete="onDelete"
         @notification="onNoticeDownload"
         @stamp="onStamp"
         @update-range="onUpdateRange"
         @update-cancel="onUpdateCancel"
+        @reorder="onReorder"
+        @transfer="transferItem = $event"
+      />
+
+      <QualityDateTransferDialog
+        :item="transferItem"
+        :busy="transferBusy"
+        @close="closeTransfer"
+        @move="onMoveDate"
+        @copy="onCopyDate"
+      />
+
+      <MainPipeGroupingDialog
+        :open="isGroupingDialogOpen"
+        :groups="groupingGroups"
+        @close="isGroupingDialogOpen = false"
+        @print="onGroupingPrint"
       />
 
       <input
@@ -372,24 +528,26 @@ onBeforeUnmount(() => {
       />
     </div>
 
-    <section class="quality-print-page">
+    <section class="quality-print-page" :class="{ 'is-print-active': printMode === 'list' }">
       <div
         v-for="(pageItems, pageIndex) in printPages"
         :key="pageIndex"
         class="quality-print-sheet"
       >
-        <div v-if="pageIndex === 0" class="quality-print-header">
-          <h1>{{ currentDateLabel }} 검수리스트</h1>
-          <span class="quality-print-summary">총합 : {{ printTotal }}개</span>
+        <div class="quality-print-header">
+          <h1>
+            <span class="quality-print-title-label">{{ currentDateLabel }} 검수리스트</span>
+            <span class="quality-print-title-total">총합 : {{ printTotal }}개</span>
+          </h1>
         </div>
         <table class="quality-print-table">
           <colgroup>
-            <col style="width: 32px" />
-            <col style="width: 52px" />
-            <col style="width: 26%" />
-            <col style="width: 22%" />
-            <col v-for="column in printCountColumns" :key="column.key" style="width: 46px" />
-            <col style="width: 54px" />
+            <col class="quality-print-col-n" />
+            <col class="quality-print-col-initial" />
+            <col class="quality-print-col-place" />
+            <col class="quality-print-col-lot" />
+            <col v-for="column in printCountColumns" :key="column.key" class="quality-print-col-count" />
+            <col class="quality-print-col-total" />
           </colgroup>
           <thead>
             <tr>
@@ -412,13 +570,17 @@ onBeforeUnmount(() => {
               <td colspan="15">검수리스트가 없습니다.</td>
             </tr>
             <tr v-for="(item, index) in pageItems" :key="item.id">
-              <td>{{ getQualityPrintRowNumber(pageIndex, index) }}</td>
+              <td class="quality-print-n">{{ getQualityPrintRowNumber(pageIndex, index) }}</td>
               <td class="quality-print-initial">
                 <span class="quality-print-initial-text">{{ item.initial }}</span>
               </td>
               <td class="quality-print-place">
-                {{ item.company }} {{ item.place }}{{ item.area ? ' ' + item.area : '' }}
-                <span v-if="showAllRecords && item.testDate" class="quality-print-date">({{ item.testDate.replace(/\s/g, '').slice(2) }})</span>
+                <div class="quality-print-place-wrap">
+                  <span class="quality-print-place-text">
+                    {{ item.company }} {{ item.place }}{{ item.area ? ' ' + item.area : '' }}
+                    <span v-if="showAllRecords && item.testDate" class="quality-print-date">({{ item.testDate.replace(/\s/g, '').slice(2) }})</span>
+                  </span>
+                </div>
               </td>
               <td class="quality-print-lot">
                 <div class="quality-print-lot-inner" :style="getLotRoundStyle(item.lotRound)">
@@ -441,8 +603,12 @@ onBeforeUnmount(() => {
       </div>
     </section>
 
+    <MainPipePrintTemplate :pages="mainPipePages" :active="printMode === 'main'" />
+    <BranchPipePrintTemplate :pages="branchPipePages" :active="printMode === 'branch'" />
+
     <PrintSettingsDialog
       :open="isPrintSettingsOpen"
+      :default-landscape="printDefaultLandscape"
       @close="isPrintSettingsOpen = false"
       @print="printQualityListPage"
     />
@@ -475,14 +641,25 @@ onBeforeUnmount(() => {
     padding: 0 !important;
   }
 
+  .quality-page-shell {
+    height: auto !important;
+    overflow: visible !important;
+    padding: 0 !important;
+  }
+
   .quality-screen {
     display: none !important;
   }
 
-  .quality-print-page {
+  .quality-print-page.is-print-active {
     display: block !important;
     color: #111827;
-    font-family: "Malgun Gothic", Arial, sans-serif;
+    font-family: TheJamsil, sans-serif !important;
+  }
+
+  .quality-print-page.is-print-active,
+  .quality-print-page.is-print-active * {
+    font-family: TheJamsil, sans-serif !important;
   }
 
   .quality-print-sheet {
@@ -496,27 +673,27 @@ onBeforeUnmount(() => {
   }
 
   .quality-print-header {
-    display: flex;
-    flex-wrap: nowrap;
-    align-items: baseline;
-    justify-content: center;
-    gap: 12px;
-    margin: 0 0 4px;
-    white-space: nowrap;
+    display: block;
+    margin: 0 0 6px;
+    text-align: left;
   }
 
   .quality-print-page h1 {
     margin: 0;
-    color: #1e3a8a;
+    color: #000;
     font-size: 18px;
     font-weight: 800;
-    text-align: center;
+    line-height: 1.2;
+    white-space: nowrap;
   }
 
-  .quality-print-summary {
-    color: #1e293b;
-    font-size: 16px;
-    font-weight: 800;
+  .quality-print-title-label {
+    color: #000;
+  }
+
+  .quality-print-title-total {
+    margin-left: 0.4em;
+    color: #ea580c;
   }
 
   .quality-print-table {
@@ -527,11 +704,35 @@ onBeforeUnmount(() => {
     font-size: 13px;
   }
 
+  .quality-print-col-n {
+    width: 32px;
+  }
+
+  .quality-print-col-initial {
+    width: 72px;
+  }
+
+  .quality-print-col-place {
+    width: auto;
+  }
+
+  .quality-print-col-lot {
+    width: 160px;
+  }
+
+  .quality-print-col-count {
+    width: 50px;
+  }
+
+  .quality-print-col-total {
+    width: 48px;
+  }
+
   .quality-print-table th,
   .quality-print-table td {
     border-right: 1px solid #94a3b8;
     border-bottom: 1px solid #94a3b8;
-    padding: 0;
+    padding: 0 2px;
     text-align: center;
     vertical-align: middle;
   }
@@ -570,6 +771,22 @@ onBeforeUnmount(() => {
     page-break-inside: avoid;
   }
 
+  .quality-print-table tbody td {
+    height: 50px;
+    max-height: 50px;
+    overflow: hidden;
+  }
+
+  .quality-print-table tbody td.quality-print-lot {
+    overflow: visible;
+  }
+
+  .quality-print-n,
+  .quality-print-total {
+    padding: 0 4px !important;
+    font-weight: 800;
+  }
+
   .quality-print-initial {
     padding: 2px !important;
     color: #334155;
@@ -581,23 +798,41 @@ onBeforeUnmount(() => {
   .quality-print-initial-text {
     display: -webkit-box;
     -webkit-box-orient: vertical;
-    -webkit-line-clamp: 3;
-    line-clamp: 3;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
     overflow: hidden;
-    text-overflow: ellipsis;
     word-break: break-all;
-    line-height: 1.4;
-    max-height: calc(1.4em * 3);
+    line-height: 1.3;
+    max-height: calc(1.3em * 2);
   }
 
   .quality-print-place {
-    padding: 2px 4px !important;
+    padding: 0 4px !important;
     color: #0f172a;
     font-size: 12px;
     font-weight: 700;
-    line-height: 1.35;
     text-align: left !important;
+    vertical-align: middle;
+  }
+
+  .quality-print-place-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    height: 100%;
+  }
+
+  .quality-print-place-text {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
     word-break: keep-all;
+    line-height: 1.3;
+    max-height: calc(1.3em * 2);
+    text-align: left;
+    width: 100%;
   }
 
   .quality-print-date {
@@ -606,7 +841,9 @@ onBeforeUnmount(() => {
   }
 
   .quality-print-lot {
-    padding: 0 4px !important;
+    padding: 0 10px !important;
+    white-space: nowrap;
+    overflow: visible;
   }
 
   .quality-print-lot-inner {
@@ -618,11 +855,9 @@ onBeforeUnmount(() => {
   }
 
   .quality-print-lot-inner strong {
-    min-width: 0;
-    overflow: hidden;
+    flex-shrink: 0;
     font-size: 12px;
     font-weight: 800;
-    text-overflow: ellipsis;
   }
 
   .quality-print-lot-inner span {
@@ -640,10 +875,6 @@ onBeforeUnmount(() => {
   .quality-print-table tbody .quality-print-metric {
     background: #fff7ed;
     color: #111827;
-    font-weight: 800;
-  }
-
-  .quality-print-total {
     font-weight: 800;
   }
 }
