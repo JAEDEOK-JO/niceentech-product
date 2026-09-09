@@ -6,7 +6,6 @@ export const LEAVE_TYPES = [
   '연차',
   '반차(오전)',
   '반차(오후)',
-  LEAVE_TYPE_OUTING,
   LEAVE_TYPE_ABSENCE,
   LEAVE_TYPE_HOME,
 ] as const

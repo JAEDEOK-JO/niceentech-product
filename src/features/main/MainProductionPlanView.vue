@@ -13,6 +13,7 @@ import { sanitizeDecimalOne } from '@/features/main/productionPlanNumbers'
 import { PLAN_SORT_COLUMNS } from '@/features/main/productionPlanSort'
 import { WELDING_SCHEDULE_PERMISSION_ERROR } from '@/features/welding-schedule/utils/weldingSchedulePermission'
 import CncPlanRegisterDialog from '@/features/cnc/components/CncPlanRegisterDialog.vue'
+import ProductionCalculationDialog from '@/features/main/calculation/ProductionCalculationDialog.vue'
 import { vVirtualKeyboard } from '@/features/virtual-keyboard/directives/vVirtualKeyboard'
 
 const { confirm, alert } = useDialog()
@@ -31,6 +32,7 @@ const props = defineProps({
   currentWorkMan: { type: String, default: '' },
   currentRole: { type: String, default: '' },
   canManageWeldingSchedule: { type: Boolean, default: false },
+  canEditCalculation: { type: Boolean, default: false },
 })
 
 const emit = defineEmits([
@@ -61,6 +63,7 @@ const emit = defineEmits([
   'register-cnc',
   'cancel-cnc',
   'toggle-plan-sort',
+  'update-calculation',
 ])
 
 const overallTotals = computed(() =>
@@ -104,6 +107,8 @@ const selectedWeldingScheduleInspector = ref('')
 const isInchDialogOpen = ref(false)
 const activeInchRow = ref(null)
 const inchInput = ref('')
+const isCalculationDialogOpen = ref(false)
+const activeCalculationRow = ref(null)
 
 const isShipmentConfirmOpen = ref(false)
 const activeShipmentRow = ref(null)
@@ -469,6 +474,22 @@ const confirmInch = () => {
   closeInchDialog()
 }
 
+const openCalculationDialog = (row) => {
+  if (!props.canEditCalculation || !row?.id) return
+  activeCalculationRow.value = row
+  isCalculationDialogOpen.value = true
+}
+
+const closeCalculationDialog = () => {
+  isCalculationDialogOpen.value = false
+  activeCalculationRow.value = null
+}
+
+const handleCalculationSaved = ({ row, hasQuantities }) => {
+  emit('update-calculation', { row, value: Boolean(hasQuantities) })
+  closeCalculationDialog()
+}
+
 const handleCellClick = ({ row, columnKey }) => {
   if (!row?.id || !columnKey) return
   if (columnKey === 'memo') {
@@ -477,6 +498,10 @@ const handleCellClick = ({ row, columnKey }) => {
   }
   if (columnKey === 'inch') {
     openInchDialog(row)
+    return
+  }
+  if (columnKey === 'name') {
+    openCalculationDialog(row)
     return
   }
   if (columnKey === 'area') {
@@ -1226,6 +1251,13 @@ const selectDrawingFile = (file) => {
         </div>
       </div>
     </div>
+
+    <ProductionCalculationDialog
+      :open="isCalculationDialogOpen"
+      :plan-row="activeCalculationRow"
+      @close="closeCalculationDialog"
+      @saved="handleCalculationSaved"
+    />
 
     <div
       v-if="isTestDateDialogOpen && activeTestDateRow"

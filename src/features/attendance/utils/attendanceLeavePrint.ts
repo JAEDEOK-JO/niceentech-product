@@ -3,6 +3,10 @@ import AttendanceLeaveApplicationDocument from '../components/AttendanceLeaveApp
 import documentCss from '../components/attendanceLeaveDocument.css?raw'
 import type { AttendanceRequest, Employee } from '../types/attendance'
 import { getLeaveApplicationDocumentTitle } from './attendanceLeaveType'
+import {
+  buildAttendanceEvidencePageHtml,
+  listAttendanceEvidenceUrls,
+} from './attendanceLeaveEvidencePrint'
 
 type PrintResult = {
   success?: boolean
@@ -54,6 +58,20 @@ html, body {
 .print-page:last-child {
   page-break-after: auto;
   break-after: auto;
+}
+
+.evidence-print {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 255mm;
+}
+
+.evidence-print img {
+  display: block;
+  max-width: 100%;
+  max-height: 247mm;
+  object-fit: contain;
 }
 `
 
@@ -147,6 +165,24 @@ async function renderLeaveApplicationContent(
   return content
 }
 
+async function renderEvidencePages(item: AttendanceRequest): Promise<string[]> {
+  const urls = listAttendanceEvidenceUrls(item)
+  if (urls.length === 0) return []
+  const inlined = await Promise.all(urls.map((url) => fetchAsDataUrl(url)))
+  return inlined
+    .map((url) => buildAttendanceEvidencePageHtml(url))
+    .filter(Boolean)
+}
+
+async function renderLeavePrintPages(
+  item: AttendanceRequest,
+  employees: Employee[],
+): Promise<string[]> {
+  const formPage = await renderLeaveApplicationContent(item, employees)
+  const evidencePages = await renderEvidencePages(item)
+  return [formPage, ...evidencePages]
+}
+
 async function invokeElectronPrint(html: string) {
   const electronAPI = window.electronAPI
 
@@ -185,9 +221,9 @@ export async function printAttendanceLeaveApplication(
 ): Promise<boolean> {
   if (typeof window === 'undefined') return false
 
-  const content = await renderLeaveApplicationContent(item, employees)
+  const pages = await renderLeavePrintPages(item, employees)
   const docTitle = getLeaveApplicationDocumentTitle(item.leaveType)
-  const html = buildPrintHtml([content], `${docTitle}_${item.userName}`)
+  const html = buildPrintHtml(pages, `${docTitle}_${item.userName}`)
   return invokeElectronPrint(html)
 }
 
@@ -203,9 +239,9 @@ export async function printAllApprovedAttendanceLeaveApplications(
     return false
   }
 
-  const pages = await Promise.all(
-    approvedItems.map((item) => renderLeaveApplicationContent(item, employees)),
-  )
+  const pages = (
+    await Promise.all(approvedItems.map((item) => renderLeavePrintPages(item, employees)))
+  ).flat()
   const html = buildPrintHtml(pages, '휴가신청서_전체')
   return invokeElectronPrint(html)
 }

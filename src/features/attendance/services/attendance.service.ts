@@ -361,7 +361,6 @@ export async function rejectAttendanceRequest(
   if (error) throw error
 }
 
-// ─── 인쇄 완료 표시 ────────────────────────────────────────────────────────────
 export async function markAttendanceRequestPrinted(id: number): Promise<string> {
   const printedAt = new Date().toISOString()
   const { error } = await supabase

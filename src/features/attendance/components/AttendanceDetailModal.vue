@@ -45,7 +45,11 @@ function openGallery(index = 0) {
       </div>
 
       <div class="p-4 md:p-6">
-        <div v-if="item.evidenceUrls?.length" class="mb-4 flex items-center gap-2">
+        <div
+          v-if="item.evidenceUrls?.length"
+          class="mb-4 flex cursor-pointer items-center gap-2"
+          @click="openGallery(0)"
+        >
           <AttendanceEvidenceThumb
             :urls="item.evidenceUrls"
             @open="openGallery"

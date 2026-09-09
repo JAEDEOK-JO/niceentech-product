@@ -106,12 +106,14 @@ const tableWidthStyle = {
           </div>
           <div class="text-right text-xs font-semibold text-slate-600">
             <p>
-              <span
+              <button
+                type="button"
                 class="inline-flex items-center rounded-full px-2 py-0.5"
                 :class="row.calculation ? 'bg-lime-100 text-lime-900' : 'bg-transparent text-slate-600'"
+                @click="emit('cell-click', { row, columnKey: 'name' })"
               >
                 담당 {{ row.name || '-' }}
-              </span>
+              </button>
             </p>
             <p>설계배포 {{ displayCellText(row, 'design_distributed') }}</p>
             <p>도착 {{ displayCellText(row, 'delivery_due_date') || '-' }}</p>

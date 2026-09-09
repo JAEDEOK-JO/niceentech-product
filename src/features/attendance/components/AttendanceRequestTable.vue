@@ -57,7 +57,8 @@ const BTN = {
   red: 'rounded-lg bg-red-500 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-400',
   outline: 'rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-100',
   outlineRed: 'rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-bold text-red-500 hover:bg-red-50',
-  deepOrange: 'rounded-lg bg-orange-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-orange-600',
+  lightBlue: 'rounded-lg border border-sky-200 bg-sky-100 px-3 py-1.5 text-xs font-bold text-sky-800 hover:bg-sky-200',
+  printedOrange: 'rounded-lg border border-orange-200 bg-orange-100 px-3 py-1.5 text-xs font-bold text-orange-800 hover:bg-orange-200',
 }
 
 function actionsFor(item: AttendanceRequest): ActionDef[] {
@@ -99,19 +100,17 @@ function actionsFor(item: AttendanceRequest): ActionDef[] {
   const actions: ActionDef[] = [{
     key: 'print',
     label: item.printedAt ? '인쇄완료' : '인쇄',
-    buttonClass: item.printedAt ? BTN.deepOrange : BTN.outline,
+    buttonClass: item.printedAt ? BTN.printedOrange : BTN.lightBlue,
   }]
   if (props.isRootAdmin) actions.push({ key: 'adminDelete', label: '삭제', buttonClass: BTN.outlineRed })
   return actions
 }
 
 function statusLabel(item: AttendanceRequest) {
-  if (item.printedAt && item.status === '승인') return '인쇄완료'
   return getAttendanceStatusLabel(item.status)
 }
 
 function statusClass(item: AttendanceRequest) {
-  if (item.printedAt && item.status === '승인') return 'bg-orange-700 text-white'
   return props.statusBadgeClass?.(item.status)
 }
 

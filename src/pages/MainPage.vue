@@ -10,6 +10,7 @@ import { isAdminRole, isDesignDepartment, normalizeDepartment } from '@/utils/ad
 import { supabase } from '@/lib/supabase'
 import { createCncItem, deleteCncItemByProductListId } from '@/features/cnc/services/cnc.service'
 import { roundToOneDecimal } from '@/features/main/productionPlanNumbers'
+import { syncInventoryWorkMemo } from '@/features/inventory/work-status'
 
 const router = useRouter()
 const route = useRoute()
@@ -129,6 +130,19 @@ const handleUpdateInch = async ({ row, value }) => {
   })
 }
 
+const handleUpdateCalculation = async ({ row, value }) => {
+  if (!row?.id) return
+  await updatePlanRowFields({
+    rowId: row.id,
+    updates: { calculation: Boolean(value) },
+  })
+}
+
+const applyPlanWorkerUpdates = async (row, updates) => {
+  await updatePlanRowFields({ rowId: row.id, updates })
+  await syncInventoryWorkMemo(row, updates)
+}
+
 const handleCancelShipRow = async (row) => {
   if (!row?.id) return
   const updates = { shipment: false }
@@ -148,7 +162,7 @@ const handleCancelShipRow = async (row) => {
     updates.worker_welding = '작업완료'
     updates.worker_welding_time_final = ''
   }
-  await updatePlanRowFields({ rowId: row.id, updates })
+  await applyPlanWorkerUpdates(row, updates)
 }
 
 const handleShipRow = async (row) => {
@@ -179,7 +193,7 @@ const handleShipRow = async (row) => {
     updates.worker_welding_time_final = finalTimeStr
   }
 
-  await updatePlanRowFields({ rowId: row.id, updates })
+  await applyPlanWorkerUpdates(row, updates)
 }
 
 const formatIsoDate = (date = new Date()) => {
@@ -279,15 +293,12 @@ const buildProcessUpdates = (row, config, { reset = false } = {}) => {
 
 const handleWeldingStart = async ({ row, inspector }) => {
   if (!row?.id) return
-  await updatePlanRowFields({
-    rowId: row.id,
-    updates: {
-      welding_status: '작업중',
-      worker_welding: '작업중',
-      welding_inspector: inspector,
-      welding_started_on: formatIsoDate(),
-      worker_welding_time: '',
-    },
+  await applyPlanWorkerUpdates(row, {
+    welding_status: '작업중',
+    worker_welding: '작업중',
+    welding_inspector: inspector,
+    welding_started_on: formatIsoDate(),
+    worker_welding_time: '',
   })
   await supabase.from('welding_inspections').upsert(
     {
@@ -307,31 +318,25 @@ const handleWeldingStart = async ({ row, inspector }) => {
 
 const handleWeldingLongPress = async (row) => {
   if (!row?.id) return
-  await updatePlanRowFields({
-    rowId: row.id,
-    updates: {
-      welding_status: '없음',
-      worker_welding: '없음',
-      worker_welding_time: '',
-      welding_started_on: null,
-      welding_completed_on: null,
-      welding_inspector: '',
-    },
+  await applyPlanWorkerUpdates(row, {
+    welding_status: '없음',
+    worker_welding: '없음',
+    worker_welding_time: '',
+    welding_started_on: null,
+    welding_completed_on: null,
+    welding_inspector: '',
   })
   await supabase.from('welding_inspections').delete().eq('product_list_id', row.id)
 }
 const handleNasaLongPress = async (row) => {
   if (!row?.id) return
-  await updatePlanRowFields({
-    rowId: row.id,
-    updates: {
-      nasa_status: '없음',
-      worker_nasa: '없음',
-      worker_nasa_time: '',
-      worker_nasa_time_final: '',
-      nasa_started_on: null,
-      nasa_completed_on: null,
-    },
+  await applyPlanWorkerUpdates(row, {
+    nasa_status: '없음',
+    worker_nasa: '없음',
+    worker_nasa_time: '',
+    worker_nasa_time_final: '',
+    nasa_started_on: null,
+    nasa_completed_on: null,
   })
 }
 
@@ -341,7 +346,7 @@ const handleCellAction = async ({ row, columnKey, reset = false }) => {
   if (processConfigs[columnKey]) {
     const updates = buildProcessUpdates(row, processConfigs[columnKey], { reset })
     if (!updates) return
-    await updatePlanRowFields({ rowId: row.id, updates })
+    await applyPlanWorkerUpdates(row, updates)
     return
   }
 
@@ -363,7 +368,7 @@ const handleCellAction = async ({ row, columnKey, reset = false }) => {
     }
     updates.nasa_status = next
     updates.worker_nasa = next
-    await updatePlanRowFields({ rowId: row.id, updates })
+    await applyPlanWorkerUpdates(row, updates)
     return
   }
 
@@ -384,7 +389,7 @@ const handleCellAction = async ({ row, columnKey, reset = false }) => {
     }
     updates.welding_status = next
     updates.worker_welding = next
-    await updatePlanRowFields({ rowId: row.id, updates })
+    await applyPlanWorkerUpdates(row, updates)
     if (next === '작업완료') {
       await supabase.from('welding_inspections')
         .update({ welding_status: '작업완료' })
@@ -418,15 +423,6 @@ const handleCellAction = async ({ row, columnKey, reset = false }) => {
     return
   }
 
-  if (columnKey === 'name') {
-    if (!isAdminRole(profile.value?.role) && !isDesignDepartment(profile.value?.department)) return
-    await updatePlanRowFields({
-      rowId: row.id,
-      updates: { calculation: !Boolean(row.calculation) },
-    })
-    return
-  }
-
   if (columnKey === 'company') {
     await updatePlanRowFields({
       rowId: row.id,
@@ -438,7 +434,26 @@ const handleCellAction = async ({ row, columnKey, reset = false }) => {
   }
 
   if (columnKey === 'place') {
-    router.push({ name: 'company-list' })
+    const company = String(row.company ?? '').trim()
+    const place = String(row.place ?? '').trim()
+    const related = groupedRows.value
+      .flatMap((group) => group.rows ?? [])
+      .filter((item) =>
+        String(item.company ?? '').trim() === company && String(item.place ?? '').trim() === place,
+      )
+    try {
+      await Promise.all((related.length > 0 ? related : [row]).map((item) => syncInventoryWorkMemo(item)))
+    } catch {
+      // 입출고 페이지는 상태 동기화 실패와 관계없이 연다.
+    }
+    router.push({
+      name: 'inventory',
+      query: {
+        ...(company ? { company } : {}),
+        ...(place ? { place } : {}),
+        ...(String(row.initial ?? '').trim() ? { initial: String(row.initial).trim() } : {}),
+      },
+    })
   }
 }
 
@@ -595,6 +610,7 @@ watch(
     :current-work-man="profile?.work_man || ''"
     :current-role="profile?.role || ''"
     :can-manage-welding-schedule="canManageWeldingSchedulePermission"
+    :can-edit-calculation="isAdminRole(profile?.role) || isDesignDepartment(profile?.department)"
     @toggle-plan-sort="togglePlanSort"
     @move-week="moveWeek"
     @reset-week="resetWeek"
@@ -614,6 +630,7 @@ watch(
     @welding-long-press="handleWeldingLongPress"
     @nasa-long-press="handleNasaLongPress"
     @update-inch="handleUpdateInch"
+    @update-calculation="handleUpdateCalculation"
     @move-test-date="handleMoveTestDate"
     @add-welding-schedule="handleAddWeldingSchedule"
     @remove-welding-schedule="handleRemoveWeldingSchedule"

@@ -1,9 +1,5 @@
 import * as XLSX from 'xlsx'
 import type { QualityListRow } from '../types/quality'
-import {
-  chunkQualityPrintPages,
-  getQualityPrintRowNumber,
-} from './qualityPrintPaging'
 
 interface StampSizeRow {
   field: keyof QualityListRow
@@ -128,66 +124,25 @@ export function printQualityList(items: QualityListRow[], title: string) {
     0,
   )
 
-  const pages = chunkQualityPrintPages(items)
-  const tableHead = `
-          <colgroup>
-            <col style="width:32px" />
-            <col style="width:52px" />
-            <col style="width:26%" />
-            <col style="width:22%" />
-            <col style="width:46px" />
-            <col style="width:46px" />
-            <col style="width:46px" />
-            <col style="width:46px" />
-            <col style="width:46px" />
-            <col style="width:46px" />
-            <col style="width:50px" />
-            <col style="width:50px" />
-            <col style="width:50px" />
-            <col style="width:50px" />
-            <col style="width:54px" />
-          </colgroup>
-          <thead>
-            <tr>
-              <th class="th-base">N</th>
-              <th class="th-base">도번</th>
-              <th class="th-base">현장명</th>
-              <th class="th-base">확관</th>
-              <th class="th-inch">32A</th>
-              <th class="th-inch">40A</th>
-              <th class="th-inch">50A</th>
-              <th class="th-inch">65A</th>
-              <th class="th-metric">65A</th>
-              <th class="th-metric">80A</th>
-              <th class="th-metric">100A</th>
-              <th class="th-metric">125A</th>
-              <th class="th-metric">150A</th>
-              <th class="th-metric">200A</th>
-              <th class="th-base">합계</th>
-            </tr>
-          </thead>`
-
-  const sheets = pages
-    .map((pageItems, pageIndex) => {
-      const rows = pageItems
-        .map((item, index) => {
-          const placeParts = [item.company, item.place].filter((p) => String(p ?? '').trim())
-          const placeMain = escapeHtml(placeParts.join(' '))
-          const area = item.area ? ` ${escapeHtml(item.area)}` : ''
-          const lotNumShort = item.lotNumH ? String(item.lotNumH).slice(-3) : '---'
-          const color = roundColor(item.lotRound)
-          const lotStart = item.lotNumStartH ? String(item.lotNumStartH) : ''
-          const lotEnd = item.lotNumEndH ? String(item.lotNumEndH) : ''
-          const lotCell = `
+  const rows = items
+    .map((item, index) => {
+      const placeParts = [item.company, item.place].filter((p) => String(p ?? '').trim())
+      const placeMain = escapeHtml(placeParts.join(' '))
+      const area = item.area ? ` ${escapeHtml(item.area)}` : ''
+      const lotNumShort = item.lotNumH ? String(item.lotNumH).slice(-3) : '---'
+      const color = roundColor(item.lotRound)
+      const lotStart = item.lotNumStartH ? String(item.lotNumStartH) : ''
+      const lotEnd = item.lotNumEndH ? String(item.lotNumEndH) : ''
+      const lotCell = `
         <div class="lot-inner" style="color:${color}">
           <span class="lot-num">(${escapeHtml(lotNumShort)})</span>
           <span class="lot-name">${escapeHtml(item.lotNameH || '-')}</span>
           <span class="lot-range">${escapeHtml(lotStart)} ~ ${escapeHtml(lotEnd)}</span>
         </div>`
-          const cell = (v: number) => (v ? String(v) : '')
-          return `
+      const cell = (v: number) => (v ? String(v) : '')
+      return `
       <tr>
-        <td>${getQualityPrintRowNumber(pageIndex, index)}</td>
+        <td>${index + 1}</td>
         <td class="td-initial"><span class="td-initial-text">${escapeHtml(item.initial)}</span></td>
         <td class="td-place">${placeMain}${area}</td>
         <td class="td-lot">${lotCell}</td>
@@ -203,25 +158,6 @@ export function printQualityList(items: QualityListRow[], title: string) {
         <td class="td-metric">${cell(item.m200)}</td>
         <td class="td-total">${item.totalH || ''}</td>
       </tr>`
-        })
-        .join('')
-
-      const header =
-        pageIndex === 0
-          ? `<div class="print-header">
-          <h1>${escapeHtml(title)}</h1>
-          <span class="summary">총합 : ${total}개</span>
-        </div>`
-          : ''
-
-      return `
-      <div class="print-sheet">
-        ${header}
-        <table>
-          ${tableHead}
-          <tbody>${rows || '<tr><td colspan="15">검수리스트가 없습니다.</td></tr>'}</tbody>
-        </table>
-      </div>`
     })
     .join('')
 
@@ -235,12 +171,9 @@ export function printQualityList(items: QualityListRow[], title: string) {
           @page { margin: 2px; }
           * { box-sizing: border-box; }
           body { font-family: 'Malgun Gothic', Arial, sans-serif; margin: 0; padding: 0; color: #111; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          h1 { margin: 0; font-size: 18px; text-align: center; color: #1e3a8a; font-weight: 700; }
-          .print-header { display: flex; flex-wrap: nowrap; align-items: baseline; justify-content: center; gap: 12px; margin: 0 0 4px; white-space: nowrap; }
-          .summary { font-size: 16px; font-weight: 700; color: #1e293b; }
-          .print-sheet { page-break-after: always; break-after: page; }
-          .print-sheet:last-child { page-break-after: auto; break-after: auto; }
           table { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 13px; table-layout: fixed; }
+          thead { display: table-header-group; }
+          tbody { display: table-row-group; }
           th, td {
             border-right: 1px solid #94a3b8;
             border-bottom: 1px solid #94a3b8;
@@ -260,10 +193,22 @@ export function printQualityList(items: QualityListRow[], title: string) {
             border-right: 1px solid #64748b;
             border-bottom: 2px solid #475569;
           }
+          thead .title-row th,
+          thead .title-row th:first-child {
+            height: auto;
+            padding: 0 0 6px;
+            border: 0;
+            background: transparent;
+            color: #000;
+            font-size: 18px;
+            font-weight: 800;
+            text-align: left;
+          }
+          thead .title-total { margin-left: 0.4em; color: #ea580c; }
           thead .th-base   { background: #eff6ff; }
           thead .th-inch   { background: #dbeafe; }
           thead .th-metric { background: #ffedd5; color: #7c2d12; }
-          tbody tr { height: 50px; page-break-inside: avoid; }
+          tbody tr { height: 50px; page-break-inside: auto; break-inside: auto; }
           tbody .td-initial {
             padding: 2px;
             vertical-align: middle;
@@ -305,7 +250,51 @@ export function printQualityList(items: QualityListRow[], title: string) {
         </style>
       </head>
       <body>
-        ${sheets}
+        <table>
+          <colgroup>
+            <col style="width:32px" />
+            <col style="width:52px" />
+            <col style="width:26%" />
+            <col style="width:22%" />
+            <col style="width:46px" />
+            <col style="width:46px" />
+            <col style="width:46px" />
+            <col style="width:46px" />
+            <col style="width:46px" />
+            <col style="width:46px" />
+            <col style="width:50px" />
+            <col style="width:50px" />
+            <col style="width:50px" />
+            <col style="width:50px" />
+            <col style="width:54px" />
+          </colgroup>
+          <thead>
+            <tr class="title-row">
+              <th colspan="15">
+                <span>${escapeHtml(title)}</span>
+                <span class="title-total">총합 : ${total}개</span>
+              </th>
+            </tr>
+            <tr>
+              <th class="th-base">N</th>
+              <th class="th-base">도번</th>
+              <th class="th-base">현장명</th>
+              <th class="th-base">확관</th>
+              <th class="th-inch">32A</th>
+              <th class="th-inch">40A</th>
+              <th class="th-inch">50A</th>
+              <th class="th-inch">65A</th>
+              <th class="th-metric">65A</th>
+              <th class="th-metric">80A</th>
+              <th class="th-metric">100A</th>
+              <th class="th-metric">125A</th>
+              <th class="th-metric">150A</th>
+              <th class="th-metric">200A</th>
+              <th class="th-base">합계</th>
+            </tr>
+          </thead>
+          <tbody>${rows || '<tr><td colspan="15">검수리스트가 없습니다.</td></tr>'}</tbody>
+        </table>
         <script>
           window.addEventListener('load', function () {
             setTimeout(function () { window.focus(); window.print(); }, 150);

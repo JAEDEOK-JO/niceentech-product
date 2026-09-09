@@ -1,3 +1,5 @@
+import { isWorkingInventoryMemo } from '@/features/inventory/work-status/buildInventoryWorkMemo'
+
 export const formatQuantity = (value) => {
   if (value === null || value === undefined || value === '') return ''
   const number = Number(value)
@@ -38,6 +40,13 @@ export const sumIfNegative = (columns, materialId) =>
     return number < 0 ? sum + number : sum
   }, 0)
 
+export const sumIfNegativeWorking = (columns, materialId) =>
+  columns.reduce((sum, column) => {
+    if (!isWorkingInventoryMemo(column.memo)) return sum
+    const number = toNumber(column.quantities?.[materialId] ?? column.quantities?.[String(materialId)])
+    return number < 0 ? sum + number : sum
+  }, 0)
+
 export const buildMaterialRows = (materialList) => {
   const groupIndexByName = new Map()
   let nextIndex = 0
@@ -67,15 +76,25 @@ export const buildMaterialRows = (materialList) => {
   })
 }
 
+export const remainingAfterAmount = (inbound, amount) => {
+  const inboundNumber = toNumber(inbound)
+  const amountNumber = toNumber(amount)
+  if (inboundNumber === 0 && amountNumber === 0) return null
+  return inboundNumber - Math.abs(amountNumber)
+}
+
 export const buildSummaries = (materialList, inboundColumns, outboundColumns) => {
   const map = {}
   for (const material of materialList) {
     const inbound = sumIfPositive(inboundColumns, material.id)
     const outbound = sumIfNegative(outboundColumns, material.id)
+    const working = sumIfNegativeWorking(outboundColumns, material.id)
     map[material.id] = {
       inbound,
       outbound,
-      net: inbound === 0 && outbound === 0 ? null : inbound + outbound,
+      working,
+      inboundNet: remainingAfterAmount(inbound, outbound),
+      workingNet: remainingAfterAmount(inbound, working),
     }
   }
   return map

@@ -37,10 +37,12 @@ import { persistImportedColumns, persistNewColumn, persistSavedCell } from '@/fe
 import { formatApprovedMaterialsLabel } from '@/features/company/approvedMaterials'
 import { updateCompanyApprovedMaterials } from '@/features/company/approvedMaterials.service'
 import { useDialog } from '@/composables/useDialog'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
+import { matchInventoryCompany } from '@/features/inventory/matchInventoryCompany'
 
 const { alert, confirm } = useDialog()
 const router = useRouter()
+const route = useRoute()
 
 const companies = ref([])
 const materialItems = ref([])
@@ -248,6 +250,19 @@ const loadCompanyLedger = async (company) => {
   }
 }
 
+const applyRouteCompany = async (companyList) => {
+  const queryRow = {
+    company: String(route.query.company ?? '').trim(),
+    place: String(route.query.place ?? '').trim(),
+    initial: String(route.query.initial ?? '').trim(),
+  }
+  if (!queryRow.company && !queryRow.place && !queryRow.initial) return false
+  const matched = matchInventoryCompany(companyList, queryRow)
+  if (!matched) return false
+  await loadCompanyLedger(matched)
+  return true
+}
+
 const load = async () => {
   loading.value = true
   errorMessage.value = ''
@@ -257,6 +272,8 @@ const load = async () => {
     companies.value = entryData.companies
     materialItems.value = entryData.materialItems
     setupWarning.value = entryData.setupWarning
+    const openedFromPlan = await applyRouteCompany(entryData.companies)
+    if (openedFromPlan) return
     if (selectedCompany.value) await loadCompanyLedger(selectedCompany.value)
     else await loadMainOverview()
   } catch (error) {
@@ -309,6 +326,9 @@ const goBackToOverview = async () => {
   activeMaterialLedgerTab.value = 'raw'
   clearSavedMessage()
   errorMessage.value = ''
+  if (route.query.company || route.query.place || route.query.initial) {
+    await router.replace({ name: 'inventory' })
+  }
   const entryData = await fetchInventoryEntryData(RAW_MATERIAL_TYPE)
   materialItems.value = entryData.materialItems
   setupWarning.value = entryData.setupWarning
@@ -448,6 +468,18 @@ watch(activeMaterialLedgerTab, async () => {
     errorMessage.value = error instanceof Error ? error.message : '현장 입출고 내역을 불러오지 못했습니다.'
   }
 })
+
+watch(
+  () => [route.query.company, route.query.place, route.query.initial],
+  async () => {
+    if (!companies.value.length) return
+    try {
+      await applyRouteCompany(companies.value)
+    } catch (error) {
+      errorMessage.value = error instanceof Error ? error.message : '현장 입출고 내역을 불러오지 못했습니다.'
+    }
+  },
+)
 </script>
 
 <template>

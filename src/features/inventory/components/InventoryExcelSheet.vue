@@ -5,6 +5,12 @@ import { applySheetDate, displayColumnDate } from '../sheet/sheetDate'
 import { buildSheetNavRows, nextSheetCellKey } from '../sheet/sheetKeyboard'
 import { useStickyAddButton } from '../sheet/useStickyAddButton'
 import { buildMaterialRows, buildSummaries, formatBlankZero, formatQuantity, quantityClass } from '../sheet/sheetFormat'
+import { IN_SUM_BLOCK_PX, OUT_SUM_BLOCK_PX, buildSheetLabelColumnWidths } from '../sheet/sheetLabelWidth'
+import {
+  displayInventoryWorkMemo,
+  inventoryWorkMemoToneClass,
+  replaceInventoryWorkMemoLabel,
+} from '@/features/inventory/work-status'
 
 const props = defineProps({
   materials: { type: Array, default: () => [] },
@@ -33,9 +39,26 @@ const outHeaderRows = [
 ]
 
 const inColspan = computed(() => 5 + inCount.value)
-const outColspan = computed(() => 2 + outCount.value)
-const inMinWidth = computed(() => 192 + 120 + Math.max(inCount.value, 1) * 100)
-const outMinWidth = computed(() => 120 + Math.max(outCount.value, 1) * 100)
+const outColspan = computed(() => 5 + outCount.value)
+const labelColumnWidths = computed(() => buildSheetLabelColumnWidths(props.materials))
+const inMinWidth = computed(() => IN_SUM_BLOCK_PX + labelColumnWidths.value.labelBlockWidth + Math.max(inCount.value, 1) * 100)
+const outMinWidth = computed(() => OUT_SUM_BLOCK_PX + labelColumnWidths.value.labelBlockWidth + Math.max(outCount.value, 1) * 100)
+
+const inboundTableStyle = computed(() => ({
+  minWidth: `${inMinWidth.value}px`,
+  '--group-col': `${labelColumnWidths.value.groupColWidth}px`,
+  '--spec-col': `${labelColumnWidths.value.specColWidth}px`,
+  '--label-left': `${IN_SUM_BLOCK_PX}px`,
+  '--sub-left': `${IN_SUM_BLOCK_PX + labelColumnWidths.value.groupColWidth}px`,
+}))
+
+const outboundTableStyle = computed(() => ({
+  minWidth: `${outMinWidth.value}px`,
+  '--group-col': `${labelColumnWidths.value.groupColWidth}px`,
+  '--spec-col': `${labelColumnWidths.value.specColWidth}px`,
+  '--label-left': `${OUT_SUM_BLOCK_PX}px`,
+  '--sub-left': `${OUT_SUM_BLOCK_PX + labelColumnWidths.value.groupColWidth}px`,
+}))
 
 const topClassByKey = {
   date: 't-36',
@@ -51,12 +74,20 @@ const headerValue = (column, key) => {
   return column[key] ?? ''
 }
 
-const quantityValue = (column, materialId) => column.quantities?.[String(materialId)] ?? ''
+const outboundMemoValue = (column) => displayInventoryWorkMemo(column.memo)
+
+const outboundMemoClass = (column) => inventoryWorkMemoToneClass(column.memo)
 
 const onHeaderInput = (column, key, value) => {
   if (key === 'date') applySheetDate(column, value)
   else column[key] = value
 }
+
+const onOutboundMemoInput = (column, value) => {
+  column.memo = replaceInventoryWorkMemoLabel(column.memo, value)
+}
+
+const quantityValue = (column, materialId) => column.quantities?.[String(materialId)] ?? ''
 
 const onQuantityInput = (column, materialId, value) => {
   column.quantities[String(materialId)] = value
@@ -101,7 +132,7 @@ const onNavigate = (editKey, direction) => {
   <section class="min-h-0 mb-[10px] mt-[-5px] flex-1 overflow-hidden border border-slate-200 bg-white">
     <div ref="sheetRoot" class="sheet-scroll">
       <div class="sheet-block">
-      <table class="ui-sheet sheet-in" :style="{ minWidth: `${inMinWidth}px` }">
+      <table class="ui-sheet sheet-in" :style="inboundTableStyle">
         <colgroup>
           <col class="col-sum" />
           <col class="col-sum" />
@@ -153,8 +184,11 @@ const onNavigate = (editKey, direction) => {
             <td class="sticky-col s-64 sum-cell sum-out" :class="quantityClass(summaries[row.id]?.outbound)">
               {{ formatBlankZero(summaries[row.id]?.outbound) }}
             </td>
-            <td class="sticky-col s-128 sum-cell sum-net" :class="quantityClass(summaries[row.id]?.net, { showZero: true })">
-              {{ formatQuantity(summaries[row.id]?.net) }}
+            <td
+              class="sticky-col s-128 sum-cell sum-net"
+              :class="quantityClass(summaries[row.id]?.inboundNet, { showZero: true })"
+            >
+              {{ formatQuantity(summaries[row.id]?.inboundNet) }}
             </td>
             <template v-if="!row.group">
               <td colspan="2" class="sticky-col s-label spec-cell s-edge">{{ row.spec }}</td>
@@ -196,38 +230,45 @@ const onNavigate = (editKey, direction) => {
       </div>
 
       <div class="sheet-block">
-      <table class="ui-sheet sheet-out" :style="{ minWidth: `${outMinWidth}px` }">
+      <table class="ui-sheet sheet-out" :style="outboundTableStyle">
         <colgroup>
+          <col class="col-sum" />
+          <col class="col-sum" />
+          <col class="col-sum" />
           <col class="col-spec" />
           <col class="col-sub" />
           <col v-for="column in outboundColumns" :key="`col-out-${column.localId}`" class="col-event" />
         </colgroup>
         <tbody>
           <tr class="section-row section-out top-stick t-0">
-            <td colspan="2" class="sticky-col s-0 section-cell">산출</td>
-            <td :colspan="outColspan - 2" class="section-cell"></td>
+            <td colspan="3" class="sticky-col s-0 section-cell">산출</td>
+            <td :colspan="outColspan - 3" class="section-cell"></td>
           </tr>
 
           <tr
-            v-for="headerRow in outHeaderRows"
+            v-for="(headerRow, headerIndex) in outHeaderRows"
             :key="`out-${headerRow.key}`"
             class="out-row head-row top-stick"
             :class="topClassByKey[headerRow.key]"
           >
+            <th v-if="headerIndex === 0" :rowspan="outHeaderRows.length" class="sticky-col s-0 sum-head sum-in">총입고</th>
+            <th v-if="headerIndex === 0" :rowspan="outHeaderRows.length" class="sticky-col s-64 sum-head sum-working">작업중</th>
+            <th v-if="headerIndex === 0" :rowspan="outHeaderRows.length" class="sticky-col s-128 sum-head sum-net">합산</th>
             <th colspan="2" class="sticky-col s-label s-edge label-cell">{{ headerRow.label }}</th>
             <td
               v-for="column in outboundColumns"
               :key="`out-${headerRow.key}-${column.localId}`"
               class="head-value"
-              :class="headerRow.key === 'memo' ? 'cell-memo' : ''"
+              :class="headerRow.key === 'memo' ? ['cell-memo', outboundMemoClass(column)] : ''"
             >
               <InventorySheetCell
-                :model-value="headerValue(column, headerRow.key)"
+                :model-value="headerRow.key === 'memo' ? outboundMemoValue(column) : headerValue(column, headerRow.key)"
                 input-type="text"
+                :multiline="headerRow.key === 'memo'"
                 :edit-key="cellKey('out', column, headerRow.key)"
                 :text-class="headerRow.key === 'date' ? 'cell-date' : ''"
                 @start="emit('start-edit', { side: 'out', column, field: headerRow.key })"
-                @update:model-value="onHeaderInput(column, headerRow.key, $event)"
+                @update:model-value="headerRow.key === 'memo' ? onOutboundMemoInput(column, $event) : onHeaderInput(column, headerRow.key, $event)"
                 @commit="emit('commit-edit', { side: 'out', column, field: headerRow.key })"
                 @cancel="emit('cancel-edit', { side: 'out', column, field: headerRow.key })"
                 @navigate="onNavigate(cellKey('out', column, headerRow.key), $event)"
@@ -236,6 +277,18 @@ const onNavigate = (editKey, direction) => {
           </tr>
 
           <tr v-for="row in materialRows" :key="`out-${row.id}`" class="out-row">
+            <td class="sticky-col s-0 sum-cell sum-in" :class="quantityClass(summaries[row.id]?.inbound)">
+              {{ formatBlankZero(summaries[row.id]?.inbound) }}
+            </td>
+            <td class="sticky-col s-64 sum-cell sum-working" :class="quantityClass(summaries[row.id]?.working)">
+              {{ formatBlankZero(summaries[row.id]?.working) }}
+            </td>
+            <td
+              class="sticky-col s-128 sum-cell sum-net"
+              :class="quantityClass(summaries[row.id]?.workingNet, { showZero: true })"
+            >
+              {{ formatQuantity(summaries[row.id]?.workingNet) }}
+            </td>
             <template v-if="!row.group">
               <td colspan="2" class="sticky-col s-label spec-cell s-edge">{{ row.spec }}</td>
             </template>
@@ -307,8 +360,8 @@ const onNavigate = (editKey, direction) => {
 }
 
 .col-sum { width: 64px; }
-.col-spec { width: 72px; }
-.col-sub { width: 48px; }
+.col-spec { width: var(--group-col, 72px); }
+.col-sub { width: var(--spec-col, 52px); }
 .col-event { width: 100px; }
 
 .sheet-block {
@@ -334,11 +387,9 @@ const onNavigate = (editKey, direction) => {
 .s-0 { left: 0; }
 .s-64 { left: 64px; }
 .s-128 { left: 128px; }
-.s-label { left: 192px; }
-.s-sub { left: 264px; }
-
-.sheet-out .s-label { left: 0; }
-.sheet-out .s-sub { left: 72px; }
+.s-192 { left: 192px; }
+.s-label { left: var(--label-left, 192px); }
+.s-sub { left: var(--sub-left, 328px); }
 
 .s-edge {
   box-shadow: 1px 0 0 #cbd5e1, 4px 0 8px -4px rgb(15 23 42 / 0.12);
@@ -408,6 +459,7 @@ const onNavigate = (editKey, direction) => {
   background: #f8fafc;
   color: #0f172a;
   font-weight: 900;
+  white-space: nowrap;
 }
 
 .ui-sheet .sum-head {
@@ -421,8 +473,39 @@ const onNavigate = (editKey, direction) => {
   background: #f8fafc;
 }
 
+.sum-cell.sum-working {
+  background: #f0fdfa;
+}
+
+.ui-sheet td.sum-cell.sum-net.is-minus {
+  color: #dc2626 !important;
+}
+
 .cell-memo {
   padding: 4px;
+}
+
+.ui-sheet td.cell-memo.bg-teal-100 {
+  background: #ccfbf1;
+  color: #115e59;
+}
+
+.ui-sheet td.cell-memo.bg-indigo-100 {
+  background: #e0e7ff;
+  color: #3730a3;
+}
+
+.ui-sheet td.cell-memo.bg-red-500 {
+  background: #ef4444;
+  color: #fff;
+}
+
+.sheet-out .row-memo th,
+.sheet-out .row-memo td {
+  height: auto;
+  min-height: 30px;
+  vertical-align: middle;
+  text-align: center;
 }
 
 .qty-cell {

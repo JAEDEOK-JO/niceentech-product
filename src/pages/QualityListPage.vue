@@ -36,10 +36,6 @@ import {
 import { formatIsoDate, formatQualityDate, getNextTuesday, moveByWeeks, parseQualityDate } from '@/features/quality-list/utils/date'
 import { exportQualityStampToExcel } from '@/features/quality-list/utils/print'
 import {
-  chunkQualityPrintPages,
-  getQualityPrintRowNumber,
-} from '@/features/quality-list/utils/qualityPrintPaging'
-import {
   applyMainPipeGrouping,
   buildMainPipeGroups,
   chunkMainPipePages,
@@ -97,7 +93,6 @@ const printTotal = computed(() =>
   ),
 )
 
-const printPages = computed(() => chunkQualityPrintPages(items.value))
 const mainPipePages = computed(() => chunkMainPipePages(mainPipeCards.value))
 const branchPipePages = computed(() => chunkBranchPipePages(branchPipeItems.value))
 const printDefaultLandscape = computed(() => printMode.value !== 'main')
@@ -529,17 +524,7 @@ onBeforeUnmount(() => {
     </div>
 
     <section class="quality-print-page" :class="{ 'is-print-active': printMode === 'list' }">
-      <div
-        v-for="(pageItems, pageIndex) in printPages"
-        :key="pageIndex"
-        class="quality-print-sheet"
-      >
-        <div class="quality-print-header">
-          <h1>
-            <span class="quality-print-title-label">{{ currentDateLabel }} 검수리스트</span>
-            <span class="quality-print-title-total">총합 : {{ printTotal }}개</span>
-          </h1>
-        </div>
+      <div class="quality-print-sheet">
         <table class="quality-print-table">
           <colgroup>
             <col class="quality-print-col-n" />
@@ -550,6 +535,12 @@ onBeforeUnmount(() => {
             <col class="quality-print-col-total" />
           </colgroup>
           <thead>
+            <tr class="quality-print-title-row">
+              <th colspan="15">
+                <span class="quality-print-title-label">{{ currentDateLabel }} 검수리스트</span>
+                <span class="quality-print-title-total">총합 : {{ printTotal }}개</span>
+              </th>
+            </tr>
             <tr>
               <th class="quality-print-base">N</th>
               <th class="quality-print-base">도번</th>
@@ -566,11 +557,11 @@ onBeforeUnmount(() => {
             </tr>
           </thead>
           <tbody>
-            <tr v-if="pageItems.length === 0">
+            <tr v-if="items.length === 0">
               <td colspan="15">검수리스트가 없습니다.</td>
             </tr>
-            <tr v-for="(item, index) in pageItems" :key="item.id">
-              <td class="quality-print-n">{{ getQualityPrintRowNumber(pageIndex, index) }}</td>
+            <tr v-for="(item, index) in items" :key="item.id">
+              <td class="quality-print-n">{{ index + 1 }}</td>
               <td class="quality-print-initial">
                 <span class="quality-print-initial-text">{{ item.initial }}</span>
               </td>
@@ -663,37 +654,16 @@ onBeforeUnmount(() => {
   }
 
   .quality-print-sheet {
-    page-break-after: always;
-    break-after: page;
-  }
-
-  .quality-print-sheet:last-child {
-    page-break-after: auto;
     break-after: auto;
+    page-break-after: auto;
   }
 
-  .quality-print-header {
-    display: block;
-    margin: 0 0 6px;
-    text-align: left;
+  .quality-print-table thead {
+    display: table-header-group;
   }
 
-  .quality-print-page h1 {
-    margin: 0;
-    color: #000;
-    font-size: 18px;
-    font-weight: 800;
-    line-height: 1.2;
-    white-space: nowrap;
-  }
-
-  .quality-print-title-label {
-    color: #000;
-  }
-
-  .quality-print-title-total {
-    margin-left: 0.4em;
-    color: #ea580c;
+  .quality-print-table tbody {
+    display: table-row-group;
   }
 
   .quality-print-table {
@@ -753,6 +723,29 @@ onBeforeUnmount(() => {
     white-space: nowrap;
   }
 
+  .quality-print-table thead .quality-print-title-row th,
+  .quality-print-table thead .quality-print-title-row th:first-child {
+    height: auto;
+    padding: 0 0 6px;
+    border: 0;
+    background: transparent;
+    color: #000;
+    font-size: 18px;
+    font-weight: 800;
+    line-height: 1.2;
+    text-align: left;
+    white-space: nowrap;
+  }
+
+  .quality-print-title-label {
+    color: #000;
+  }
+
+  .quality-print-title-total {
+    margin-left: 0.4em;
+    color: #ea580c;
+  }
+
   .quality-print-base {
     background: #eff6ff;
   }
@@ -768,7 +761,8 @@ onBeforeUnmount(() => {
 
   .quality-print-table tbody tr {
     height: 50px;
-    page-break-inside: avoid;
+    page-break-inside: auto;
+    break-inside: auto;
   }
 
   .quality-print-table tbody td {

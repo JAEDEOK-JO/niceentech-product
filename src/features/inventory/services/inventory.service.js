@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { fetchManagerNameById, mapInventoryCompanies } from '@/features/inventory/mapInventoryCompanies'
+import { memoMatchesPlanLabels, resolvePlanMemoLabels } from '@/features/inventory/work-status/planOutboundMatch'
 
 const MATERIAL_TABLE = 'inventory_material_items'
 const COMPANY_MATERIAL_TABLE = 'inventory_company_material_items'
@@ -110,7 +111,6 @@ export const defaultSubsidiaryMaterialItems = subsidiaryDefaultGroups.flatMap(([
       spec,
       unit: 'EA',
       sortOrder: 1000 + groupIndex * 100 + specIndex * 10,
-      isDefault: false,
     }),
   ),
 )
@@ -143,6 +143,11 @@ const isMissingInventoryMaterialTypeSchema = (error) => {
     message.includes('material_type') ||
     message.includes('inventory_company_material_items')
   )
+}
+
+const isMissingProductListIdSchema = (error) => {
+  const message = String(error?.message ?? '').toLowerCase()
+  return message.includes('product_list_id')
 }
 
 const isAuthError = (error) => {
@@ -336,7 +341,22 @@ const fetchDefaultMaterialItems = async (materialType) => {
     throw result.error
   }
 
-  return result.data ?? []
+  const defaultItems = result.data ?? []
+  if (defaultItems.length > 0 || normalizedType !== SUBSIDIARY_MATERIAL_TYPE) return defaultItems
+
+  const activeResult = await supabase
+    .from(MATERIAL_TABLE)
+    .select(materialSelectColumns)
+    .eq('is_active', true)
+    .eq('material_type', normalizedType)
+    .order('sort_order', { ascending: true })
+
+  if (activeResult.error) {
+    if (isMissingInventoryMaterialTypeSchema(activeResult.error)) return defaultSubsidiaryMaterialItems
+    throw activeResult.error
+  }
+
+  return activeResult.data ?? []
 }
 
 export async function fetchInventoryCompanyMaterialItems(companyId, materialType = RAW_MATERIAL_TYPE) {
@@ -365,12 +385,15 @@ export async function fetchInventoryCompanyMaterialItems(companyId, materialType
     .filter((item) => item.id && item.is_active !== false)
 
   if (linkedItems.length > 0) return linkedItems
-  if (companyItemRows.length > 0) return []
 
   const defaultItems = await fetchDefaultMaterialItems(normalizedType)
   if (defaultItems.length === 0 || defaultItems.some((item) => item.isDefaultOnly)) return defaultItems
 
-  const linkPayload = defaultItems.map((item) => ({
+  const existingIds = new Set(companyItemRows.map((row) => String(row.material_item_id)))
+  const itemsToLink = defaultItems.filter((item) => !existingIds.has(String(item.id)))
+  if (itemsToLink.length === 0) return linkedItems
+
+  const linkPayload = itemsToLink.map((item) => ({
     company_id: Number(companyId),
     material_item_id: Number(item.id),
     material_type: normalizedType,
@@ -792,6 +815,12 @@ const fetchInventoryCompanies = async () => {
     .order('place', { ascending: true })
 }
 
+export async function fetchInventoryCompanyList() {
+  const result = await fetchInventoryCompanies()
+  if (result.error) throw result.error
+  return mapInventoryCompanies(result.data)
+}
+
 export async function fetchInventoryEntryData(materialType = RAW_MATERIAL_TYPE) {
   const normalizedType = normalizeMaterialType(materialType)
   const [companiesResult, materialsResult] = await Promise.all([
@@ -1022,12 +1051,22 @@ export async function saveInventorySheetRows(rows, materialItems, company, mater
       supplier: String(row.supplier ?? '').trim(),
       created_by: createdBy,
     }
+    if (row.productListId) transactionPayload.product_list_id = Number(row.productListId)
 
     let transactionResult = await supabase
       .from(TRANSACTION_TABLE)
       .insert(transactionPayload)
       .select('id')
       .single()
+
+    if (transactionResult.error && row.productListId && isMissingProductListIdSchema(transactionResult.error)) {
+      const { product_list_id: _productListId, ...payloadWithoutProduct } = transactionPayload
+      transactionResult = await supabase
+        .from(TRANSACTION_TABLE)
+        .insert(payloadWithoutProduct)
+        .select('id')
+        .single()
+    }
 
     if (transactionResult.error && normalizedType === RAW_MATERIAL_TYPE && isMissingInventoryMaterialTypeSchema(transactionResult.error)) {
       const { material_type: _materialType, ...legacyPayload } = transactionPayload
@@ -1056,6 +1095,293 @@ export async function saveInventorySheetRows(rows, materialItems, company, mater
   }
 
   return savedIds
+}
+
+export async function findProductOutboundTransaction(productListId, materialType = RAW_MATERIAL_TYPE) {
+  return findPlanOutboundTransaction({ productListId, materialType })
+}
+
+const OUTBOUND_TRANSACTION_TYPES = ['return', 'use']
+
+const namesLooseEqual = (left, right) => {
+  const a = String(left ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
+  const b = String(right ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
+  if (!a || !b) return false
+  return a === b || a.includes(b) || b.includes(a)
+}
+
+const transactionMatchesSite = (row, companyName, placeName) => {
+  const companyOk = !companyName || namesLooseEqual(row.company_name, companyName)
+  const placeOk = !placeName || namesLooseEqual(row.place_name, placeName)
+  if (companyName && placeName) return companyOk && placeOk
+  return companyOk || placeOk
+}
+
+export async function findPlanOutboundTransaction({
+  productListId,
+  companyId,
+  companyName = '',
+  placeName = '',
+  materialType = RAW_MATERIAL_TYPE,
+  memoLabel = '',
+  memoLabels = [],
+  planRow = null,
+}) {
+  const normalizedType = normalizeMaterialType(materialType)
+  const labels = resolvePlanMemoLabels({ planRow, memoLabel, memoLabels, includeInitialOnly: true })
+
+  if (productListId) {
+    const byProduct = await supabase
+      .from(TRANSACTION_TABLE)
+      .select('id,memo,product_list_id')
+      .eq('product_list_id', Number(productListId))
+      .eq('material_type', normalizedType)
+      .order('id', { ascending: true })
+      .limit(1)
+
+    if (!byProduct.error && byProduct.data?.[0]) return byProduct.data[0]
+    if (
+      byProduct.error
+      && !isMissingProductListIdSchema(byProduct.error)
+      && !isMissingInventoryMaterialTypeSchema(byProduct.error)
+    ) {
+      throwInventoryError(byProduct.error)
+    }
+  }
+
+  let siteQuery = supabase
+    .from(TRANSACTION_TABLE)
+    .select('id,memo,product_list_id,transaction_type,company_name,place_name')
+    .eq('material_type', normalizedType)
+    .in('transaction_type', OUTBOUND_TRANSACTION_TYPES)
+    .order('id', { ascending: false })
+    .limit(200)
+
+  if (companyId) siteQuery = siteQuery.eq('company_id', Number(companyId))
+
+  let siteResult = await siteQuery
+  if (siteResult.error && isMissingProductListIdSchema(siteResult.error)) {
+    let retryQuery = supabase
+      .from(TRANSACTION_TABLE)
+      .select('id,memo,transaction_type,company_name,place_name')
+      .eq('material_type', normalizedType)
+      .in('transaction_type', OUTBOUND_TRANSACTION_TYPES)
+      .order('id', { ascending: false })
+      .limit(200)
+    if (companyId) retryQuery = retryQuery.eq('company_id', Number(companyId))
+    siteResult = await retryQuery
+  }
+  if (siteResult.error) {
+    if (isMissingInventoryMaterialTypeSchema(siteResult.error)) return null
+    throwInventoryError(siteResult.error)
+  }
+
+  const rows = (siteResult.data ?? []).filter((row) => {
+    if (companyId) return true
+    return transactionMatchesSite(row, companyName, placeName)
+  })
+  const match = labels.reduce((found, label) => {
+    if (found) return found
+    return rows.find((row) => memoMatchesPlanLabels(row.memo, [label])) ?? null
+  }, null)
+  if (!match) return null
+
+  if (productListId) {
+    const linkResult = await supabase
+      .from(TRANSACTION_TABLE)
+      .update({
+        product_list_id: Number(productListId),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', match.id)
+    if (linkResult.error && !isMissingProductListIdSchema(linkResult.error)) {
+      throwInventoryError(linkResult.error)
+    }
+  }
+
+  return match
+}
+
+export async function fetchPlanOutboundQuantities(params) {
+  const transaction = await findPlanOutboundTransaction(params)
+  if (!transaction?.id) return { transactionId: null, quantities: {} }
+
+  const itemsResult = await supabase
+    .from(TRANSACTION_ITEM_TABLE)
+    .select('material_item_id,quantity')
+    .eq('transaction_id', transaction.id)
+
+  if (itemsResult.error) throwInventoryError(itemsResult.error)
+
+  const quantities = {}
+  for (const item of itemsResult.data ?? []) {
+    const number = toNumber(item.quantity)
+    if (number === 0) continue
+    quantities[String(item.material_item_id)] = String(Math.abs(number))
+  }
+
+  return { transactionId: transaction.id, quantities }
+}
+
+export async function deleteInventoryTransaction(transactionId) {
+  if (!transactionId) return
+  await requireAuthenticatedSession()
+  const result = await supabase.from(TRANSACTION_TABLE).delete().eq('id', Number(transactionId))
+  if (result.error) throwInventoryError(result.error)
+}
+
+export async function upsertProductOutboundSheetRow({
+  company,
+  materialItems,
+  materialType,
+  productListId,
+  planRow = null,
+  row,
+  memoLabel = '',
+}) {
+  const existing = await findPlanOutboundTransaction({
+    productListId,
+    companyId: company?.id,
+    companyName: company?.company,
+    placeName: company?.place,
+    materialType,
+    planRow,
+    memoLabel: memoLabel || row?.memo,
+  })
+  if (!existing?.id) {
+    return saveInventorySheetRows([{ ...row, productListId }], materialItems, company, materialType)
+  }
+
+  await requireAuthenticatedSession()
+  const normalizedType = normalizeMaterialType(materialType)
+  const materialMap = new Map(materialItems.map((item) => [String(item.id), item]))
+  const items = Object.entries(row.quantities ?? {})
+    .map(([materialId, value]) => ({
+      material: materialMap.get(String(materialId)),
+      materialId,
+      quantity: toNumber(value),
+    }))
+    .filter((item) => item.material && item.quantity !== 0)
+
+  if (items.length === 0) throw new Error('저장할 입출고 내역이 없습니다.')
+  if (items.some((item) => String(item.materialId).startsWith('default-'))) {
+    throw new Error('DB 테이블이 아직 적용되지 않아 저장할 수 없습니다. migration 적용 후 다시 시도해주세요.')
+  }
+
+  const headerPayload = {
+    transaction_date: row.transactionDate,
+    transaction_type: inferTransactionType(row),
+    material_type: normalizedType,
+    company_id: Number(company.id),
+    company_name: String(company.company ?? '').trim(),
+    place_name: String(company.place ?? '').trim(),
+    memo: String(row.memo ?? '').trim(),
+    updated_at: new Date().toISOString(),
+  }
+  if (productListId) headerPayload.product_list_id = Number(productListId)
+
+  let headerResult = await supabase
+    .from(TRANSACTION_TABLE)
+    .update(headerPayload)
+    .eq('id', existing.id)
+
+  if (headerResult.error && productListId && isMissingProductListIdSchema(headerResult.error)) {
+    const { product_list_id: _productListId, ...withoutProduct } = headerPayload
+    headerResult = await supabase.from(TRANSACTION_TABLE).update(withoutProduct).eq('id', existing.id)
+  }
+
+  if (headerResult.error) throwInventoryError(headerResult.error)
+
+  const deleteResult = await supabase.from(TRANSACTION_ITEM_TABLE).delete().eq('transaction_id', existing.id)
+  if (deleteResult.error) throwInventoryError(deleteResult.error)
+
+  const itemsResult = await supabase.from(TRANSACTION_ITEM_TABLE).insert(
+    items.map((item) => ({
+      transaction_id: existing.id,
+      material_item_id: Number(item.materialId),
+      quantity: item.quantity,
+    })),
+  )
+  if (itemsResult.error) throwInventoryError(itemsResult.error)
+  return [existing.id]
+}
+
+export async function updateInventoryMemosByProductListId(productListId, memo) {
+  return updateInventoryMemosForPlan({ productListId, memo })
+}
+
+export async function updateInventoryMemosForPlan({
+  productListId,
+  companyId,
+  companyName,
+  placeName,
+  memoLabel,
+  memoLabels = [],
+  planRow = null,
+  memo,
+}) {
+  await requireAuthenticatedSession()
+  const nextMemo = String(memo ?? '').trim()
+  const payload = { memo: nextMemo, updated_at: new Date().toISOString() }
+  if (productListId) payload.product_list_id = Number(productListId)
+  const labels = resolvePlanMemoLabels({ planRow, memoLabel, memoLabels, includeInitialOnly: false })
+
+  const ids = new Set()
+
+  if (productListId) {
+    const byProduct = await supabase
+      .from(TRANSACTION_TABLE)
+      .select('id')
+      .eq('product_list_id', Number(productListId))
+    if (!byProduct.error) {
+      for (const row of byProduct.data ?? []) ids.add(row.id)
+    } else if (
+      !isMissingProductListIdSchema(byProduct.error)
+      && !isMissingInventoryMaterialTypeSchema(byProduct.error)
+    ) {
+      throwInventoryError(byProduct.error)
+    }
+  }
+
+  let siteQuery = supabase
+    .from(TRANSACTION_TABLE)
+    .select('id,memo,product_list_id,transaction_type,company_name,place_name')
+    .in('transaction_type', OUTBOUND_TRANSACTION_TYPES)
+    .limit(200)
+
+  if (companyId) siteQuery = siteQuery.eq('company_id', Number(companyId))
+
+  let siteResult = await siteQuery
+  if (siteResult.error && isMissingProductListIdSchema(siteResult.error)) {
+    let retryQuery = supabase
+      .from(TRANSACTION_TABLE)
+      .select('id,memo,transaction_type,company_name,place_name')
+      .in('transaction_type', OUTBOUND_TRANSACTION_TYPES)
+      .limit(200)
+    if (companyId) retryQuery = retryQuery.eq('company_id', Number(companyId))
+    siteResult = await retryQuery
+  }
+  if (siteResult.error) {
+    if (!isMissingInventoryMaterialTypeSchema(siteResult.error)) throwInventoryError(siteResult.error)
+  } else {
+    for (const row of siteResult.data ?? []) {
+      if (!companyId && !transactionMatchesSite(row, companyName, placeName)) continue
+      const linked = productListId && Number(row.product_list_id) === Number(productListId)
+      if (linked || memoMatchesPlanLabels(row.memo, labels)) ids.add(row.id)
+    }
+  }
+
+  if (ids.size === 0) return
+
+  const idList = [...ids]
+  const updateResult = await supabase.from(TRANSACTION_TABLE).update(payload).in('id', idList)
+  if (updateResult.error && isMissingProductListIdSchema(updateResult.error)) {
+    const { product_list_id: _productListId, ...withoutProduct } = payload
+    const retryResult = await supabase.from(TRANSACTION_TABLE).update(withoutProduct).in('id', idList)
+    if (retryResult.error) throwInventoryError(retryResult.error)
+    return
+  }
+  if (updateResult.error) throwInventoryError(updateResult.error)
 }
 
 export async function updateInventoryTransactionHeader(transactionId, field, value) {
