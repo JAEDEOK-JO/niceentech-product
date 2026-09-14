@@ -1,12 +1,14 @@
 <script setup>
 import { watch } from 'vue'
 import Button from '@/components/ui/button/Button.vue'
+import ShipmentSpecPrintDialogSummary from './ShipmentSpecPrintDialogSummary.vue'
 import ShipmentSpecPrinterSelect from './ShipmentSpecPrinterSelect.vue'
 import ShipmentSpecRemarkFields from './ShipmentSpecRemarkFields.vue'
 import { useShipmentSpecPrinters } from './useShipmentSpecPrinters'
 
 const props = defineProps({
   open: { type: Boolean, default: false },
+  row: { type: Object, default: null },
   orientation: { type: String, default: 'portrait' },
   remarkFields: { type: Array, default: () => [] },
   printing: { type: Boolean, default: false },
@@ -64,6 +66,7 @@ const handlePrint = () => {
             </div>
             <button type="button" class="text-sm font-bold text-slate-400 hover:text-slate-700" @click="emit('close')">닫기</button>
           </div>
+          <ShipmentSpecPrintDialogSummary :row="row" />
           <ShipmentSpecPrinterSelect
             v-if="canSelectPrinter"
             v-model="selectedPrinterName"

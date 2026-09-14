@@ -1,4 +1,5 @@
 <script setup>
+import { shipmentSpecDisplayText } from './shipmentSpecDisplayText'
 import { hasShipmentSpecOutput, remarksForBadges } from './shipmentSpecOutput'
 
 defineProps({
@@ -9,10 +10,7 @@ defineProps({
 
 const emit = defineEmits(['select'])
 
-const text = (value) => {
-  const raw = String(value ?? '').trim()
-  return raw || '-'
-}
+const text = shipmentSpecDisplayText
 </script>
 
 <template>

@@ -1,10 +1,12 @@
 <script setup>
-import { nextTick, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import Button from '@/components/ui/button/Button.vue'
 import { useAuth } from '@/composables/useAuth'
+import { filterShipmentSpecRows } from '@/features/shipment-spec/filterShipmentSpecRows'
 import ShipmentSpecPrintDialog from '@/features/shipment-spec/ShipmentSpecPrintDialog.vue'
 import ShipmentSpecPrintStack from '@/features/shipment-spec/ShipmentSpecPrintStack.vue'
+import ShipmentSpecSearchInput from '@/features/shipment-spec/ShipmentSpecSearchInput.vue'
 import ShipmentSpecTable from '@/features/shipment-spec/ShipmentSpecTable.vue'
 import { printShipmentSpec } from '@/features/shipment-spec/printShipmentSpec'
 import { buildShipmentSpecPrintSheets } from '@/features/shipment-spec/shipmentSpecFormFields'
@@ -24,6 +26,9 @@ const {
   resetWeek,
   loadRows,
 } = useShipmentSpecList(session)
+
+const searchText = ref('')
+const filteredRows = computed(() => filterShipmentSpecRows(rows.value, searchText.value))
 
 const {
   open,
@@ -80,28 +85,34 @@ const handleDialogPrint = async (options = {}) => {
 </script>
 
 <template>
-  <section class="shipment-spec-page min-h-[calc(100dvh-56px)] bg-slate-100 md:min-h-[calc(100vh-72px)]">
-    <header class="shipment-spec-chrome border-b border-slate-200 bg-white">
+  <section class="shipment-spec-page flex h-[calc(100dvh-56px)] flex-col overflow-hidden bg-slate-100 md:h-[calc(100vh-72px)]">
+    <header class="shipment-spec-chrome shrink-0 border-b border-slate-200 bg-white">
       <div class="mx-auto flex max-w-7xl flex-wrap items-center gap-2 px-4 py-3 md:px-6">
-        <h1 class="mr-1 text-base font-extrabold text-slate-900">{{ pageTitle }}</h1>
+        <h1 class="mr-1 shrink-0 text-base font-extrabold text-slate-900">{{ pageTitle }}</h1>
         <Button class="h-8 px-2.5 text-xs" variant="outline" @click="moveWeek(-1)">지난주</Button>
         <Button class="h-8 px-2.5 text-xs" variant="outline" :disabled="weekOffset === 0" @click="resetWeek">이번주</Button>
         <Button class="h-8 px-2.5 text-xs" variant="outline" @click="moveWeek(1)">다음주</Button>
-        <Button class="ml-auto h-8 px-2.5 text-xs" variant="outline" @click="goHome">홈</Button>
+        <div class="ml-auto flex min-w-0 flex-1 items-center justify-end gap-2">
+          <ShipmentSpecSearchInput v-model="searchText" class="max-w-2xl flex-1" />
+          <Button class="h-8 shrink-0 px-2.5 text-xs" variant="outline" @click="goHome">홈</Button>
+        </div>
       </div>
     </header>
 
-    <main class="shipment-spec-chrome mx-auto max-w-7xl px-4 py-4 md:px-6">
-      <ShipmentSpecTable
-        :rows="rows"
-        :loading="loading"
-        :error-message="errorMessage"
-        @select="openDialog"
-      />
+    <main class="shipment-spec-chrome min-h-0 flex-1 overflow-y-auto">
+      <div class="mx-auto max-w-7xl px-4 py-4 md:px-6">
+        <ShipmentSpecTable
+          :rows="filteredRows"
+          :loading="loading"
+          :error-message="errorMessage"
+          @select="openDialog"
+        />
+      </div>
     </main>
 
     <ShipmentSpecPrintDialog
       :open="open"
+      :row="selectedRow"
       :orientation="orientation"
       :remark-fields="remarkFields"
       :printing="isPrinting"

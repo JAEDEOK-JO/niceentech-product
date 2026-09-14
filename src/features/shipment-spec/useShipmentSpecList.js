@@ -56,6 +56,7 @@ export const useShipmentSpecList = (session) => {
     selectedTuesdayIso,
     pageTitle,
     moveWeek,
+    resetWeek,
     loadRows,
   }
 }
