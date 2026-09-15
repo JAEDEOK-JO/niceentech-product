@@ -24,6 +24,7 @@ import AttendanceEvidenceGalleryDialog from './AttendanceEvidenceGalleryDialog.v
 import AttendanceRequestTable from './AttendanceRequestTable.vue'
 import type { DailyWorkHour } from '../types/attendance'
 import { isDeptHeadPending, isFinalApprovalPending, isGyeongyuPending } from '../utils/attendanceApprover'
+import type { AttendanceStatusChangeValue } from '../utils/attendanceRequestStatus'
 import { formatLeaveDaysCountLabel, isHalfDayLeaveType, LEAVE_TYPE_ABSENCE, LEAVE_TYPE_HOME, LEAVE_TYPE_OUTING } from '../utils/attendanceLeaveType'
 
 type AdminTab = 'requests' | 'employees' | 'summary' | 'analysis' | 'approval' | 'daepyo' | 'gyeongyu' | 'workhours'
@@ -90,6 +91,7 @@ const emit = defineEmits<{
   (e: 'adminEdit', item: AttendanceRequest): void
   (e: 'adminDelete', item: AttendanceRequest): void
   (e: 'print', item: AttendanceRequest): void
+  (e: 'changeStatus', payload: { item: AttendanceRequest; status: AttendanceStatusChangeValue }): void
   (e: 'openDetail', item: AttendanceRequest): void
   (e: 'closeDetail'): void
   (e: 'closeReject'): void
@@ -604,6 +606,7 @@ watch(
                   @admin-edit="emit('adminEdit', $event)"
                   @admin-delete="emit('adminDelete', $event)"
                   @print="emit('print', $event)"
+                  @change-status="emit('changeStatus', $event)"
                 />
                 <div class="flex items-center justify-center gap-2 pt-3">
                   <button

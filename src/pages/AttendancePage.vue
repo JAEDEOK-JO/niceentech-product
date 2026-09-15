@@ -25,6 +25,7 @@ import {
   adminDeleteAttendanceRequest,
   approveAttendanceRequest,
   rejectAttendanceRequest,
+  updateAttendanceRequestStatus,
   gyeongyuAttendanceRequest,
   daepyoApproveAttendanceRequest,
   markAttendanceRequestPrinted,
@@ -61,7 +62,8 @@ import {
 import { validateHomeLeaveForm } from '@/features/attendance/utils/homeLeavePolicy'
 import AttendanceView from '@/features/attendance/components/AttendanceView.vue'
 import { printAttendanceLeaveApplication, printAllApprovedAttendanceLeaveApplications } from '@/features/attendance/utils/attendanceLeavePrint'
-import { isDeptHeadPending, isFinalApprovalPending, isGyeongyuPending } from '@/features/attendance/utils/attendanceApprover'
+import { isDeptHeadPending, isFinalApprovalPending, isGyeongyuPending, getAttendanceStatusLabel } from '@/features/attendance/utils/attendanceApprover'
+import type { AttendanceStatusChangeValue } from '@/features/attendance/utils/attendanceRequestStatus'
 import {
   ATTENDANCE_APPROVAL_DENIED_MESSAGE,
   canDeptHeadApprove,
@@ -791,6 +793,21 @@ async function submitReject() {
   }
 }
 
+async function handleChangeStatus(payload: { item: AttendanceRequest; status: AttendanceStatusChangeValue }) {
+  const { item, status } = payload
+  if (item.status !== '반려' || status === '반려') return
+  const label = getAttendanceStatusLabel(status)
+  if (!await confirm(`${item.userName}의 상태를 '${label}'(으)로 변경하시겠습니까?`)) return
+  try {
+    await updateAttendanceRequestStatus(item.id, status)
+    markLocalAttendanceMutation()
+    showToast('상태가 변경되었습니다.')
+    await refreshAttendanceAfterMutation()
+  } catch (err) {
+    showToast((err as Error)?.message || '상태 변경 중 오류가 발생했습니다.', 'error')
+  }
+}
+
 // ─── 직원 CRUD ─────────────────────────────────────────────────────────────────
 async function handleCreateEmployee(data: EmployeeFormData) {
   try {
@@ -875,6 +892,7 @@ async function handleDeleteEmployee(id: number) {
     @open-reject="openRejectDialog"
     @close-reject="closeRejectDialog"
     @submit-reject="submitReject"
+    @change-status="handleChangeStatus"
     @admin-edit="handleAdminEdit"
     @admin-delete="handleAdminDelete"
     @print="handlePrint"

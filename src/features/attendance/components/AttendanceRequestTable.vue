@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import type { AttendanceRequest } from '../types/attendance'
+import type { AttendanceStatusChangeValue } from '../utils/attendanceRequestStatus'
 import { formatLeaveDaysCountLabel } from '../utils/attendanceLeaveType'
-import { getAttendanceStatusLabel } from '../utils/attendanceApprover'
 import AttendanceEvidenceThumb from './AttendanceEvidenceThumb.vue'
+import AttendanceRequestStatusSelect from './AttendanceRequestStatusSelect.vue'
 
 const props = defineProps<{
   items: AttendanceRequest[]
@@ -23,6 +24,7 @@ const emit = defineEmits<{
   (e: 'adminEdit', item: AttendanceRequest): void
   (e: 'adminDelete', item: AttendanceRequest): void
   (e: 'print', item: AttendanceRequest): void
+  (e: 'changeStatus', payload: { item: AttendanceRequest; status: AttendanceStatusChangeValue }): void
 }>()
 
 function period(item: AttendanceRequest) {
@@ -106,12 +108,12 @@ function actionsFor(item: AttendanceRequest): ActionDef[] {
   return actions
 }
 
-function statusLabel(item: AttendanceRequest) {
-  return getAttendanceStatusLabel(item.status)
-}
-
 function statusClass(item: AttendanceRequest) {
   return props.statusBadgeClass?.(item.status)
+}
+
+function onStatusChange(item: AttendanceRequest, status: AttendanceStatusChangeValue) {
+  emit('changeStatus', { item, status })
 }
 
 function runAction(key: ActionKey, item: AttendanceRequest) {
@@ -176,10 +178,13 @@ function runAction(key: ActionKey, item: AttendanceRequest) {
               반려: {{ item.rejectReason }}
             </p>
           </td>
-          <td v-if="mode === 'requests'" class="whitespace-nowrap border border-slate-200 px-4 py-3 text-center">
-            <span class="rounded-full px-2.5 py-1 text-[11px] font-bold" :class="statusClass(item)">
-              {{ statusLabel(item) }}
-            </span>
+          <td v-if="mode === 'requests'" class="whitespace-nowrap border border-slate-200 px-4 py-3 text-center" @click.stop>
+            <AttendanceRequestStatusSelect
+              :item="item"
+              :badge-class="statusClass(item)"
+              :editable="true"
+              @change="onStatusChange(item, $event)"
+            />
           </td>
           <td class="border border-slate-200 px-4 py-3">
             <div class="flex justify-center" @click.stop>
@@ -224,13 +229,13 @@ function runAction(key: ActionKey, item: AttendanceRequest) {
           <span class="rounded-full px-2.5 py-1 text-[11px] font-bold" :class="leaveBadgeClass(item.leaveType)">
             {{ item.leaveType }}
           </span>
-          <span
+          <AttendanceRequestStatusSelect
             v-if="mode === 'requests'"
-            class="rounded-full px-2.5 py-1 text-[11px] font-bold"
-            :class="statusClass(item)"
-          >
-            {{ statusLabel(item) }}
-          </span>
+            :item="item"
+            :badge-class="statusClass(item)"
+            :editable="true"
+            @change="onStatusChange(item, $event)"
+          />
         </div>
       </div>
 

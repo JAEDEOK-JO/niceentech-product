@@ -16,7 +16,11 @@ import {
 } from '../types/attendance'
 import { normalizeEmployeePassword } from '../utils/employeePassword'
 import { normalizeEvidenceUrls, removeAttendanceEvidenceUrls } from '../utils/attendanceEvidence'
-import { PENDING_ATTENDANCE_STATUSES } from '../utils/attendanceApprover'
+import { ATTENDANCE_WORKFLOW_STATUS, PENDING_ATTENDANCE_STATUSES } from '../utils/attendanceApprover'
+import {
+  buildAttendanceStatusUpdatePayload,
+  type AttendanceStatusChangeValue,
+} from '../utils/attendanceRequestStatus'
 // 연차 차감 일수 계산 (연차/병가만 일수 차감)
 const DEDUCTED_LEAVE_TYPES: string[] = ['연차', '반차(오전)', '반차(오후)', '병가']
 const normalizeAttendanceApproverName = (value: string) => String(value ?? '').replace(/\(t\)/gi, '').trim()
@@ -339,6 +343,24 @@ export async function daepyoApproveAttendanceRequest(
     const year = new Date(req.start_date).getFullYear()
     await upsertUsedDays(req.user_id as string, year, Number(req.days_count))
   }
+}
+
+export async function updateAttendanceRequestStatus(
+  id: number,
+  status: AttendanceStatusChangeValue,
+): Promise<void> {
+  if (status === ATTENDANCE_WORKFLOW_STATUS.REJECTED) return
+
+  const { data, error } = await supabase
+    .from('attendance_requests')
+    .update(buildAttendanceStatusUpdatePayload(status))
+    .eq('id', id)
+    .eq('status', ATTENDANCE_WORKFLOW_STATUS.REJECTED)
+    .select('id')
+    .maybeSingle()
+
+  if (error) throw error
+  if (!data) throw new Error('반려 상태에서만 변경할 수 있습니다.')
 }
 
 export async function rejectAttendanceRequest(
