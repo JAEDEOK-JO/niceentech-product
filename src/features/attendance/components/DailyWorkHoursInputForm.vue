@@ -7,6 +7,15 @@ import {
   normalizeDailyWorkDepartment,
 } from '../utils/dailyWorkDepartment'
 import { getDailyWorkAbsence } from '../utils/dailyWorkAbsence'
+import DailyWorkHoursBulkPresets from './DailyWorkHoursBulkPresets.vue'
+import {
+  ALL_STATION_PRESET_KEY,
+  PRODUCTION_PRESET_KEY,
+  buildWorkHourSelections,
+  filterEmployeesByDepartments,
+  getWorkHourPresetDepartments,
+  getWorkHourPresetLabel,
+} from '../utils/dailyWorkHourPresets'
 
 const props = defineProps<{
   employees: Employee[]
@@ -21,8 +30,6 @@ const emit = defineEmits<{
   (e: 'save', records: { employeeId: number; endTime: string }[]): void
 }>()
 
-const PRODUCTION_DEPARTMENTS = new Set(['메인관', '가지관', '나사'])
-
 const assignedDepartments = computed(() => {
   const set = new Set(props.employees.map((e) => normalizeDailyWorkDepartment(e.assignedDepartment)))
   return DAILY_WORK_DEPARTMENT_ORDER.filter((d) => set.has(d))
@@ -30,19 +37,18 @@ const assignedDepartments = computed(() => {
 
 const selectedDept = ref<string>('')
 const selections = ref<Map<number, string>>(new Map())
-const productionPresetTime = ref<string>('')
+const presetTime = ref<string>('')
 const bulkTime = ref<WorkEndTime>('17:00')
 
-const productionEmployees = computed(() => {
-  return props.employees.filter((employee) => PRODUCTION_DEPARTMENTS.has(normalizeDailyWorkDepartment(employee.assignedDepartment)))
-})
+const isAbsent = (employee: Employee) => Boolean(getDailyWorkAbsence(employee, props.workDate, props.requests))
 
 const visibleEmployees = computed(() => {
   if (!selectedDept.value) return []
+  const presetDepartments = getWorkHourPresetDepartments(selectedDept.value)
   const list = selectedDept.value === '__ALL__'
     ? props.employees
-    : selectedDept.value === '__PRODUCTION__'
-      ? productionEmployees.value
+    : presetDepartments
+      ? filterEmployeesByDepartments(props.employees, presetDepartments)
       : props.employees.filter((e) => normalizeDailyWorkDepartment(e.assignedDepartment) === selectedDept.value)
   return list.slice().sort((a, b) => {
     const d = getDailyWorkDepartmentRank(a.assignedDepartment) -
@@ -54,11 +60,12 @@ const visibleEmployees = computed(() => {
 
 watch(selectedDept, () => {
   const next = new Map<number, string>()
+  const presetDepartments = getWorkHourPresetDepartments(selectedDept.value)
   for (const emp of visibleEmployees.value) {
-    if (getDailyWorkAbsence(emp, props.workDate, props.requests)) continue
+    if (isAbsent(emp)) continue
     const existing = props.todayHours.find((h) => h.employeeId === emp.id)
-    if (productionPresetTime.value && selectedDept.value === '__PRODUCTION__') {
-      next.set(emp.id, productionPresetTime.value)
+    if (presetTime.value && presetDepartments) {
+      next.set(emp.id, presetTime.value)
     } else if (existing) {
       next.set(emp.id, existing.endTime)
     }
@@ -69,18 +76,21 @@ watch(selectedDept, () => {
 watch(() => props.workDate, () => {
   selectedDept.value = ''
   selections.value = new Map()
-  productionPresetTime.value = ''
+  presetTime.value = ''
 })
 
+function applyEndTimePreset(time: string, key: string) {
+  presetTime.value = time
+  selectedDept.value = key
+  selections.value = buildWorkHourSelections(visibleEmployees.value, time, isAbsent)
+}
+
 function applyProductionPreset(time: string) {
-  productionPresetTime.value = time
-  selectedDept.value = '__PRODUCTION__'
-  const next = new Map<number, string>()
-  for (const emp of productionEmployees.value) {
-    if (getDailyWorkAbsence(emp, props.workDate, props.requests)) continue
-    next.set(emp.id, time)
-  }
-  selections.value = next
+  applyEndTimePreset(time, PRODUCTION_PRESET_KEY)
+}
+
+function applyAllStationPreset(time: string) {
+  applyEndTimePreset(time, ALL_STATION_PRESET_KEY)
 }
 
 function pickTime(empId: number, time: string) {
@@ -109,7 +119,7 @@ function clearAll() {
 function back() {
   selectedDept.value = ''
   selections.value = new Map()
-  productionPresetTime.value = ''
+  presetTime.value = ''
 }
 
 const selectedCount = computed(() => {
@@ -135,8 +145,7 @@ function handleSave() {
 
 const selectedDeptLabel = computed(() => {
   if (selectedDept.value === '__ALL__') return '전체'
-  if (selectedDept.value === '__PRODUCTION__') return '생산'
-  return selectedDept.value
+  return getWorkHourPresetLabel(selectedDept.value) ?? selectedDept.value
 })
 const absenceOf = (employee: Employee) => getDailyWorkAbsence(employee, props.workDate, props.requests)
 </script>
@@ -157,16 +166,10 @@ const absenceOf = (employee: Employee) => getDailyWorkAbsence(employee, props.wo
     </div>
 
     <div v-if="!selectedDept" class="p-5 overflow-y-auto">
-      <p class="mb-3 text-sm font-bold text-slate-700">생산 일괄 적용</p>
-      <div class="mb-5 grid grid-cols-3 gap-2">
-        <button
-          v-for="opt in WORK_END_TIME_OPTIONS"
-          :key="opt.value"
-          type="button"
-          class="rounded-xl bg-emerald-600 px-3 py-3 text-sm font-extrabold text-white hover:bg-emerald-500"
-          @click="applyProductionPreset(opt.value)"
-        >생산 {{ opt.label }}</button>
-      </div>
+      <DailyWorkHoursBulkPresets
+        @apply-production="applyProductionPreset"
+        @apply-all-stations="applyAllStationPreset"
+      />
 
       <p class="mb-3 text-sm font-bold text-slate-700">담당부서 선택</p>
       <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
