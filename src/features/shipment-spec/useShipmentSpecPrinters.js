@@ -4,18 +4,18 @@ export const useShipmentSpecPrinters = () => {
   const printers = ref([])
   const selectedPrinterName = ref('')
   const printerLoading = ref(false)
-  const printerError = ref('')
+  const printerError = ref(false)
 
   const loadPrinters = async () => {
     if (!window.electronAPI?.getPrinters) {
       printers.value = []
       selectedPrinterName.value = ''
-      printerError.value = ''
+      printerError.value = false
       return
     }
 
     printerLoading.value = true
-    printerError.value = ''
+    printerError.value = false
     try {
       const list = await window.electronAPI.getPrinters()
       printers.value = Array.isArray(list) ? list : []
@@ -24,7 +24,7 @@ export const useShipmentSpecPrinters = () => {
     } catch {
       printers.value = []
       selectedPrinterName.value = ''
-      printerError.value = '프린터 목록을 불러오지 못했습니다.'
+      printerError.value = true
     } finally {
       printerLoading.value = false
     }
@@ -32,7 +32,7 @@ export const useShipmentSpecPrinters = () => {
 
   const resetPrinters = () => {
     selectedPrinterName.value = ''
-    printerError.value = ''
+    printerError.value = false
   }
 
   return {

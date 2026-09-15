@@ -1,7 +1,10 @@
 <script setup>
 import { watch } from 'vue'
 import Button from '@/components/ui/button/Button.vue'
+import { useShipmentSpecDialogLocale } from './useShipmentSpecDialogLocale'
+import ShipmentSpecDialogLocaleSwitch from './ShipmentSpecDialogLocaleSwitch.vue'
 import ShipmentSpecPrintDialogSummary from './ShipmentSpecPrintDialogSummary.vue'
+import ShipmentSpecPrintHistory from './ShipmentSpecPrintHistory.vue'
 import ShipmentSpecPrinterSelect from './ShipmentSpecPrinterSelect.vue'
 import ShipmentSpecRemarkFields from './ShipmentSpecRemarkFields.vue'
 import { useShipmentSpecPrinters } from './useShipmentSpecPrinters'
@@ -10,11 +13,13 @@ const props = defineProps({
   open: { type: Boolean, default: false },
   row: { type: Object, default: null },
   orientation: { type: String, default: 'portrait' },
+  printedHistory: { type: Array, default: () => [] },
   remarkFields: { type: Array, default: () => [] },
   printing: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['close', 'print', 'add', 'remove', 'update:orientation'])
+const emit = defineEmits(['close', 'print', 'add', 'remove', 'remove-history', 'update:orientation'])
+const { copy } = useShipmentSpecDialogLocale()
 
 const {
   printers,
@@ -36,8 +41,8 @@ watch(
   },
 )
 
-const handlePrint = () => {
-  emit('print', { deviceName: selectedPrinterName.value })
+const handlePrint = (scope = 'new') => {
+  emit('print', { deviceName: selectedPrinterName.value, scope })
 }
 </script>
 
@@ -56,15 +61,18 @@ const handlePrint = () => {
                 class="rounded-xl border px-4 py-2 text-sm font-extrabold transition"
                 :class="orientation === 'portrait' ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'"
                 @click="emit('update:orientation', 'portrait')"
-              >세로</button>
+              >{{ copy.portrait }}</button>
               <button
                 type="button"
                 class="rounded-xl border px-4 py-2 text-sm font-extrabold transition"
                 :class="orientation === 'landscape' ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'"
                 @click="emit('update:orientation', 'landscape')"
-              >가로</button>
+              >{{ copy.landscape }}</button>
             </div>
-            <button type="button" class="text-sm font-bold text-slate-400 hover:text-slate-700" @click="emit('close')">닫기</button>
+            <div class="flex items-center gap-3">
+              <ShipmentSpecDialogLocaleSwitch />
+              <button type="button" class="text-sm font-bold text-slate-400 hover:text-slate-700" @click="emit('close')">{{ copy.close }}</button>
+            </div>
           </div>
           <ShipmentSpecPrintDialogSummary :row="row" />
           <ShipmentSpecPrinterSelect
@@ -72,12 +80,17 @@ const handlePrint = () => {
             v-model="selectedPrinterName"
             :printers="printers"
             :loading="printerLoading"
-            :error-message="printerError"
+            :error="printerError"
             @refresh="loadPrinters"
           />
         </div>
 
-        <div class="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+        <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+          <ShipmentSpecPrintHistory
+            :items="printedHistory"
+            :disabled="printing"
+            @remove="emit('remove-history', $event)"
+          />
           <ShipmentSpecRemarkFields
             :remark-fields="remarkFields"
             @add="emit('add')"
@@ -86,7 +99,14 @@ const handlePrint = () => {
         </div>
 
         <div class="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">
-          <Button class="h-9 px-4 text-sm" variant="outline" :disabled="printing" @click="handlePrint">인쇄</Button>
+          <Button
+            v-if="printedHistory.length > 0"
+            class="h-9 px-4 text-sm"
+            variant="outline"
+            :disabled="printing"
+            @click="handlePrint('all')"
+          >{{ copy.printAll }}</Button>
+          <Button class="h-9 px-4 text-sm" variant="outline" :disabled="printing" @click="handlePrint('new')">{{ copy.print }}</Button>
         </div>
       </div>
     </div>

@@ -21,6 +21,11 @@ export const remarksForBadges = (value) => (
   parseShipmentSpecRemarks(value).map((text) => text.trim()).filter(Boolean)
 )
 
+export const mergeShipmentSpecRemarks = (history, nextRemarks) => [
+  ...remarksForBadges(history),
+  ...remarksForBadges(nextRemarks),
+]
+
 export const hasShipmentSpecOutput = (value) => remarksForBadges(value).length > 0
 
 export const saveShipmentSpecOutput = async (rowId, remarks, landscape) => {

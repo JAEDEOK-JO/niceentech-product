@@ -11,6 +11,7 @@ import ShipmentSpecTable from '@/features/shipment-spec/ShipmentSpecTable.vue'
 import { printShipmentSpec } from '@/features/shipment-spec/printShipmentSpec'
 import { buildShipmentSpecPrintSheets } from '@/features/shipment-spec/shipmentSpecFormFields'
 import { saveShipmentSpecOutput } from '@/features/shipment-spec/shipmentSpecOutput'
+import { useShipmentSpecDialogLocale } from '@/features/shipment-spec/useShipmentSpecDialogLocale'
 import { useShipmentSpecList } from '@/features/shipment-spec/useShipmentSpecList'
 import { useShipmentSpecPrintDialog } from '@/features/shipment-spec/useShipmentSpecPrintDialog'
 
@@ -34,13 +35,19 @@ const {
   open,
   selectedRow,
   orientation,
+  printedHistory,
   remarkFields,
   openDialog,
   closeDialog,
   addRemarkField,
   removeRemarkField,
+  historyRemarksAfterRemove,
+  applyHistoryRemove,
   remarksForPrint,
+  remarksForSave,
+  absorbPrintedRemarks,
 } = useShipmentSpecPrintDialog()
+const { copy } = useShipmentSpecDialogLocale()
 
 const isPrinting = ref(false)
 const printSheets = ref([])
@@ -70,17 +77,34 @@ const runPrint = async (row, remarks, landscape, deviceName = '') => {
   }
 }
 
-const handleDialogPrint = async (options = {}) => {
-  const remarks = remarksForPrint()
+const handleRemoveHistory = async (index) => {
+  if (isPrinting.value) return
+  const remarks = historyRemarksAfterRemove(index)
   const landscape = orientation.value === 'landscape'
   try {
     await saveShipmentSpecOutput(selectedRow.value.id, remarks, landscape)
-    await loadRows()
   } catch (error) {
-    window.alert(error?.message ?? '저장 실패')
+    window.alert(error?.message ?? copy.value.saveFailed)
     return
   }
-  await runPrint(selectedRow.value, remarks, landscape, options.deviceName)
+  applyHistoryRemove(index)
+  await loadRows()
+}
+
+const handleDialogPrint = async (options = {}) => {
+  const remarks = remarksForSave()
+  const toPrint = options.scope === 'all' ? remarks : remarksForPrint()
+  const landscape = orientation.value === 'landscape'
+  try {
+    await saveShipmentSpecOutput(selectedRow.value.id, remarks, landscape)
+    absorbPrintedRemarks()
+    await loadRows()
+  } catch (error) {
+    window.alert(error?.message ?? copy.value.saveFailed)
+    return
+  }
+  if (toPrint.length === 0) return
+  await runPrint(selectedRow.value, toPrint, landscape, options.deviceName)
 }
 </script>
 
@@ -114,12 +138,14 @@ const handleDialogPrint = async (options = {}) => {
       :open="open"
       :row="selectedRow"
       :orientation="orientation"
+      :printed-history="printedHistory"
       :remark-fields="remarkFields"
       :printing="isPrinting"
       @close="handleClose"
       @print="handleDialogPrint"
       @add="addRemarkField"
       @remove="removeRemarkField"
+      @remove-history="handleRemoveHistory"
       @update:orientation="orientation = $event"
     />
 
