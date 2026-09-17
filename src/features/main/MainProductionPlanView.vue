@@ -7,7 +7,7 @@ import MainProductionPlanGroupTable from '@/features/main/MainProductionPlanGrou
 import PrintSettingsDialog from '@/features/printing/PrintSettingsDialog.vue'
 import { printCurrentPage } from '@/features/printing/pagePrint'
 import { useDialog } from '@/composables/useDialog'
-import { isAdminRole, isProductionAdmin } from '@/utils/adminAccess'
+import { isForemanWorkMan, isProductionAdmin } from '@/utils/adminAccess'
 import { WELDING_INSPECTORS, getWeldingInspectorClass } from '@/utils/productionStatus'
 import { sanitizeDecimalOne } from '@/features/main/productionPlanNumbers'
 import { PLAN_SORT_COLUMNS } from '@/features/main/productionPlanSort'
@@ -140,17 +140,24 @@ const canToggleNasaStatus = (row) => {
   const status = getNasaStatus(row)
   return !status || status === '없음' || status === '작업전' || status === '작업중'
 }
+const canControlAllProcessWork = () => (
+  isProductionAdmin(props.currentRole) || isForemanWorkMan(props.currentWorkMan)
+)
 const canControlNasaWork = () => {
   const workMan = String(props.currentWorkMan ?? '').trim()
-  return workMan === '무용접' || workMan === '나사' || isProductionAdmin(props.currentRole)
+  return workMan === '무용접' || workMan === '나사' || canControlAllProcessWork()
 }
 const canControlProductionWork = () => {
   const workMan = String(props.currentWorkMan ?? '').trim()
-  return ['생산', '마킹1', '마킹2', '레이저1', '티&면치'].includes(workMan) || isProductionAdmin(props.currentRole)
+  return ['생산', '마킹1', '마킹2', '레이저1', '티&면치'].includes(workMan) || canControlAllProcessWork()
 }
 const canControlMainWork = () => {
   const workMan = String(props.currentWorkMan ?? '').trim()
-  return workMan === '메인' || workMan === '레이저2' || isProductionAdmin(props.currentRole)
+  return workMan === '메인' || workMan === '레이저2' || canControlAllProcessWork()
+}
+const canControlWeldingWork = () => {
+  const workMan = String(props.currentWorkMan ?? '').trim()
+  return workMan === '용접반' || workMan === '용접' || WELDING_INSPECTORS.includes(workMan) || canControlAllProcessWork()
 }
 const canToggleWorkerStatus = (value) => {
   const status = String(value ?? '').trim()
@@ -543,10 +550,7 @@ const handleCellClick = ({ row, columnKey }) => {
       isShipmentConfirmOpen.value = true
       return
     }
-    const currentWorkMan = String(props.currentWorkMan ?? '').trim()
-    const isWeldingTeam = currentWorkMan === '용접반' || currentWorkMan === '용접' || WELDING_INSPECTORS.includes(currentWorkMan)
-    const isAdmin = isAdminRole(props.currentRole)
-    if (!isWeldingTeam && !isAdmin) {
+    if (!canControlWeldingWork()) {
       showSnackbar('용접반만 작업할 수 있습니다.')
       return
     }
@@ -652,6 +656,10 @@ const handleCellLongPress = ({ row, columnKey }) => {
     return
   }
   if (columnKey === 'worker_welding') {
+    if (!canControlWeldingWork()) {
+      showSnackbar('용접반만 작업할 수 있습니다.')
+      return
+    }
     emit('welding-long-press', row)
     return
   }
