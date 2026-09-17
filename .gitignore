@@ -19,6 +19,7 @@ supabase/.temp/
 
 # Electron build outputs
 release/
+release-tmp/
 release-online/
 win-unpacked/
 dist-electron/*.zip
