@@ -17,14 +17,29 @@ function storageErrorText(error: unknown): string {
   return `${e.statusCode ?? ''} ${e.message ?? ''} ${e.error ?? ''}`
 }
 
-export function isMissingNoticePdf(error: unknown): boolean {
-  const text = storageErrorText(error).toLowerCase()
+function textMeansMissingPdf(text: string): boolean {
+  const lower = text.toLowerCase()
   return (
-    text.includes('404') ||
-    text.includes('not found') ||
-    text.includes('nosuchkey') ||
-    text.includes('object not found')
+    lower.includes('404') ||
+    lower.includes('not found') ||
+    lower.includes('nosuchkey') ||
+    lower.includes('object not found')
   )
+}
+
+export async function isMissingNoticePdf(error: unknown): Promise<boolean> {
+  if (textMeansMissingPdf(storageErrorText(error))) return true
+
+  const original = (error as { originalError?: unknown } | null)?.originalError
+  if (original instanceof Response) {
+    try {
+      return textMeansMissingPdf(await original.clone().text())
+    } catch {
+      return false
+    }
+  }
+
+  return false
 }
 
 export function downloadBlob(fileName: string, data: Blob) {
@@ -38,32 +53,48 @@ export function downloadBlob(fileName: string, data: Blob) {
   URL.revokeObjectURL(url)
 }
 
+function hasReceiptNum(value: unknown): boolean {
+  return !(value == null || String(value) === '0' || String(value).trim() === '')
+}
+
 export async function fetchReceiptInfo(input: {
   testDate: string
   lotNum: number
   lotType: string
+  lotRound?: string
+  lotName?: string
 }): Promise<ReceiptInfo | null> {
   const response = await supabase
     .from('quality_list_info')
-    .select('receipt_num, lot_type')
+    .select('receipt_num, lot_type, lot_round, lot_name')
     .eq('test_date', input.testDate)
     .eq('lot_num', input.lotNum)
-    .eq('lot_type', input.lotType)
-    .limit(1)
 
   if (response.error) throw response.error
 
-  const row = response.data?.[0] as { receipt_num?: unknown; lot_type?: unknown } | undefined
-  if (!row) return null
+  const rows = (response.data ?? []) as Array<{
+    receipt_num?: unknown
+    lot_type?: unknown
+    lot_round?: unknown
+    lot_name?: unknown
+  }>
 
-  const receiptNum = row.receipt_num
-  if (receiptNum == null || String(receiptNum) === '0' || String(receiptNum).trim() === '') {
-    return null
-  }
+  const ranked = rows
+    .map((row) => {
+      let score = 0
+      if (input.lotName && String(row.lot_name ?? '') === input.lotName) score += 4
+      if (input.lotType && String(row.lot_type ?? '') === input.lotType) score += 2
+      if (input.lotRound && String(row.lot_round ?? '') === input.lotRound) score += 1
+      return { row, score }
+    })
+    .sort((a, b) => b.score - a.score)
+
+  const picked = ranked.find((item) => hasReceiptNum(item.row.receipt_num)) ?? ranked[0]
+  if (!picked || !hasReceiptNum(picked.row.receipt_num)) return null
 
   return {
-    receiptNum: receiptNum as number | string,
-    lotType: String(row.lot_type ?? input.lotType),
+    receiptNum: picked.row.receipt_num as number | string,
+    lotType: String(picked.row.lot_type ?? input.lotType),
   }
 }
 
@@ -74,7 +105,7 @@ export async function downloadJoinCertificatePdf(input: {
   const fileName = toJoinCertificateFileName(input.lotCertification, input.lotNumH)
   const response = await supabase.storage.from('notice-pdf').download(fileName)
   if (response.error) {
-    if (isMissingNoticePdf(response.error)) return null
+    if (await isMissingNoticePdf(response.error)) return null
     throw response.error
   }
 

@@ -264,11 +264,9 @@ async function onNoticeDownload(item: QualityListRow) {
       testDate: item.testDate,
       lotNum: item.lotNumH,
       lotType: item.lotType,
+      lotRound: item.lotRound,
+      lotName: item.lotNameH,
     })
-    if (!receipt) {
-      await alert('접수번호 없음')
-      return
-    }
 
     let joinFile
     try {
@@ -288,7 +286,7 @@ async function onNoticeDownload(item: QualityListRow) {
       return
     }
 
-    const model = buildNoticeCertificateModel(item, receipt.receiptNum, receipt.lotType)
+    const model = buildNoticeCertificateModel(item, receipt?.receiptNum ?? '', receipt?.lotType || item.lotType)
     const html = await buildNoticeCertificateHtml(model)
     const saved = await saveNoticeBundleToFolder({
       company: item.company,

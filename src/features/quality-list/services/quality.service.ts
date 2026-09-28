@@ -329,6 +329,54 @@ export async function copyQualityItem(row: QualityListRow, newTestDate: string) 
   if (response.error) throw response.error
 }
 
+export function normalizeReceiptNum(value: unknown): string {
+  if (value == null) return ''
+  const text = String(value).trim()
+  if (!text || text === '0') return ''
+  return text
+}
+
+function mapLotInfoRow(row: Record<string, unknown>, includeId: boolean): QualityLotInfo {
+  return {
+    id: includeId && row.id != null ? Number(row.id) : undefined,
+    no: row.no == null ? undefined : Number(row.no),
+    testDate: String(row.test_date ?? ''),
+    lotRound: String(row.lot_round ?? ''),
+    lotType: String(row.lot_type ?? ''),
+    lotName: String(row.lot_name ?? ''),
+    lotNum: Number(row.lot_num ?? 0),
+    receiptNum: normalizeReceiptNum(row.receipt_num),
+  }
+}
+
+export async function updateLotReceiptNum(id: number, receiptNum: string) {
+  const text = normalizeReceiptNum(receiptNum)
+  const response = await supabase
+    .from('quality_list_info')
+    .update({ receipt_num: text === '' ? null : text })
+    .eq('id', id)
+
+  if (!response.error) return
+
+  const message = `${response.error.message ?? ''} ${response.error.details ?? ''}`
+  const integerMismatch = /invalid input syntax|integer|numeric/i.test(message)
+  const nullRejected = /null value|not-null/i.test(message)
+
+  if (text !== '' && integerMismatch && /^\d+$/.test(text)) {
+    const retry = await supabase.from('quality_list_info').update({ receipt_num: Number(text) }).eq('id', id)
+    if (retry.error) throw retry.error
+    return
+  }
+
+  if (text === '' && (nullRejected || integerMismatch)) {
+    const retry = await supabase.from('quality_list_info').update({ receipt_num: 0 }).eq('id', id)
+    if (retry.error) throw retry.error
+    return
+  }
+
+  throw response.error
+}
+
 export async function fetchLotInfos(testDate: string, lotRound: string): Promise<QualityLotInfo[]> {
   const primary = await supabase
     .from('quality_list_info')
@@ -338,15 +386,7 @@ export async function fetchLotInfos(testDate: string, lotRound: string): Promise
     .order('no', { ascending: true })
 
   if (!primary.error) {
-    return (primary.data ?? []).map((row) => ({
-      id: row.id,
-      no: row.no,
-      testDate: String(row.test_date ?? ''),
-      lotRound: String(row.lot_round ?? ''),
-      lotType: String(row.lot_type ?? ''),
-      lotName: String(row.lot_name ?? ''),
-      lotNum: Number(row.lot_num ?? 0),
-    }))
+    return (primary.data ?? []).map((row) => mapLotInfoRow(row, true))
   }
 
   const fallback = await supabase
@@ -357,15 +397,7 @@ export async function fetchLotInfos(testDate: string, lotRound: string): Promise
     .order('no', { ascending: true })
 
   if (fallback.error) throw fallback.error
-  return (fallback.data ?? []).map((row) => ({
-    id: row.id,
-    no: row.no,
-    testDate: String(row.test_date ?? ''),
-    lotRound: String(row.lot_round ?? ''),
-    lotType: String(row.lot_type ?? ''),
-    lotName: String(row.lot_name ?? ''),
-    lotNum: Number(row.lot_num ?? 0),
-  }))
+  return (fallback.data ?? []).map((row) => mapLotInfoRow(row, false))
 }
 
 export async function createLotInfo(input: QualityLotInfo) {

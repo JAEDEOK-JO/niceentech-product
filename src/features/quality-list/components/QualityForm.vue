@@ -14,8 +14,10 @@ import {
   applyLotMeta,
   createLotInfo,
   fetchLotInfos,
+  normalizeReceiptNum,
   saveQualityForm,
   searchCompanies,
+  updateLotReceiptNum,
 } from '../services/quality.service'
 import { useDialog } from '@/composables/useDialog'
 
@@ -70,6 +72,25 @@ const filteredLotInfos = computed(() =>
 const selectedLotValue = computed(() =>
   form.lotNameH && form.lotNumH ? `${form.lotNameH}|${form.lotNumH}` : '',
 )
+
+const selectedLot = computed(() =>
+  filteredLotInfos.value.find(
+    (info) => info.lotName === form.lotNameH && Number(info.lotNum) === Number(form.lotNumH),
+  ) ?? null,
+)
+
+const receiptNumInput = ref('')
+const savedReceiptNum = ref('')
+
+function syncReceiptInput(lot: QualityLotInfo | null) {
+  const value = lot?.receiptNum ?? ''
+  receiptNumInput.value = value
+  savedReceiptNum.value = value
+}
+
+watch(selectedLot, (lot) => {
+  syncReceiptInput(lot)
+})
 
 function syncLotMeta() {
   applyLotMeta(form, selectedLotType.value)
@@ -174,6 +195,31 @@ async function loadLotInfos() {
   }
 }
 
+async function persistReceiptNum() {
+  const lot = selectedLot.value
+  const next = normalizeReceiptNum(receiptNumInput.value)
+  receiptNumInput.value = next
+  if (!lot?.id || next === savedReceiptNum.value) return
+  await updateLotReceiptNum(lot.id, next)
+  lot.receiptNum = next
+  savedReceiptNum.value = next
+}
+
+async function onReceiptNumChange() {
+  const next = receiptNumInput.value.trim()
+  if (next && !/^\d+$/.test(next)) {
+    receiptNumInput.value = savedReceiptNum.value
+    await alert('접수번호는 숫자만 입력할 수 있습니다.')
+    return
+  }
+  try {
+    await persistReceiptNum()
+  } catch (error) {
+    receiptNumInput.value = savedReceiptNum.value
+    await alert(error instanceof Error ? error.message : '접수번호 저장에 실패했습니다.')
+  }
+}
+
 async function submit() {
   if (!form.company.trim() || !form.place.trim() || !form.area.trim()) {
     await alert('회사명, 현장명, 구역명은 필수입니다.')
@@ -183,6 +229,7 @@ async function submit() {
   try {
     form.lotType = selectedLotType.value
     syncLotMeta()
+    await persistReceiptNum()
     const id = await saveQualityForm(form)
     emit('saved', id)
   } catch (error) {
@@ -312,6 +359,16 @@ watch(selectedLotType, () => {
           </div>
 
           <div class="qf-inline">
+            <div class="qf-field qf-field--grow">
+              <label>접수번호</label>
+              <input
+                v-model="receiptNumInput"
+                type="text"
+                :disabled="!selectedLot"
+                :class="{ 'qf-input--readonly': !selectedLot }"
+                @change="onReceiptNumChange"
+              />
+            </div>
             <div class="qf-field qf-field--grow">
               <label>KSD</label>
               <input :value="form.lotKsd" type="text" readonly class="qf-input--readonly" />
@@ -623,6 +680,11 @@ watch(selectedLotType, () => {
   outline: none;
   border-color: #2563eb;
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.qf-field input:disabled {
+  color: #94a3b8;
+  cursor: default;
 }
 
 .qf-input--readonly {

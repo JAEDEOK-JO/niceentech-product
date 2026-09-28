@@ -21,6 +21,7 @@ export interface QualityLotInfo {
   lotType: LotInfoType | string
   lotName: string
   lotNum: number
+  receiptNum?: string
 }
 
 export interface QualityListRow {

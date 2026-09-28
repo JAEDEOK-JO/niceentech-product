@@ -61,11 +61,44 @@ button:disabled {
   min-height: 100vh;
 }
 
+@media (max-width: 767px) {
+  html,
+  body,
+  #app {
+    height: 100%;
+    max-height: 100%;
+    overflow: hidden;
+  }
+
+  .app-with-bar {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+    max-height: 100dvh;
+    overflow: hidden;
+  }
+
+  .app-with-bar > * {
+    flex: 1 1 auto;
+    min-height: 0 !important;
+    overflow-y: auto;
+  }
+}
+
 @media print {
   *,
   *::before,
   *::after {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+  }
+
+  html,
+  body,
+  #app,
+  .app-with-bar,
+  .app-with-bar > * {
+    height: auto !important;
+    overflow: visible !important;
   }
 }
