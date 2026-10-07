@@ -8,7 +8,18 @@ export function watchDrawingQuantityState(drawingFileId) {
   const started = Date.now()
 
   return new Promise((resolve) => {
-    const timer = window.setInterval(async () => {
+    let settled = false
+    let timer = null
+
+    const finish = (state) => {
+      if (settled) return
+      settled = true
+      if (timer) window.clearInterval(timer)
+      resolve(state)
+    }
+
+    const poll = async () => {
+      if (settled) return
       const { data } = await supabase
         .from('drawing_pdf')
         .select('quantity_state')
@@ -17,15 +28,18 @@ export function watchDrawingQuantityState(drawingFileId) {
 
       const state = data?.quantity_state
       if (FINAL_STATES.includes(state)) {
-        window.clearInterval(timer)
-        resolve(state)
+        finish(state)
         return
       }
 
       if (Date.now() - started >= WAIT_MS) {
-        window.clearInterval(timer)
-        resolve(state === 'running' ? 'running' : 'failed')
+        finish(state === 'running' ? 'running' : 'failed')
       }
+    }
+
+    timer = window.setInterval(() => {
+      void poll()
     }, POLL_MS)
+    void poll()
   })
 }

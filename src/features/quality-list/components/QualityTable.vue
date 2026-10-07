@@ -2,8 +2,9 @@
 import { ref, watch } from 'vue'
 import { useQualityRowReorder } from '../composables/useQualityRowReorder'
 import type { QualityCountField } from '../services/quality.service'
-import type { QualityListRow } from '../types/quality'
+import type { QualityListRow, QualityLotInfo } from '../types/quality'
 import { formatLotEnd } from '../utils/print/format'
+import QualityExpansionRoundDialog from './QualityExpansionRoundDialog.vue'
 
 const props = defineProps<{
   items: QualityListRow[]
@@ -25,6 +26,7 @@ const emit = defineEmits<{
   stamp: [item: QualityListRow]
   updateCancel: [item: QualityListRow, field: QualityCountField, value: number]
   updateRange: [item: QualityListRow, lotStart: number]
+  assignExpansion: [item: QualityListRow, payload: { round: string; lot: QualityLotInfo | null }]
   reorder: [items: QualityListRow[]]
   transfer: [item: QualityListRow]
 }>()
@@ -71,6 +73,18 @@ function saveRange(item: QualityListRow) {
 const menuDialogItem = ref<QualityListRow | null>(null)
 function openMenuDialog(item: QualityListRow) { menuDialogItem.value = item }
 function closeMenuDialog() { menuDialogItem.value = null }
+
+const roundItem = ref<QualityListRow | null>(null)
+function openRoundDialog(item: QualityListRow) {
+  if (isReordering.value || consumeClickSuppression()) return
+  roundItem.value = item
+}
+function assignRound(payload: { round: string; lot: QualityLotInfo | null }) {
+  const item = roundItem.value
+  if (!item) return
+  emit('assignExpansion', item, payload)
+  roundItem.value = null
+}
 
 function toggleCard(item: QualityListRow) {
   if (isReordering.value || consumeClickSuppression()) return
@@ -166,7 +180,7 @@ const mobileCountRows: CountCol[][] = [
             <span>합계 {{ item.totalH || 0 }}</span>
           </div>
 
-          <div class="qt-card-lot" :class="lotRoundClass(item.lotRound)" @click.stop>
+          <div class="qt-card-lot" :class="lotRoundClass(item.lotRound)" @click.stop="openRoundDialog(item)">
             <span class="qt-card-lot-name">{{ item.lotNameH || '-' }}</span>
             <span class="qt-card-lot-num">({{ item.lotNumH ? String(item.lotNumH).slice(-3) : '---' }})</span>
             <span class="qt-card-lot-start">{{ rangeInputs[item.id] || 0 }}</span>
@@ -244,7 +258,7 @@ const mobileCountRows: CountCol[][] = [
               <span v-if="showAllRecords && item.testDate" class="place-date">{{ formatShortDate(item.testDate) }}</span>
             </td>
             <td class="td-lot">
-              <div class="lot-inner" :class="lotRoundClass(item.lotRound)">
+              <div class="lot-inner" :class="lotRoundClass(item.lotRound)" @click="openRoundDialog(item)">
                 <span class="lot-num">({{ item.lotNumH ? String(item.lotNumH).slice(-3) : '---' }})</span>
                 <span class="lot-name">{{ item.lotNameH || '-' }}</span>
                 <input
@@ -253,6 +267,7 @@ const mobileCountRows: CountCol[][] = [
                   inputmode="numeric"
                   min="0"
                   class="lot-input"
+                  @click.stop
                   @keydown.enter="saveRange(item)"
                   @keydown="(e) => ['e','E','+','-','.'].includes(e.key) && e.preventDefault()"
                 />
@@ -290,6 +305,12 @@ const mobileCountRows: CountCol[][] = [
         </table>
       </div>
     </div>
+
+    <QualityExpansionRoundDialog
+      :item="roundItem"
+      @close="roundItem = null"
+      @assign="assignRound"
+    />
 
     <!-- 메뉴 다이얼로그 -->
     <div v-if="menuDialogItem" class="dialog-overlay" @click.self="closeMenuDialog">
@@ -483,6 +504,7 @@ const mobileCountRows: CountCol[][] = [
   justify-content: center;
   gap: 3px;
   white-space: nowrap;
+  cursor: pointer;
 }
 .lot-num {
   font-size: 12px;
@@ -757,6 +779,7 @@ const mobileCountRows: CountCol[][] = [
     display: flex;
     align-items: center;
     gap: 6px;
+    cursor: pointer;
     margin-top: 10px;
     border-radius: 12px;
     background: #f8fafc;

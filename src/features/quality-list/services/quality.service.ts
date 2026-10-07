@@ -1,6 +1,7 @@
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
 import {
+  LOT_ROUNDS,
   createEmptyQualityForm,
   mapQualityListRow,
   type CompanyRecord,
@@ -267,6 +268,29 @@ export async function updateReturnFlag(
   })
 }
 
+export async function assignQualityExpansion(
+  row: QualityListRow,
+  round: string,
+  lot: QualityLotInfo | null,
+) {
+  const lotType = String(lot?.lotType ?? '').trim()
+  const meta = lotType ? LOT_META[lotType] ?? null : null
+  const lotName = String(lot?.lotName ?? '').trim()
+  const lotNum = lot && Number(lot.lotNum) > 0 ? Number(lot.lotNum) : null
+  await updateQualityItem(row.id, {
+    lot_round: round,
+    lot_type: lotType || null,
+    lot_nameH: lotName || null,
+    lot_numH: lotNum,
+    lot_ksd: meta?.lotKsd ?? null,
+    lot_certification: meta?.lotCertification ?? null,
+    lot_ksd_num: meta?.lotKsdNum ?? null,
+    full_text: `${row.company} ${row.place} ${row.area} ${row.initial} ${lotName} ${lotNum ?? ''}`
+      .trim()
+      .replace(/\s+/g, ' '),
+  })
+}
+
 export async function updateLotRange(row: QualityListRow, lotStart: number) {
   const total = ALL_COUNT_FIELDS.reduce((sum, key) => sum + Number(row[key] ?? 0), 0)
   await updateQualityItem(row.id, {
@@ -375,6 +399,34 @@ export async function updateLotReceiptNum(id: number, receiptNum: string) {
   }
 
   throw response.error
+}
+
+export async function fetchRegisteredLotRounds(testDate: string): Promise<string[]> {
+  const primary = await supabase
+    .from('quality_list_info')
+    .select('lot_round, lot_name, lot_num')
+    .eq('test_date', testDate)
+
+  let rows = primary.data
+  if (primary.error) {
+    const fallback = await supabase
+      .from('product_list_info')
+      .select('lot_round, lot_name, lot_num')
+      .eq('test_date', testDate)
+    if (fallback.error) throw fallback.error
+    rows = fallback.data
+  }
+
+  const registered = new Set(
+    (rows ?? [])
+      .filter((row) => String(row.lot_name ?? '').trim() && Number(row.lot_num) > 0)
+      .map((row) => String(row.lot_round ?? '').trim())
+      .filter(Boolean),
+  )
+
+  const known = LOT_ROUNDS.filter((round) => registered.has(round))
+  const extra = [...registered].filter((round) => !LOT_ROUNDS.includes(round as (typeof LOT_ROUNDS)[number]))
+  return [...known, ...extra]
 }
 
 export async function fetchLotInfos(testDate: string, lotRound: string): Promise<QualityLotInfo[]> {

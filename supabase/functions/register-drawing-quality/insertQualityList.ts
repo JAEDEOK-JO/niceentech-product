@@ -1,5 +1,4 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js'
-import { findExpansionInfo } from './findExpansionInfo.ts'
 import { hasMainPipe, totalQuantity, type DrawingQuantities } from './quantityFields.ts'
 
 type PlanRow = {
@@ -9,16 +8,6 @@ type PlanRow = {
   initial: string
   testDate: string
   companyId: number | null
-}
-
-const EMPTY_LOT = {
-  lot_round: '1차',
-  lot_type: '백관',
-  lot_ksd: 'KSD 3507',
-  lot_certification: '분기 25-36',
-  lot_ksd_num: '',
-  lot_nameH: null,
-  lot_numH: null,
 }
 
 async function resolveCompanyId(supabase: SupabaseClient, row: PlanRow) {
@@ -65,7 +54,6 @@ export async function insertQualityList(
   if (!companyId) throw new Error('company_missing')
   if (!row.testDate) throw new Error('test_date_missing')
 
-  const expansion = await findExpansionInfo(supabase, row.testDate)
   const total = totalQuantity(quantities)
   const payload: Record<string, unknown> = {
     company_id: companyId,
@@ -74,14 +62,18 @@ export async function insertQualityList(
     area: row.area,
     initial: row.initial,
     test_date: row.testDate,
-    ...(expansion ?? EMPTY_LOT),
+    lot_round: null,
+    lot_type: null,
+    lot_ksd: null,
+    lot_certification: null,
+    lot_ksd_num: null,
+    lot_nameH: null,
+    lot_numH: null,
     lot_number_startH: 0,
     lot_number_endH: 0,
     totalH: total,
     print: hasMainPipe(quantities),
-    full_text: `${row.company} ${row.place} ${row.area} ${row.initial} ${expansion?.lot_nameH ?? ''} ${expansion?.lot_numH ?? ''}`
-      .trim()
-      .replace(/\s+/g, ' '),
+    full_text: `${row.company} ${row.place} ${row.area} ${row.initial}`.trim().replace(/\s+/g, ' '),
     sort: await nextSort(supabase, row.testDate),
     ...quantities,
   }

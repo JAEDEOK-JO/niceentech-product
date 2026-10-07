@@ -22,6 +22,7 @@ import {
   reorderQualityItems,
   subscribeQualityList,
   updateCancelCount,
+  assignQualityExpansion,
   updateLotRange,
   updateReturnFlag,
   uploadNoticePdf,
@@ -52,7 +53,7 @@ import {
 } from '@/features/quality-list/utils/print/notice-certificate'
 import { buildNoticeCertificateHtml } from '@/features/quality-list/utils/print/notice-certificate-html'
 import type { QualityCountField } from '@/features/quality-list/services/quality.service'
-import type { QualityListRow } from '@/features/quality-list/types/quality'
+import type { QualityListRow, QualityLotInfo } from '@/features/quality-list/types/quality'
 import type {
   BranchPipeItem,
   MainPipeGroupableGroup,
@@ -360,6 +361,14 @@ async function onUpdateRange(item: QualityListRow, lotStart: number) {
   await updateLotRange(item, lotStart)
 }
 
+async function onAssignExpansion(item: QualityListRow, payload: { round: string; lot: QualityLotInfo | null }) {
+  try {
+    await assignQualityExpansion(item, payload.round, payload.lot)
+  } catch (error) {
+    await alert(error instanceof Error ? error.message : '확관차수를 지정하지 못했습니다.')
+  }
+}
+
 async function onUpdateCancel(item: QualityListRow, field: QualityCountField, value: number) {
   await updateCancelCount(item.id, field, value)
 }
@@ -491,6 +500,7 @@ onBeforeUnmount(() => {
         @notification="onNoticeDownload"
         @stamp="onStamp"
         @update-range="onUpdateRange"
+        @assign-expansion="onAssignExpansion"
         @update-cancel="onUpdateCancel"
         @reorder="onReorder"
         @transfer="transferItem = $event"

@@ -17,6 +17,7 @@ import ProductionCalculationDialog from '@/features/main/calculation/ProductionC
 import ProductionPlanLegendDialog from '@/features/main/ProductionPlanLegendDialog.vue'
 import { vVirtualKeyboard } from '@/features/virtual-keyboard/directives/vVirtualKeyboard'
 import { scheduleDrawingQualityCheck } from '@/features/main/drawing-quality/drawingQualityCheck'
+import { restoreDrawingQualityStatuses } from '@/features/main/drawing-quality/drawingQualityRestore'
 import { drawingQualityStatuses } from '@/features/main/drawing-quality/drawingQualityStatus'
 import DrawingQuantityStatusList from '@/features/main/drawing-quality/DrawingQuantityStatusList.vue'
 import { normalizeProductionWorkType } from '@/utils/productionStatus'
@@ -210,6 +211,14 @@ watch(
   ([text, allDates]) => {
     localSearchText.value = String(text ?? '')
     localSearchAllDates.value = Boolean(allDates)
+  },
+  { immediate: true },
+)
+
+watch(
+  () => props.groupedRows,
+  (groups) => {
+    void restoreDrawingQualityStatuses(groups)
   },
   { immediate: true },
 )
