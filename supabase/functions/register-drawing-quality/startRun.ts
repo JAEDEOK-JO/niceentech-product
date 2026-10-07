@@ -19,6 +19,11 @@ export async function startDrawingRun(supabase: SupabaseClient, productListId: n
   if (!fileName.toLowerCase().endsWith('.pdf')) return { status: 'skipped' as const }
   if (!sourcePath) return { status: 'missing' as const }
 
+  const plan = await supabase.from('product_list').select('work_type').eq('id', productListId).maybeSingle()
+  if (plan.error) throw new Error(plan.error.message)
+  const workType = String(plan.data?.work_type ?? '').replaceAll(' ', '').trim()
+  if (workType !== '용접/무용접') return { status: 'skipped' as const }
+
   const claimed = await supabase
     .from('drawing_pdf')
     .update({ quantity_state: 'running', quantity_message: null })

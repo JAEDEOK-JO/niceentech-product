@@ -43,6 +43,7 @@ async function resolveQuantityState(drawingFileId, result) {
 }
 
 export function scheduleDrawingQualityCheck({ productListId, drawingNo, group, files, onResult }) {
+  if (group !== '용접/무용접') return
   const pdfs = (files ?? []).filter((file) => file?.id && isPdfFile(file))
   if (!productListId || pdfs.length === 0) return
 
