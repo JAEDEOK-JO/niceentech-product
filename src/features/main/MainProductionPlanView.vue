@@ -14,7 +14,10 @@ import { PLAN_SORT_COLUMNS } from '@/features/main/productionPlanSort'
 import { WELDING_SCHEDULE_PERMISSION_ERROR } from '@/features/welding-schedule/utils/weldingSchedulePermission'
 import CncPlanRegisterDialog from '@/features/cnc/components/CncPlanRegisterDialog.vue'
 import ProductionCalculationDialog from '@/features/main/calculation/ProductionCalculationDialog.vue'
+import ProductionPlanLegendDialog from '@/features/main/ProductionPlanLegendDialog.vue'
 import { vVirtualKeyboard } from '@/features/virtual-keyboard/directives/vVirtualKeyboard'
+import { scheduleDrawingQualityCheck } from '@/features/main/drawing-quality/drawingQualityCheck'
+import { normalizeProductionWorkType } from '@/utils/productionStatus'
 
 const { confirm, alert } = useDialog()
 
@@ -192,17 +195,7 @@ const formatDrawingDate = (value) => {
   return `${yy}.${mm}.${dd}`
 }
 
-const headerLegendBadges = [
-  { label: '증지만듦', className: 'border-yellow-300 bg-yellow-200 text-yellow-900' },
-  { label: '배포확인', className: 'border-blue-300 bg-blue-300 text-blue-950' },
-  { label: '산출완료', className: 'border-lime-200 bg-lime-100 text-lime-900' },
-  { label: '도면배포', className: 'border-slate-300 bg-slate-100 text-slate-700' },
-  { label: '보류', className: 'border-orange-200 bg-orange-100 text-orange-900' },
-  { label: '나사', className: 'border-orange-200 bg-orange-100 text-orange-800' },
-  { label: '민뚜라', className: 'border-cyan-300 bg-cyan-200 text-cyan-950' },
-  { label: '진민택', className: 'border-fuchsia-300 bg-fuchsia-200 text-fuchsia-950' },
-  { label: 'CNC', className: 'border-violet-300 bg-violet-200 text-violet-950' },
-]
+const isLegendDialogOpen = ref(false)
 
 const formatKoreanDateLabel = (value) => {
   const parsed = parseIsoDate(value)
@@ -910,9 +903,12 @@ const handleDrawingFileChange = (event) => {
     return
   }
 
+  const productListId = activeDrawingRow.value.id
+  const drawingNo = String(activeDrawingRow.value.initial ?? '').trim()
+  const group = normalizeProductionWorkType(activeDrawingRow.value.work_type)
   drawingUploading.value = true
   emit('upload-drawing-files', {
-    rowId: activeDrawingRow.value.id,
+    rowId: productListId,
     files: selectedFiles,
     onResult: (result) => {
       drawingUploading.value = false
@@ -928,6 +924,13 @@ const handleDrawingFileChange = (event) => {
         const firstFile = nextFiles.find((item) => String(item?.viewUrl ?? '').trim())
         selectedDrawingUrl.value = firstFile?.viewUrl ?? ''
       }
+
+      scheduleDrawingQualityCheck({
+        productListId,
+        drawingNo,
+        group,
+        files: result.files ?? [],
+      })
     },
   })
 }
@@ -998,16 +1001,9 @@ const selectDrawingFile = (file) => {
           <div class="min-w-0">
             <div class="flex flex-col gap-2 xl:flex-row xl:items-center xl:gap-3">
               <h1 class="shrink-0 text-lg font-extrabold text-slate-900 md:text-xl">{{ pageTitle }}</h1>
-              <div class="hidden flex-wrap items-center gap-1.5 md:flex">
-                <span
-                  v-for="badge in headerLegendBadges"
-                  :key="badge.label"
-                  class="inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold whitespace-nowrap"
-                  :class="badge.className"
-                >
-                  {{ badge.label }}
-                </span>
-              </div>
+              <Button class="print-hide h-8 px-3 text-xs md:text-sm" variant="outline" @click="isLegendDialogOpen = true">
+                색상정보
+              </Button>
             </div>
           </div>
           <div class="print-hide flex flex-col gap-2 xl:min-w-[520px] xl:flex-row xl:items-center xl:justify-end">
@@ -1672,6 +1668,7 @@ const selectDrawingFile = (file) => {
       @close="isPrintSettingsOpen = false"
       @print="printProductionPlan"
     />
+    <ProductionPlanLegendDialog class="print-hide" :open="isLegendDialogOpen" @close="isLegendDialogOpen = false" />
   </section>
 </template>
 

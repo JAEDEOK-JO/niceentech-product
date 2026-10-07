@@ -1,4 +1,5 @@
 <script setup>
+import { computed } from 'vue'
 import {
   tableColumns,
   getCellText,
@@ -12,6 +13,8 @@ import {
 import { getWorkTypeBadgeClass } from '@/utils/productionStatus'
 import { isPlanSortColumn } from '@/features/main/productionPlanSort'
 import { useMobileRowEdit } from '@/features/main/useMobileRowEdit'
+import { drawingQualityStatuses } from '@/features/main/drawing-quality/drawingQualityStatus'
+import DrawingQuantityStatusList from '@/features/main/drawing-quality/DrawingQuantityStatusList.vue'
 
 const props = defineProps({
   groupData: { type: Object, required: true },
@@ -29,6 +32,9 @@ const tableBorderStyle = {
 }
 
 const emit = defineEmits(['open-row-menu', 'cell-click', 'cell-long-press', 'sort'])
+const groupQuantityStatuses = computed(() =>
+  drawingQualityStatuses.filter((item) => item.group === props.groupData.group),
+)
 const { isRowEditing, toggleEdit } = useMobileRowEdit()
 
 const LONG_PRESS_MS = 700
@@ -207,7 +213,10 @@ const tableWidthStyle = {
 
     <div class="production-plan-table-wrap hidden md:block" :style="tableWidthStyle">
       <div class="mb-2 flex w-full items-center justify-between gap-4">
-        <h2 class="shrink-0 text-base font-extrabold text-slate-900 md:text-lg">{{ groupData.group }}</h2>
+        <div class="flex min-w-0 items-center gap-3">
+          <h2 class="shrink-0 text-base font-extrabold text-slate-900 md:text-lg">{{ groupData.group }}</h2>
+          <DrawingQuantityStatusList :items="groupQuantityStatuses" />
+        </div>
         <div v-if="groupIndex === 0" class="flex flex-wrap items-center justify-end gap-2">
           <span class="rounded-full border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-extrabold text-indigo-800 shadow-sm">
             헤드 <span class="ml-1 text-[15px] text-indigo-950">{{ overallTotals.head }}</span>

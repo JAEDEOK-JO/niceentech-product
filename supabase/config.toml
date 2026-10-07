@@ -1,2 +1,5 @@
 [functions.send-fcm]
 verify_jwt = false
+
+[functions.register-drawing-quality]
+verify_jwt = true
