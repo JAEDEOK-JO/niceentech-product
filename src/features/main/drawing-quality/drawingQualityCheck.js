@@ -4,8 +4,7 @@ import {
   removeDrawingQualityStatus,
   startDrawingQualityStatus,
 } from '@/features/main/drawing-quality/drawingQualityStatus'
-
-export const DRAWING_QUALITY_CHECK_DELAY_MS = 10_000
+import { watchDrawingQuantityState } from '@/features/main/drawing-quality/drawingQualityWatch'
 
 function isPdfFile(file) {
   return String(file?.name ?? '').trim().toLowerCase().endsWith('.pdf')
@@ -28,11 +27,19 @@ async function registerDrawingQuality({ productListId, drawingFileId }) {
   })
 
   if (data?.skipped) return { ok: true, skipped: true }
+  if (data?.accepted) return { ok: true, accepted: true }
   if (error || !data?.ok) {
     return { ok: false, message: await readFailureMessage(error, data) }
   }
 
   return { ok: true, message: '검수리스트 등록', qualityListId: data.qualityListId }
+}
+
+async function resolveQuantityState(drawingFileId, result) {
+  if (result?.skipped) return 'skipped'
+  const watched = await watchDrawingQuantityState(drawingFileId)
+  if (['done', 'review', 'running'].includes(watched)) return watched
+  return 'failed'
 }
 
 export function scheduleDrawingQualityCheck({ productListId, drawingNo, group, files, onResult }) {
@@ -46,19 +53,21 @@ export function scheduleDrawingQualityCheck({ productListId, drawingNo, group, f
   })
 
   for (const file of pdfs) {
-    window.setTimeout(() => {
-      void registerDrawingQuality({
-        productListId,
-        drawingFileId: file.id,
+    void registerDrawingQuality({
+      productListId,
+      drawingFileId: file.id,
+    })
+      .then((result) => resolveQuantityState(file.id, result))
+      .catch(() => watchDrawingQuantityState(file.id))
+      .then((state) => {
+        if (state === 'skipped') removeDrawingQualityStatus(statusId)
+        else if (state === 'done' || state === 'review') finishDrawingQualityStatus(statusId, state)
+        else if (state === 'running') return
+        else finishDrawingQualityStatus(statusId, 'failed')
+        onResult?.({ ok: state === 'done' || state === 'review', skipped: state === 'skipped' })
       })
-        .then((result) => {
-          if (result.skipped) removeDrawingQualityStatus(statusId)
-          else finishDrawingQualityStatus(statusId, result.ok ? 'done' : 'failed')
-          onResult?.(result)
-        })
-        .catch(() => {
-          finishDrawingQualityStatus(statusId, 'failed')
-        })
-    }, DRAWING_QUALITY_CHECK_DELAY_MS)
+      .catch(() => {
+        finishDrawingQualityStatus(statusId, 'failed')
+      })
   }
 }

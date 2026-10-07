@@ -23,11 +23,13 @@ function label(item) {
   const drawingNo = String(item?.drawingNo ?? '').trim() || '-'
   if (item?.state === 'failed') return `도번 ${drawingNo}번 수량파악 실패`
   if (item?.state === 'done') return `도번 ${drawingNo}번 수량파악 완료`
+  if (item?.state === 'review') return `도번 ${drawingNo}번 수량파악 확인필요`
   return `도번 ${drawingNo}번 수량파악중`
 }
 
 function textClass(item) {
   if (item?.state === 'done') return 'text-emerald-700'
+  if (item?.state === 'review') return 'text-amber-600'
   if (item?.state === 'failed') return 'text-red-600'
   return 'text-sky-700'
 }

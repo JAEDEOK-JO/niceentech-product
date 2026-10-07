@@ -1,22 +1,27 @@
-import { createClient } from 'npm:@supabase/supabase-js'
-import { readDrawingQuantities } from './gptQuantity.ts'
-import { insertQualityList } from './insertQualityList.ts'
+import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js'
+import { advanceRun } from './advanceRun.ts'
+import { isSignedInUser, isWebhook } from './requestAuth.ts'
+import { listDueRunIds } from './runStore.ts'
+import { CHECK_DELAY_MS, startDrawingRun, startEvaluationRun } from './startRun.ts'
+
+declare const EdgeRuntime: {
+  waitUntil: (promise: Promise<unknown>) => void
+}
 
 const jsonHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, content-type, x-client-info, apikey',
+  'Access-Control-Allow-Headers': 'authorization, content-type, x-client-info, apikey, x-drawing-quality-secret',
   'Content-Type': 'application/json',
 }
 
 const jsonResponse = (payload: Record<string, unknown>, status = 200) =>
   new Response(JSON.stringify(payload), { status, headers: jsonHeaders })
 
-function failureMessage(detail: string) {
-  if (detail === 'company_missing') return '회사 연결 실패'
-  if (detail === 'test_date_missing') return '검수일이 없습니다'
-  if (detail === 'openai_key_missing') return 'API 키 없음'
-  if (detail.startsWith('openai_')) return '도면 수량 읽기 실패'
-  return detail.slice(0, 80) || '검수리스트 등록 실패'
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+async function advanceDueRuns(supabase: SupabaseClient) {
+  const runIds = await listDueRunIds(supabase)
+  for (const runId of runIds) await advanceRun(supabase, runId)
 }
 
 Deno.serve(async (req) => {
@@ -34,59 +39,44 @@ Deno.serve(async (req) => {
     return jsonResponse({ ok: false, message: '검수리스트 등록 실패' }, 400)
   }
 
-  const productListId = Number(body.productListId ?? 0)
-  const drawingFileId = Number(body.drawingFileId ?? 0)
-  if (!productListId || !drawingFileId) return jsonResponse({ ok: false, message: '검수리스트 등록 실패' }, 400)
-
   const supabase = createClient(supabaseUrl, serviceRoleKey)
-  const plan = await supabase
-    .from('product_list')
-    .select('id, company, place, area, initial, test_date, company_info')
-    .eq('id', productListId)
-    .maybeSingle()
-
-  if (plan.error || !plan.data) return jsonResponse({ ok: false, message: '검수리스트 등록 실패' }, 404)
-
-  const company = String(plan.data.company ?? '').trim()
-
-  const drawing = await supabase
-    .from('drawing_pdf')
-    .select('id, name, nas_path, product_list_id')
-    .eq('id', drawingFileId)
-    .eq('product_list_id', productListId)
-    .maybeSingle()
-
-  if (drawing.error || !drawing.data) return jsonResponse({ ok: false, message: '검수리스트 등록 실패' }, 404)
-
-  const fileName = String(drawing.data.name ?? 'drawing.pdf')
-  if (!fileName.toLowerCase().endsWith('.pdf')) return jsonResponse({ ok: true, skipped: true })
-
-  const storagePath = String(drawing.data.nas_path ?? '').trim()
-  if (!storagePath) return jsonResponse({ ok: false, message: '검수리스트 등록 실패' }, 404)
-
-  const file = await supabase.storage.from('media').download(storagePath)
-  if (file.error || !file.data) return jsonResponse({ ok: false, message: '검수리스트 등록 실패' }, 500)
+  const webhook = await isWebhook(supabase, req)
+  const action = String(body.action ?? 'start')
 
   try {
-    const bytes = new Uint8Array(await file.data.arrayBuffer())
-    const quantities = await readDrawingQuantities(fileName, bytes)
-    const qualityListId = await insertQualityList(
-      supabase,
-      {
-        company,
-        place: String(plan.data.place ?? ''),
-        area: String(plan.data.area ?? ''),
-        initial: String(plan.data.initial ?? ''),
-        testDate: String(plan.data.test_date ?? '').trim(),
-        companyId: plan.data.company_info == null ? null : Number(plan.data.company_info),
-      },
-      quantities,
-    )
+    if (action === 'tick') {
+      if (!webhook) return jsonResponse({ ok: false }, 401)
+      EdgeRuntime.waitUntil(advanceDueRuns(supabase))
+      return jsonResponse({ ok: true })
+    }
 
-    return jsonResponse({ ok: true, qualityListId, quantities })
+    if (action === 'evaluate') {
+      if (!webhook) return jsonResponse({ ok: false }, 401)
+      const sourcePath = String(body.sourcePath ?? '').trim()
+      if (!sourcePath) return jsonResponse({ ok: false }, 400)
+      const runId = await startEvaluationRun(supabase, sourcePath, String(body.fileName ?? 'drawing.pdf'))
+      EdgeRuntime.waitUntil(advanceRun(supabase, runId))
+      return jsonResponse({ ok: true, runId })
+    }
+
+    if (!webhook && !(await isSignedInUser(supabase, req))) {
+      return jsonResponse({ ok: false, message: '검수리스트 등록 실패' }, 401)
+    }
+
+    const productListId = Number(body.productListId ?? 0)
+    const drawingFileId = Number(body.drawingFileId ?? 0)
+    if (!productListId || !drawingFileId) return jsonResponse({ ok: false, message: '검수리스트 등록 실패' }, 400)
+
+    const started = await startDrawingRun(supabase, productListId, drawingFileId)
+    if (started.status === 'missing') return jsonResponse({ ok: false, message: '검수리스트 등록 실패' }, 404)
+    if (started.status === 'skipped') return jsonResponse({ ok: true, skipped: true })
+    if (started.status === 'started') {
+      EdgeRuntime.waitUntil(delay(CHECK_DELAY_MS + 500).then(() => advanceRun(supabase, started.runId)))
+    }
+    return jsonResponse({ ok: true, accepted: true })
   } catch (error) {
     const detail = error instanceof Error ? error.message : 'unknown'
     console.error('register-drawing-quality', detail)
-    return jsonResponse({ ok: false, message: failureMessage(detail) }, 500)
+    return jsonResponse({ ok: false, message: '검수리스트 등록 실패' }, 500)
   }
 })
