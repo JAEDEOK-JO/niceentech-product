@@ -17,6 +17,8 @@ import ProductionCalculationDialog from '@/features/main/calculation/ProductionC
 import ProductionPlanLegendDialog from '@/features/main/ProductionPlanLegendDialog.vue'
 import { vVirtualKeyboard } from '@/features/virtual-keyboard/directives/vVirtualKeyboard'
 import { scheduleDrawingQualityCheck } from '@/features/main/drawing-quality/drawingQualityCheck'
+import { drawingQualityStatuses } from '@/features/main/drawing-quality/drawingQualityStatus'
+import DrawingQuantityStatusList from '@/features/main/drawing-quality/DrawingQuantityStatusList.vue'
 import { normalizeProductionWorkType } from '@/utils/productionStatus'
 
 const { confirm, alert } = useDialog()
@@ -1004,6 +1006,7 @@ const selectDrawingFile = (file) => {
               <Button class="print-hide h-8 px-3 text-xs md:text-sm" variant="outline" @click="isLegendDialogOpen = true">
                 색상정보
               </Button>
+              <DrawingQuantityStatusList class="print-hide shrink-0" :items="drawingQualityStatuses" />
             </div>
           </div>
           <div class="print-hide flex flex-col gap-2 xl:min-w-[520px] xl:flex-row xl:items-center xl:justify-end">
