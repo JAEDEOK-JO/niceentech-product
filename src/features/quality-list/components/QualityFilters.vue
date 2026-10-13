@@ -23,6 +23,7 @@ const emit = defineEmits<{
   refresh: []
   create: []
   noticeUpload: []
+  merge: []
   print: []
   mainPipePrint: []
   branchPipePrint: []
@@ -76,6 +77,7 @@ function openCalendar() {
         <button type="button" class="ghost-button" @click="emit('mainPipePrint')">메인관출력</button>
         <button type="button" class="ghost-button" @click="emit('branchPipePrint')">가지관 출력</button>
       </div>
+      <button type="button" class="ghost-button" @click="emit('merge')">합치기</button>
       <button type="button" class="primary-button quality-create-button" @click="emit('create')">등록</button>
       <button type="button" class="ghost-button quality-notice-button" @click="emit('noticeUpload')">통보서</button>
       <div class="quality-search-row">

@@ -67,6 +67,11 @@ export async function createRun(
     startAfter: Date
     model: string
     effort: string
+    testDate?: string | null
+    drawingNo?: string | null
+    company?: string | null
+    place?: string | null
+    area?: string | null
   },
 ) {
   const { data, error } = await supabase
@@ -80,6 +85,11 @@ export async function createRun(
       start_after: values.startAfter.toISOString(),
       model: values.model,
       reasoning_effort: values.effort,
+      test_date: values.testDate ?? null,
+      drawing_no: values.drawingNo ?? null,
+      company: values.company ?? null,
+      place: values.place ?? null,
+      area: values.area ?? null,
     })
     .select('id')
     .single()

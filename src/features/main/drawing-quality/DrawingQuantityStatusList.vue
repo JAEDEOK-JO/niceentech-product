@@ -8,6 +8,8 @@ const props = defineProps({
   items: { type: Array, default: () => [] },
 })
 
+const emit = defineEmits(['open'])
+
 const index = ref(0)
 const sliding = ref(false)
 let rotateTimer = null
@@ -22,14 +24,12 @@ const upcoming = computed(() => {
 function label(item) {
   const drawingNo = String(item?.drawingNo ?? '').trim() || '-'
   if (item?.state === 'failed') return `도번 ${drawingNo}번 수량파악 실패`
-  if (item?.state === 'done') return `도번 ${drawingNo}번 수량파악 완료`
-  if (item?.state === 'review') return `도번 ${drawingNo}번 수량파악 확인필요`
+  if (item?.state === 'done' || item?.state === 'review') return `도번 ${drawingNo}번 수량파악 완료`
   return `도번 ${drawingNo}번 수량파악중`
 }
 
 function textClass(item) {
-  if (item?.state === 'done') return 'text-emerald-700'
-  if (item?.state === 'review') return 'text-amber-600'
+  if (item?.state === 'done' || item?.state === 'review') return 'text-emerald-700'
   if (item?.state === 'failed') return 'text-red-600'
   return 'text-sky-700'
 }
@@ -69,9 +69,9 @@ onUnmounted(clearTimers)
 </script>
 
 <template>
-  <div v-if="current" class="status-row">
+  <button v-if="current" type="button" class="status-row" @click="emit('open')">
     <span v-if="current.state === 'running'" class="quantity-ping" aria-hidden="true"></span>
-    <span v-else-if="current.state === 'done'" class="quantity-done" aria-hidden="true">
+    <span v-else-if="current.state === 'done' || current.state === 'review'" class="quantity-done" aria-hidden="true">
       <svg viewBox="0 0 16 16" class="quantity-check">
         <path d="M3.8 8.2 6.6 11 12.2 4.8" />
       </svg>
@@ -92,7 +92,7 @@ onUnmounted(clearTimers)
         </p>
       </div>
     </div>
-  </div>
+  </button>
 </template>
 
 <style scoped>
@@ -102,8 +102,11 @@ onUnmounted(clearTimers)
   gap: 0.7rem;
   height: 2rem;
   margin-left: 0.15rem;
-  padding-left: 0.9rem;
+  padding: 0 0 0 0.9rem;
+  border: none;
+  background: transparent;
   overflow: visible;
+  cursor: pointer;
 }
 
 .status-window {

@@ -20,6 +20,8 @@ import { scheduleDrawingQualityCheck } from '@/features/main/drawing-quality/dra
 import { restoreDrawingQualityStatuses } from '@/features/main/drawing-quality/drawingQualityRestore'
 import { drawingQualityStatuses } from '@/features/main/drawing-quality/drawingQualityStatus'
 import DrawingQuantityStatusList from '@/features/main/drawing-quality/DrawingQuantityStatusList.vue'
+import DrawingQuantityLogDialog from '@/features/main/drawing-quality/DrawingQuantityLogDialog.vue'
+import { productionTestDate } from '@/features/main/drawing-quality/fetchQuantityRunLogs'
 import { normalizeProductionWorkType } from '@/utils/productionStatus'
 
 const { confirm, alert } = useDialog()
@@ -199,6 +201,8 @@ const formatDrawingDate = (value) => {
 }
 
 const isLegendDialogOpen = ref(false)
+const quantityLogOpen = ref(false)
+const quantityLogDate = computed(() => productionTestDate(props.selectedTuesdayIso))
 
 const formatKoreanDateLabel = (value) => {
   const parsed = parseIsoDate(value)
@@ -1015,7 +1019,7 @@ const selectDrawingFile = (file) => {
               <Button class="print-hide h-8 px-3 text-xs md:text-sm" variant="outline" @click="isLegendDialogOpen = true">
                 색상정보
               </Button>
-              <DrawingQuantityStatusList class="print-hide shrink-0" :items="drawingQualityStatuses" />
+              <DrawingQuantityStatusList class="print-hide shrink-0" :items="drawingQualityStatuses" @open="quantityLogOpen = true" />
             </div>
           </div>
           <div class="print-hide flex flex-col gap-2 xl:min-w-[520px] xl:flex-row xl:items-center xl:justify-end">
@@ -1681,6 +1685,7 @@ const selectDrawingFile = (file) => {
       @print="printProductionPlan"
     />
     <ProductionPlanLegendDialog class="print-hide" :open="isLegendDialogOpen" @close="isLegendDialogOpen = false" />
+    <DrawingQuantityLogDialog class="print-hide" :open="quantityLogOpen" :test-date="quantityLogDate" @close="quantityLogOpen = false" />
   </section>
 </template>
 

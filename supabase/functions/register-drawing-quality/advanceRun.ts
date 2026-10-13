@@ -1,5 +1,6 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js'
 import { finalizeRun, setDrawingQuantityState } from './finalizeRun.ts'
+import { failureMessage } from './resultMessage.ts'
 import { countPdfPages } from './pdfPages.ts'
 import { applySurvey, collectPageResults, initialPages, mergeZoomResults, zoomCandidates } from './runStages.ts'
 import {
@@ -31,8 +32,14 @@ function pdfLoader(supabase: SupabaseClient, path: string) {
 }
 
 async function failRun(supabase: SupabaseClient, run: QuantityRun, reason: string) {
-  await updateRun(supabase, run.id, { state: 'failed', error: reason, finished_at: new Date().toISOString() })
-  await setDrawingQuantityState(supabase, run.drawing_pdf_id, 'failed', '도면 수량 읽기 실패')
+  const message = failureMessage(reason)
+  await updateRun(supabase, run.id, {
+    state: 'failed',
+    error: reason,
+    result_message: message,
+    finished_at: new Date().toISOString(),
+  })
+  await setDrawingQuantityState(supabase, run.drawing_pdf_id, 'failed', message)
 }
 
 async function step(supabase: SupabaseClient, run: QuantityRun, loadPdf: () => Promise<Uint8Array>) {

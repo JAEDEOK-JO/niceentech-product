@@ -2,15 +2,8 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js'
 import { sumIncludedRecords } from './aggregateRecords.ts'
 import { insertQualityList } from './insertQualityList.ts'
 import { quantitiesFromDiameterCounts } from './quantityFields.ts'
+import { completionMessage } from './resultMessage.ts'
 import { updateRun, type QuantityRun } from './runStore.ts'
-
-export function failureMessage(detail: string) {
-  if (detail === 'company_missing') return '회사 연결 실패'
-  if (detail === 'test_date_missing') return '검수일이 없습니다'
-  if (detail === 'openai_key_missing') return 'API 키 없음'
-  if (detail.startsWith('openai_')) return '도면 수량 읽기 실패'
-  return detail.slice(0, 80) || '검수리스트 등록 실패'
-}
 
 export async function setDrawingQuantityState(
   supabase: SupabaseClient,
@@ -70,6 +63,12 @@ export async function finalizeRun(supabase: SupabaseClient, run: QuantityRun) {
   }
 
   const finishedAt = new Date().toISOString()
+  const message = completionMessage({
+    state,
+    pages: run.pages,
+    records: run.records,
+    error: error ?? run.error,
+  })
   await updateRun(supabase, run.id, {
     state,
     counts,
@@ -80,9 +79,9 @@ export async function finalizeRun(supabase: SupabaseClient, run: QuantityRun) {
     pages: run.pages,
     records: run.records,
     finished_at: finishedAt,
+    result_message: message,
   })
 
-  const message = state === 'failed' ? failureMessage(error ?? 'openai_failed') : null
-  await setDrawingQuantityState(supabase, run.drawing_pdf_id, state, message)
+  await setDrawingQuantityState(supabase, run.drawing_pdf_id, state, state === 'failed' ? message : null)
   return state
 }

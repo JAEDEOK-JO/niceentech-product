@@ -5,6 +5,7 @@ import '@/features/quality-list/quality.css'
 import QualityFilters from '@/features/quality-list/components/QualityFilters.vue'
 import QualityTable from '@/features/quality-list/components/QualityTable.vue'
 import QualityDateTransferDialog from '@/features/quality-list/components/QualityDateTransferDialog.vue'
+import QualityMergeDialog from '@/features/quality-list/components/QualityMergeDialog.vue'
 import PrintSettingsDialog from '@/features/printing/PrintSettingsDialog.vue'
 import MainPipeGroupingDialog from '@/features/quality-list/components/print/MainPipeGroupingDialog.vue'
 import MainPipePrintTemplate from '@/features/quality-list/components/print/MainPipePrintTemplate.vue'
@@ -61,6 +62,7 @@ import type {
   PrintEntryWithType,
 } from '@/features/quality-list/types/print'
 import { mapQualityListRow } from '@/features/quality-list/types/quality'
+import { mergeQualityRows } from '@/features/quality-list/services/mergeQualityRows'
 
 const router = useRouter()
 const route = useRoute()
@@ -81,6 +83,8 @@ const mainPipeCards = ref<PrintEntryWithType[]>([])
 const branchPipeItems = ref<BranchPipeItem[]>([])
 const noticeFileInput = ref<HTMLInputElement | null>(null)
 const transferItem = ref<QualityListRow | null>(null)
+const mergeOpen = ref(false)
+const mergeBusy = ref(false)
 const transferBusy = ref(false)
 
 const currentDateLabel = computed(() =>
@@ -357,6 +361,28 @@ async function onCopyDate(item: QualityListRow, newTestDate: string) {
   }
 }
 
+function openMerge() {
+  mergeOpen.value = true
+}
+
+function closeMerge() {
+  if (mergeBusy.value) return
+  mergeOpen.value = false
+}
+
+async function onMerge(rows: QualityListRow[], payload: { initial: string; area: string }) {
+  if (rows.length < 2 || mergeBusy.value) return
+  mergeBusy.value = true
+  try {
+    await mergeQualityRows(rows, payload)
+    mergeOpen.value = false
+  } catch (error) {
+    await alert(error instanceof Error ? error.message : '합치기에 실패했습니다.')
+  } finally {
+    mergeBusy.value = false
+  }
+}
+
 async function onUpdateRange(item: QualityListRow, lotStart: number) {
   await updateLotRange(item, lotStart)
 }
@@ -485,6 +511,7 @@ onBeforeUnmount(() => {
         @refresh="load"
         @create="goCreate"
         @notice-upload="openNoticeUpload"
+        @merge="openMerge"
         @print="onPrint"
         @main-pipe-print="handleMainPipePrint"
         @branch-pipe-print="handleBranchPipePrint"
@@ -504,6 +531,14 @@ onBeforeUnmount(() => {
         @update-cancel="onUpdateCancel"
         @reorder="onReorder"
         @transfer="transferItem = $event"
+      />
+
+      <QualityMergeDialog
+        :open="mergeOpen"
+        :items="items"
+        :busy="mergeBusy"
+        @close="closeMerge"
+        @confirm="onMerge"
       />
 
       <QualityDateTransferDialog

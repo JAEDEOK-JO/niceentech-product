@@ -19,10 +19,16 @@ export async function startDrawingRun(supabase: SupabaseClient, productListId: n
   if (!fileName.toLowerCase().endsWith('.pdf')) return { status: 'skipped' as const }
   if (!sourcePath) return { status: 'missing' as const }
 
-  const plan = await supabase.from('product_list').select('work_type').eq('id', productListId).maybeSingle()
+  const plan = await supabase
+    .from('product_list')
+    .select('work_type, test_date, initial, company, place, area')
+    .eq('id', productListId)
+    .maybeSingle()
   if (plan.error) throw new Error(plan.error.message)
   const workType = String(plan.data?.work_type ?? '').replaceAll(' ', '').trim()
-  if (workType !== '용접/무용접') return { status: 'skipped' as const }
+  if (workType !== '용접/무용접' && workType !== '전실/입상' && workType !== '전실입상' && workType !== '입상/전실' && workType !== '입상전실') {
+    return { status: 'skipped' as const }
+  }
 
   const claimed = await supabase
     .from('drawing_pdf')
@@ -42,6 +48,11 @@ export async function startDrawingRun(supabase: SupabaseClient, productListId: n
     startAfter: new Date(Date.now() + CHECK_DELAY_MS),
     model: QUANTITY_MODEL,
     effort: QUANTITY_REASONING_EFFORT,
+    testDate: String(plan.data?.test_date ?? '').trim(),
+    drawingNo: String(plan.data?.initial ?? '').trim(),
+    company: String(plan.data?.company ?? '').trim(),
+    place: String(plan.data?.place ?? '').trim(),
+    area: String(plan.data?.area ?? '').trim(),
   })
   return { status: 'started' as const, runId }
 }
