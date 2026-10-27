@@ -69,6 +69,14 @@ const bannerMessage = computed(() => {
   return `${normalizeVersion(remoteVersion.value)} 버전이 배포되었습니다.`
 })
 
+const changelogLines = computed(() => {
+  const text = bannerMessage.value.trim()
+  if (!text) return []
+  const lines = text.split(/\n+/).map((line) => line.trim()).filter(Boolean)
+  if (lines.length > 1) return lines
+  return text.split(/(?=\d+\.\s)/).map((line) => line.trim()).filter(Boolean)
+})
+
 const updatePercent = computed(() => Math.round(Number(updateStatus.value.percent || 0)))
 const updateBusy = computed(() => ['checking', 'available', 'downloading', 'installing'].includes(updateStatus.value.phase))
 const updateButtonLabel = computed(() => {
@@ -219,12 +227,21 @@ onBeforeUnmount(() => {
         class="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/80 px-4"
         @click.self.prevent
       >
-        <section class="w-full max-w-md rounded-[28px] border border-slate-200 bg-white p-6 shadow-2xl">
-          <div class="inline-flex rounded-full bg-slate-900 px-3 py-1 text-xs font-extrabold tracking-[0.18em] text-white">
+        <section class="flex max-h-[92vh] w-full max-w-md flex-col rounded-[28px] border border-slate-200 bg-white p-6 shadow-2xl">
+          <div class="inline-flex w-fit rounded-full bg-slate-900 px-3 py-1 text-xs font-extrabold tracking-[0.18em] text-white">
             UPDATE
           </div>
           <h2 class="mt-4 text-2xl font-extrabold text-slate-900">새 버전이 배포되었습니다</h2>
-          <p class="mt-3 max-h-[40vh] overflow-y-auto whitespace-pre-line text-sm leading-6 text-slate-600">{{ bannerMessage }}</p>
+          <div class="mt-4 min-h-[440px] flex-1 space-y-2 overflow-y-auto">
+            <p
+              v-for="(line, index) in changelogLines"
+              :key="index"
+              class="rounded-xl px-4 py-3 text-sm leading-6"
+              :class="/^\d+\./.test(line) ? 'bg-slate-50 text-slate-700' : 'px-1 py-1 font-extrabold text-slate-900'"
+            >
+              {{ line }}
+            </p>
+          </div>
 
           <div class="mt-5 grid grid-cols-2 gap-3 rounded-2xl bg-slate-50 p-4 text-sm">
             <div>
