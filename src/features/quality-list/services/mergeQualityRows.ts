@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import type { QualityListRow } from '@/features/quality-list/types/quality'
+import { discardQualityMergeBackup, saveQualityMergeBackup } from '@/features/quality-list/services/qualityMergeBackup'
 
 const COUNT_FIELDS = ['a32', 'a40', 'a50', 'a65', 'm65', 'm80', 'm100', 'm125', 'm150', 'm200'] as const
 const MAIN_FIELDS = ['a32', 'a40', 'a50', 'a65'] as const
@@ -29,6 +30,7 @@ export async function mergeQualityRows(rows: QualityListRow[], input: MergeQuali
   const initial = input.initial.trim()
   const area = input.area.trim()
   const print = MAIN_FIELDS.some((field) => Number(counts[field] ?? 0) > 0)
+  const backupId = await saveQualityMergeBackup(keeper.id, rows.map((row) => row.id))
 
   const updated = await supabase
     .from('quality_list')
@@ -52,8 +54,10 @@ export async function mergeQualityRows(rows: QualityListRow[], input: MergeQuali
     .eq('id', keeper.id)
     .select('id')
 
-  if (updated.error) throw updated.error
-  if (!updated.data?.length) throw new Error('합치기에 실패했습니다.')
+  if (updated.error || !updated.data?.length) {
+    await discardQualityMergeBackup(backupId)
+    throw updated.error ?? new Error('합치기에 실패했습니다.')
+  }
 
   const removed = await supabase
     .from('quality_list')

@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase'
 
-const POLL_MS = 5_000
+const POLL_MS = 2_000
 const WAIT_MS = 30 * 60 * 1000
 const FINAL_STATES = ['done', 'review', 'failed']
 
@@ -10,12 +10,18 @@ export function watchDrawingQuantityState(drawingFileId) {
   return new Promise((resolve) => {
     let settled = false
     let timer = null
+    let channel = null
 
     const finish = (state) => {
       if (settled) return
       settled = true
       if (timer) window.clearInterval(timer)
+      if (channel) supabase.removeChannel(channel)
       resolve(state)
+    }
+
+    const apply = (state) => {
+      if (FINAL_STATES.includes(state)) finish(state)
     }
 
     const poll = async () => {
@@ -27,15 +33,25 @@ export function watchDrawingQuantityState(drawingFileId) {
         .maybeSingle()
 
       const state = data?.quantity_state
-      if (FINAL_STATES.includes(state)) {
-        finish(state)
-        return
-      }
-
-      if (Date.now() - started >= WAIT_MS) {
+      apply(state)
+      if (!settled && Date.now() - started >= WAIT_MS) {
         finish(state === 'running' ? 'running' : 'failed')
       }
     }
+
+    channel = supabase
+      .channel(`drawing-quantity-${drawingFileId}-${started}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'drawing_pdf',
+          filter: `id=eq.${drawingFileId}`,
+        },
+        (payload) => apply(payload.new?.quantity_state),
+      )
+      .subscribe()
 
     timer = window.setInterval(() => {
       void poll()

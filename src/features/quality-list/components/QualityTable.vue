@@ -11,6 +11,7 @@ const props = defineProps<{
   loading?: boolean
   showAllRecords?: boolean
   canReorder?: boolean
+  mergedIds?: Set<number>
 }>()
 
 function formatShortDate(testDate: string): string {
@@ -29,6 +30,7 @@ const emit = defineEmits<{
   assignExpansion: [item: QualityListRow, payload: { round: string; lot: QualityLotInfo | null }]
   reorder: [items: QualityListRow[]]
   transfer: [item: QualityListRow]
+  undoMerge: [item: QualityListRow]
 }>()
 
 const {
@@ -326,6 +328,14 @@ const mobileCountRows: CountCol[][] = [
           <button type="button" class="da-btn da-btn--blue" @click="emit('edit', menuDialogItem); closeMenuDialog()">수정</button>
           <button type="button" class="da-btn da-btn--teal" @click="emit('notification', menuDialogItem); closeMenuDialog()">통보서</button>
           <button type="button" class="da-btn da-btn--purple" @click="emit('stamp', menuDialogItem); closeMenuDialog()">증지</button>
+          <button
+            v-if="mergedIds?.has(menuDialogItem.id)"
+            type="button"
+            class="da-btn da-btn--amber"
+            @click="emit('undoMerge', menuDialogItem); closeMenuDialog()"
+          >
+            합치기 취소
+          </button>
           <button type="button" class="da-btn da-btn--danger" @click="emit('delete', menuDialogItem); closeMenuDialog()">삭제</button>
         </div>
       </div>
@@ -689,6 +699,8 @@ const mobileCountRows: CountCol[][] = [
 .da-btn--green:hover  { background: #bbf7d0; }
 .da-btn--purple { background: #ede9fe; border-color: #ddd6fe; color: #5b21b6; }
 .da-btn--purple:hover { background: #ddd6fe; }
+.da-btn--amber { background: #fef3c7; border-color: #fde68a; color: #92400e; }
+.da-btn--amber:hover { background: #fde68a; }
 .da-btn--danger { background: #fee2e2; border-color: #fecaca; color: #b91c1c; }
 .da-btn--danger:hover { background: #fecaca; }
 

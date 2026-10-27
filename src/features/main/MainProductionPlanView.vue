@@ -22,6 +22,7 @@ import { drawingQualityStatuses } from '@/features/main/drawing-quality/drawingQ
 import DrawingQuantityStatusList from '@/features/main/drawing-quality/DrawingQuantityStatusList.vue'
 import DrawingQuantityLogDialog from '@/features/main/drawing-quality/DrawingQuantityLogDialog.vue'
 import { productionTestDate } from '@/features/main/drawing-quality/fetchQuantityRunLogs'
+import DrawingFileHistoryList from '@/features/main/drawing-history/DrawingFileHistoryList.vue'
 import { normalizeProductionWorkType } from '@/utils/productionStatus'
 
 const { confirm, alert } = useDialog()
@@ -187,6 +188,7 @@ const drawingFileInput = ref(null)
 const selectedDrawingUrl = ref('')
 const activeDrawingRow = ref(null)
 const drawingDeletingId = ref(null)
+const drawingHistoryList = ref(null)
 const suppressDrawingClickId = ref(null)
 let drawingLongPressTimer = null
 const DRAWING_LONG_PRESS_MS = 700
@@ -946,6 +948,7 @@ const handleDrawingFileChange = (event) => {
         group,
         files: result.files ?? [],
       })
+      drawingHistoryList.value?.reload()
     },
   })
 }
@@ -975,6 +978,7 @@ const handleDrawingItemPressStart = (file) => {
           return
         }
         drawingFiles.value = drawingFiles.value.filter((item) => item.id !== file.id)
+        drawingHistoryList.value?.reload()
         if (selectedDrawingUrl.value === file.viewUrl) {
           const firstFile = drawingFiles.value.find((item) => String(item?.viewUrl ?? '').trim())
           selectedDrawingUrl.value = firstFile?.viewUrl ?? ''
@@ -1472,7 +1476,7 @@ const selectDrawingFile = (file) => {
       @click.self="closeDrawingDialog"
     >
       <div class="flex h-[100dvh] w-screen flex-col gap-0 overflow-hidden bg-white md:grid md:h-screen md:grid-cols-[320px_1fr]">
-        <div class="shrink-0 border-b border-slate-200 bg-white p-4 md:border-b-0 md:border-r">
+        <div class="shrink-0 overflow-y-auto border-b border-slate-200 bg-white p-4 md:border-b-0 md:border-r">
           <div class="mb-4 flex items-start justify-between gap-3">
             <div class="min-w-0">
               <h3 class="text-base font-extrabold text-slate-900">도면 목록</h3>
@@ -1482,6 +1486,11 @@ const selectDrawingFile = (file) => {
             </div>
             <button type="button" class="shrink-0 text-sm text-slate-500 hover:text-slate-700" @click="closeDrawingDialog">닫기</button>
           </div>
+          <DrawingFileHistoryList
+            v-if="activeDrawingRow?.id"
+            ref="drawingHistoryList"
+            :product-list-id="activeDrawingRow.id"
+          />
           <div class="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
             <p class="mb-2 text-xs font-bold text-slate-600">도면 등록</p>
             <input

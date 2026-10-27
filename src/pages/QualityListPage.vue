@@ -63,6 +63,7 @@ import type {
 } from '@/features/quality-list/types/print'
 import { mapQualityListRow } from '@/features/quality-list/types/quality'
 import { mergeQualityRows } from '@/features/quality-list/services/mergeQualityRows'
+import { fetchQualityMergeBackups, undoQualityMerge } from '@/features/quality-list/services/qualityMergeBackup'
 
 const router = useRouter()
 const route = useRoute()
@@ -85,6 +86,8 @@ const noticeFileInput = ref<HTMLInputElement | null>(null)
 const transferItem = ref<QualityListRow | null>(null)
 const mergeOpen = ref(false)
 const mergeBusy = ref(false)
+const mergeBackups = ref(new Map<number, number>())
+const mergedIds = computed(() => new Set(mergeBackups.value.keys()))
 const transferBusy = ref(false)
 
 const currentDateLabel = computed(() =>
@@ -131,11 +134,16 @@ async function load() {
       searchQuery: searchQuery.value,
       showAllRecords: showAllRecords.value,
     })
+    await refreshMergeBackups()
   } catch (error) {
     await alert(error instanceof Error ? error.message : '검수리스트를 불러오지 못했습니다.')
   } finally {
     loading.value = false
   }
+}
+
+async function refreshMergeBackups() {
+  mergeBackups.value = await fetchQualityMergeBackups(items.value.map((item) => item.id))
 }
 
 function sortItems(list: QualityListRow[]): QualityListRow[] {
@@ -376,10 +384,23 @@ async function onMerge(rows: QualityListRow[], payload: { initial: string; area:
   try {
     await mergeQualityRows(rows, payload)
     mergeOpen.value = false
+    await refreshMergeBackups()
   } catch (error) {
     await alert(error instanceof Error ? error.message : '합치기에 실패했습니다.')
   } finally {
     mergeBusy.value = false
+  }
+}
+
+async function onUndoMerge(item: QualityListRow) {
+  const backupId = mergeBackups.value.get(item.id)
+  if (!backupId) return
+  if (!await confirm(`${item.company} ${item.place} 합치기를 취소할까요?`)) return
+  try {
+    await undoQualityMerge(backupId)
+    await load()
+  } catch (error) {
+    await alert(error instanceof Error ? error.message : '합치기 취소에 실패했습니다.')
   }
 }
 
@@ -522,6 +543,7 @@ onBeforeUnmount(() => {
         :loading="loading"
         :show-all-records="showAllRecords"
         :can-reorder="canReorder"
+        :merged-ids="mergedIds"
         @edit="goEdit"
         @delete="onDelete"
         @notification="onNoticeDownload"
@@ -531,6 +553,7 @@ onBeforeUnmount(() => {
         @update-cancel="onUpdateCancel"
         @reorder="onReorder"
         @transfer="transferItem = $event"
+        @undo-merge="onUndoMerge"
       />
 
       <QualityMergeDialog

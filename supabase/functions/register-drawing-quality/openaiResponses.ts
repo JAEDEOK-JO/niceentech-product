@@ -1,5 +1,5 @@
-export const QUANTITY_MODEL = 'gpt-6.1-sol'
-export const QUANTITY_REASONING_EFFORT = 'high'
+export const QUANTITY_MODEL = 'gpt-6.1-terra'
+export const QUANTITY_REASONING_EFFORT = 'max'
 
 const RESPONSES_URL = 'https://api.openai.com/v1/responses'
 const MAX_OUTPUT_TOKENS = 64_000

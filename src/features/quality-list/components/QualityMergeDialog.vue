@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { vVirtualKeyboard } from '@/features/virtual-keyboard/directives/vVirtualKeyboard'
+import { joinSortedAreas, joinSortedDrawingNos } from '@/features/quality-list/services/mergeFieldOrder'
 import type { QualityListRow } from '@/features/quality-list/types/quality'
 
 const COUNT_FIELDS = [
@@ -82,10 +83,6 @@ const sums = computed(() =>
   })).filter((field) => field.value > 0),
 )
 
-function joined(values: string[]) {
-  return values.map((value) => value.trim()).filter(Boolean).join(', ')
-}
-
 function toggleRow(row: QualityListRow) {
   if (props.busy) return
   const selectedKey = checkedRows.value[0] ? siteKey(checkedRows.value[0]) : ''
@@ -100,8 +97,8 @@ function toggleRow(row: QualityListRow) {
 
 function goForm() {
   if (checkedRows.value.length < 2) return
-  initial.value = joined(checkedRows.value.map((row) => row.initial))
-  area.value = joined(checkedRows.value.map((row) => row.area))
+  initial.value = joinSortedDrawingNos(checkedRows.value.map((row) => row.initial))
+  area.value = joinSortedAreas(checkedRows.value.map((row) => row.area))
   step.value = 'form'
 }
 
@@ -112,7 +109,7 @@ function submit() {
 </script>
 
 <template>
-  <div v-if="open" class="merge-overlay" @click.self="emit('close')">
+  <div v-if="open" class="merge-overlay">
     <div class="merge-box">
       <div class="merge-head">
         <p class="merge-title">합치기</p>

@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import { countsDrawingQuantity, quantityWorkType } from '@/features/main/drawing-quality/quantityWorkTypes'
 import {
+  drawingQualityStatuses,
   finishDrawingQualityStatus,
   showFinishedDrawingQualityStatus,
   startDrawingQualityStatus,
@@ -10,6 +11,8 @@ import { watchDrawingQuantityState } from '@/features/main/drawing-quality/drawi
 const watchedFileIds = new Set()
 const CHUNK_SIZE = 100
 const FINISHED_STATES = ['done', 'review', 'failed']
+let settleTimer = null
+let settleProductIds = []
 
 function quantityPlanRows(groups) {
   const rows = []
@@ -65,9 +68,45 @@ async function runningDrawingFiles(productListIds) {
   return files
 }
 
+async function settleRunningStatuses() {
+  const runningItems = drawingQualityStatuses.filter((item) => item.state === 'running')
+  if (runningItems.length === 0) return
+  const ids = [...new Set(runningItems.map((item) => item.productListId))]
+  const { data, error } = await supabase
+    .from('drawing_pdf')
+    .select('product_list_id, quantity_state')
+    .in('product_list_id', ids)
+  if (error) return
+
+  const byProduct = new Map()
+  for (const row of data ?? []) {
+    const id = Number(row.product_list_id)
+    const states = byProduct.get(id) ?? []
+    states.push(row.quantity_state)
+    byProduct.set(id, states)
+  }
+
+  for (const item of runningItems) {
+    const states = byProduct.get(item.productListId) ?? []
+    if (states.length === 0 || states.some((state) => state === 'running' || state == null)) continue
+    const state = states.includes('failed') ? 'failed' : states.includes('review') ? 'review' : 'done'
+    finishDrawingQualityStatus(item.id, state)
+  }
+}
+
+function watchSettledStatuses(productIds) {
+  settleProductIds = productIds
+  if (settleTimer) return
+  settleTimer = window.setInterval(() => {
+    if (settleProductIds.length === 0) return
+    void settleRunningStatuses()
+  }, 2000)
+}
+
 export async function restoreDrawingQualityStatuses(groups) {
   const rows = quantityPlanRows(groups)
   if (rows.length === 0) return
+  watchSettledStatuses(rows.map((row) => row.id))
 
   const files = await runningDrawingFiles(rows.map((row) => row.id))
   const plans = new Map(rows.map((row) => [row.id, row]))
@@ -89,6 +128,8 @@ export async function restoreDrawingQualityStatuses(groups) {
       else if (state !== 'running') finishDrawingQualityStatus(statusId, 'failed')
     })
   }
+
+  await settleRunningStatuses()
 
   const latest = await latestFinishedRun(rows.map((row) => row.id))
   if (!latest) return

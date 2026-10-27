@@ -15,10 +15,15 @@ const sliding = ref(false)
 let rotateTimer = null
 let slideTimer = null
 
-const current = computed(() => props.items[index.value] ?? null)
+const visibleItems = computed(() => {
+  const running = props.items.filter((item) => item.state === 'running')
+  return running.length > 0 ? running : props.items
+})
+
+const current = computed(() => visibleItems.value[index.value] ?? null)
 const upcoming = computed(() => {
-  if (props.items.length < 2 || !current.value) return null
-  return props.items[(index.value + 1) % props.items.length]
+  if (visibleItems.value.length < 2 || !current.value) return null
+  return visibleItems.value[(index.value + 1) % visibleItems.value.length]
 })
 
 function label(item) {
@@ -46,10 +51,10 @@ function clearTimers() {
 }
 
 function rotateNext() {
-  if (props.items.length < 2 || sliding.value) return
+  if (visibleItems.value.length < 2 || sliding.value) return
   sliding.value = true
   slideTimer = window.setTimeout(() => {
-    index.value = (index.value + 1) % props.items.length
+    index.value = (index.value + 1) % visibleItems.value.length
     sliding.value = false
     slideTimer = null
   }, SLIDE_MS)
@@ -58,12 +63,12 @@ function rotateNext() {
 function startRotation() {
   clearTimers()
   sliding.value = false
-  if (index.value >= props.items.length) index.value = 0
-  if (props.items.length < 2) return
+  if (index.value >= visibleItems.value.length) index.value = 0
+  if (visibleItems.value.length < 2) return
   rotateTimer = window.setInterval(rotateNext, ROTATE_MS)
 }
 
-watch(() => props.items.map((item) => item.id).join('|'), startRotation, { immediate: true })
+watch(() => visibleItems.value.map((item) => `${item.id}:${item.state}`).join('|'), startRotation, { immediate: true })
 
 onUnmounted(clearTimers)
 </script>
