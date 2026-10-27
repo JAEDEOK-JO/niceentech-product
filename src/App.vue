@@ -224,7 +224,7 @@ onBeforeUnmount(() => {
             UPDATE
           </div>
           <h2 class="mt-4 text-2xl font-extrabold text-slate-900">새 버전이 배포되었습니다</h2>
-          <p class="mt-3 text-sm leading-6 text-slate-600">{{ bannerMessage }}</p>
+          <p class="mt-3 max-h-[40vh] overflow-y-auto whitespace-pre-line text-sm leading-6 text-slate-600">{{ bannerMessage }}</p>
 
           <div class="mt-5 grid grid-cols-2 gap-3 rounded-2xl bg-slate-50 p-4 text-sm">
             <div>

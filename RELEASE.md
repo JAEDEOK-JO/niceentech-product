@@ -163,6 +163,14 @@ set version = '<version>'
 returning version, update_message;
 ```
 
+같은 시점에 `update_message`에 이번 버전 수정내역을 저장한다. 업데이트 다이얼로그에 그대로 표시되므로 사용자가 이해할 수 있는 짧은 문장으로, 줄바꿈으로 항목을 나눠 쓴다.
+
+```sql
+update public.setting
+set update_message = E'<version> 수정내역\n1. ...\n2. ...'
+returning version, update_message;
+```
+
 검증:
 
 ```sql
