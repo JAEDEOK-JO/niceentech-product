@@ -42,8 +42,7 @@ DECLARE
 BEGIN
   SELECT rows INTO v_rows
   FROM public.quality_merge_backups
-  WHERE id = p_backup_id
-  FOR UPDATE;
+  WHERE id = p_backup_id;
 
   IF v_rows IS NULL THEN
     RAISE EXCEPTION 'merge_backup_missing';

@@ -9,7 +9,8 @@ import { printCurrentPage } from '@/features/printing/pagePrint'
 import { useDialog } from '@/composables/useDialog'
 import { isForemanWorkMan, isProductionAdmin } from '@/utils/adminAccess'
 import { WELDING_INSPECTORS, getWeldingInspectorClass } from '@/utils/productionStatus'
-import { sanitizeDecimalOne } from '@/features/main/productionPlanNumbers'
+import MakerDialog from '@/features/main/maker/MakerDialog.vue'
+import { serializeMaker } from '@/features/main/maker/makerOptions'
 import { PLAN_SORT_COLUMNS } from '@/features/main/productionPlanSort'
 import { WELDING_SCHEDULE_PERMISSION_ERROR } from '@/features/welding-schedule/utils/weldingSchedulePermission'
 import CncPlanRegisterDialog from '@/features/cnc/components/CncPlanRegisterDialog.vue'
@@ -68,7 +69,7 @@ const emit = defineEmits([
   'welding-long-press',
   'nasa-long-press',
   'welding-start',
-  'update-inch',
+  'update-maker',
   'register-cnc',
   'cancel-cnc',
   'toggle-plan-sort',
@@ -113,9 +114,8 @@ const activeWeldingScheduleRow = ref(null)
 const weldingScheduleDateIso = ref('')
 const weldingScheduleCalendarMonth = ref(new Date())
 const selectedWeldingScheduleInspector = ref('')
-const isInchDialogOpen = ref(false)
-const activeInchRow = ref(null)
-const inchInput = ref('')
+const isMakerDialogOpen = ref(false)
+const activeMakerRow = ref(null)
 const isCalculationDialogOpen = ref(false)
 const activeCalculationRow = ref(null)
 
@@ -453,42 +453,23 @@ const handleDeleteRow = () => {
   closeRowDialog()
 }
 
-const openInchDialog = (row) => {
-  activeInchRow.value = row
-  inchInput.value = sanitizeDecimalOne(row?.inch ?? '')
-  isInchDialogOpen.value = true
+const openMakerDialog = (row) => {
+  activeMakerRow.value = row
+  isMakerDialogOpen.value = true
 }
 
-const closeInchDialog = () => {
-  isInchDialogOpen.value = false
-  activeInchRow.value = null
-  inchInput.value = ''
+const closeMakerDialog = () => {
+  isMakerDialogOpen.value = false
+  activeMakerRow.value = null
 }
 
-const handleInchInput = (value) => {
-  inchInput.value = sanitizeDecimalOne(value)
-}
-
-const inchSubmitLabel = computed(() => {
-  const currentValue = String(activeInchRow.value?.inch ?? '').trim()
-  return currentValue ? '수정' : '저장'
-})
-
-const handleInchKeydown = (event) => {
-  if (event.ctrlKey || event.metaKey) return
-  if (['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Tab', 'Home', 'End', 'Enter'].includes(event.key)) return
-  if (/^\d$/.test(event.key)) return
-  if (event.key === '.' && !String(event.target?.value ?? '').includes('.')) return
-  event.preventDefault()
-}
-
-const confirmInch = () => {
-  if (!activeInchRow.value) return
-  emit('update-inch', {
-    row: activeInchRow.value,
-    value: inchInput.value,
+const confirmMaker = (value) => {
+  if (!activeMakerRow.value) return
+  emit('update-maker', {
+    row: activeMakerRow.value,
+    value: serializeMaker(value),
   })
-  closeInchDialog()
+  closeMakerDialog()
 }
 
 const openCalculationDialog = (row) => {
@@ -514,7 +495,7 @@ const handleCellClick = ({ row, columnKey }) => {
     return
   }
   if (columnKey === 'inch') {
-    openInchDialog(row)
+    openMakerDialog(row)
     return
   }
   if (columnKey === 'name') {
@@ -649,6 +630,10 @@ const handleCellClick = ({ row, columnKey }) => {
   emit('cell-action', { row, columnKey })
 }
 const handleCellLongPress = ({ row, columnKey }) => {
+  if (columnKey === 'company') {
+    emit('cell-action', { row, columnKey, reset: true })
+    return
+  }
   if (columnKey === 'worker_t') {
     if (!canControlProductionWork()) {
       showSnackbar('생산 작업자만 작업할 수 있습니다.')
@@ -1240,41 +1225,15 @@ const selectDrawingFile = (file) => {
     </main>
 
 
-    <div
-      v-if="isInchDialogOpen && activeInchRow"
-      class="print-hide fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 px-4"
-    >
-      <div class="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
-        <div class="flex items-start justify-between gap-4">
-          <div class="min-w-0">
-            <h3 class="text-base font-extrabold text-slate-900">인치 입력</h3>
-            <p class="mt-2 truncate text-sm font-semibold text-slate-700">
-              {{ activeInchRow.company || '-' }} / {{ activeInchRow.place || '-' }}
-            </p>
-            <p class="truncate text-sm text-slate-500">{{ activeInchRow.area || '-' }}</p>
-          </div>
-          <button type="button" class="text-sm text-slate-500 hover:text-slate-700" @click="closeInchDialog">닫기</button>
-        </div>
-
-        <div class="mt-5">
-          <p class="mb-2 text-sm font-bold text-slate-700">인치</p>
-          <Input
-            class="h-11"
-            :model-value="inchInput"
-            inputmode="decimal"
-            placeholder="숫자 입력"
-            autofocus
-            @keydown="handleInchKeydown"
-            @update:model-value="handleInchInput"
-          />
-        </div>
-
-        <div class="mt-6 flex justify-end gap-2">
-          <Button class="h-10 px-4 text-sm" variant="outline" @click="closeInchDialog">닫기</Button>
-          <Button class="h-10 px-4 text-sm" @click="confirmInch">{{ inchSubmitLabel }}</Button>
-        </div>
-      </div>
-    </div>
+    <MakerDialog
+      :open="isMakerDialogOpen"
+      :company="activeMakerRow?.company"
+      :place="activeMakerRow?.place"
+      :area="activeMakerRow?.area"
+      :maker="activeMakerRow?.maker"
+      @close="closeMakerDialog"
+      @save="confirmMaker"
+    />
 
     <ProductionCalculationDialog
       :open="isCalculationDialogOpen"

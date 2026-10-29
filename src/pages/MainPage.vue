@@ -9,7 +9,6 @@ import { canManageWeldingSchedule } from '@/features/welding-schedule/utils/weld
 import { isAdminRole, isDesignDepartment, normalizeDepartment } from '@/utils/adminAccess'
 import { supabase } from '@/lib/supabase'
 import { createCncItem, deleteCncItemByProductListId } from '@/features/cnc/services/cnc.service'
-import { roundToOneDecimal } from '@/features/main/productionPlanNumbers'
 import { syncInventoryWorkMemo } from '@/features/inventory/work-status'
 
 const router = useRouter()
@@ -119,13 +118,12 @@ const handleDeleteRow = async (row) => {
   await deletePlanRow({ rowId: row.id })
 }
 
-const handleUpdateInch = async ({ row, value }) => {
+const handleUpdateMaker = async ({ row, value }) => {
   if (!row?.id) return
-  const safeValue = String(value ?? '').trim()
   await updatePlanRowFields({
     rowId: row.id,
     updates: {
-      inch: safeValue === '' ? null : roundToOneDecimal(safeValue),
+      maker: value,
     },
   })
 }
@@ -424,11 +422,18 @@ const handleCellAction = async ({ row, columnKey, reset = false }) => {
   }
 
   if (columnKey === 'company') {
+    if (reset) {
+      if (!row?.drawing_date) return
+      await updatePlanRowFields({
+        rowId: row.id,
+        updates: { drawing_date: null },
+      })
+      return
+    }
+    if (row?.drawing_date) return
     await updatePlanRowFields({
       rowId: row.id,
-      updates: {
-        drawing_date: row?.drawing_date ? null : new Date().toISOString(),
-      },
+      updates: { drawing_date: new Date().toISOString() },
     })
     return
   }
@@ -629,7 +634,7 @@ watch(
     @welding-start="handleWeldingStart"
     @welding-long-press="handleWeldingLongPress"
     @nasa-long-press="handleNasaLongPress"
-    @update-inch="handleUpdateInch"
+    @update-maker="handleUpdateMaker"
     @update-calculation="handleUpdateCalculation"
     @move-test-date="handleMoveTestDate"
     @add-welding-schedule="handleAddWeldingSchedule"

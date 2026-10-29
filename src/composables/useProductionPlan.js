@@ -340,7 +340,7 @@ export function useProductionPlan(session) {
 
     const legacyBaseColumns =
       'id,no,company_info,uid,initial,company,place,area,memo,full_text,work_type,hole,head,groove,weight,name,test_date,welding_schedule_date,welding_schedule_inspector,drawing,is_drawing,drawing_date,delivery_due_date,delay_time,delay_text,complete,complete_date,shipment,not_test,hold,outsourcing,paper,calculation,ahn,stamp,nasa_mark,worker_t,worker_t_time,worker_t_time_final,worker_main,worker_main_time,worker_main_time_final,worker_nasa,worker_nasa_time,worker_nasa_time_final,worker_welding,worker_welding_time,worker_welding_time_final,marking_weld_a_status,marking_weld_a_started_on,marking_weld_a_completed_on,marking_weld_b_status,marking_weld_b_started_on,marking_weld_b_completed_on,marking_laser_1_status,marking_laser_1_started_on,marking_laser_1_completed_on,marking_laser_2_status,marking_laser_2_started_on,marking_laser_2_completed_on,cutting_status,beveling_status,beveling_started_on,beveling_completed_on,main_status,main_started_on,main_completed_on,nasa_status,nasa_started_on,nasa_completed_on,welding_status,welding_started_on,welding_completed_on,welding_inspector'
-    const baseColumns = legacyBaseColumns.replace('groove,weight', 'groove,inch,weight')
+    const baseColumns = legacyBaseColumns.replace('groove,weight', 'groove,inch,maker,weight')
     const withVirtualColumns = `${baseColumns},virtual_drawing_distributed`
     const legacyWithVirtualColumns = `${legacyBaseColumns},virtual_drawing_distributed`
     const runQuery = (columns) => {
@@ -368,8 +368,13 @@ export function useProductionPlan(session) {
     }
 
     let usedLegacyInchFallback = false
+    let usedMakerFallback = false
     let usedNasaMarkFallback = false
     let { data, error } = await runQueryWithNasaMarkFallback(withVirtualColumns)
+    if (error && String(error.message ?? '').includes('maker')) {
+      usedMakerFallback = true
+      ;({ data, error } = await runQueryWithNasaMarkFallback(withVirtualColumns.replace(',maker', '')))
+    }
     if (error && String(error.message ?? '').includes('inch')) {
       usedLegacyInchFallback = true
       ;({ data, error } = await runQueryWithNasaMarkFallback(legacyWithVirtualColumns))
@@ -389,6 +394,7 @@ export function useProductionPlan(session) {
     planRows.value = (data ?? []).map((row) => ({
       ...row,
       ...(usedLegacyInchFallback ? { inch: null } : {}),
+      ...(usedMakerFallback ? { maker: null } : {}),
       ...(usedNasaMarkFallback ? { nasa_mark: false } : {}),
     }))
     await refreshCncProductListIds()

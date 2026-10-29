@@ -42,7 +42,7 @@ export const tableColumns = [
   { label: '담당', key: 'name', align: 'center', width: 55 },
   { label: '회사명', key: 'company', align: 'center', width: 120 },
   { label: '현장명', key: 'place', align: 'center', width: 170 },
-  { label: '구역명', key: 'area', align: 'center', width: areaColumnWidth },
+  { label: '구역명', key: 'area', align: 'center', width: areaColumnWidth - 15 },
   { label: '생산', key: 'worker_t', align: 'center', width: statusColumnWidth },
   { label: '나사', key: 'worker_nasa', align: 'center', width: statusColumnWidth },
   { label: '메인', key: 'worker_main', align: 'center', width: statusColumnWidth },
@@ -50,7 +50,7 @@ export const tableColumns = [
   { label: '헤드', key: 'head', align: 'center', width: qtyColumnWidth },
   { label: '홀', key: 'hole', align: 'center', width: qtyColumnWidth },
   { label: '그루브', key: 'groove', align: 'center', width: qtyColumnWidth },
-  { label: '인치', key: 'inch', align: 'center', width: qtyColumnWidth },
+  { label: '메이커', key: 'inch', align: 'center', width: qtyColumnWidth + 15 },
   { label: '중량', key: 'weight', align: 'center', width: qtyColumnWidth },
   { label: '비고', key: 'memo', align: 'center', width: 310 },
   { label: '도면', key: 'drawing', align: 'center', width: 40 },
@@ -137,7 +137,7 @@ export const getCellText = (row, key, options = {}) => {
     return '없음'
   }
   if ((key === 'head' || key === 'hole' || key === 'groove') && Number(row?.[key] ?? 0) === 0) return ''
-  if (key === 'inch') return formatPositiveDecimal(row?.inch)
+  if (key === 'inch') return ''
   if (key === 'weight') {
     return formatPositiveDecimal(row?.weight, { fixed: true })
   }
@@ -226,7 +226,9 @@ export const getBodyCellClass = (row, column) => {
     classes.push('bg-[#FFF2C2]')
   }
 
-  if (isStatusCompactColumn(column.key) || isCompactTextColumn(column.key)) {
+  if (column.key === 'inch') {
+    classes.push('relative', 'overflow-hidden', 'px-0.5', 'py-px')
+  } else if (isStatusCompactColumn(column.key) || isCompactTextColumn(column.key)) {
     classes.push('px-1', 'py-px', 'font-semibold')
   } else {
     classes.push('px-2', 'py-px')

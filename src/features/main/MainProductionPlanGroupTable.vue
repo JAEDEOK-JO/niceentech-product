@@ -12,6 +12,7 @@ import {
 import { getWorkTypeBadgeClass } from '@/utils/productionStatus'
 import { isPlanSortColumn } from '@/features/main/productionPlanSort'
 import { useMobileRowEdit } from '@/features/main/useMobileRowEdit'
+import MakerBadges from '@/features/main/maker/MakerBadges.vue'
 const props = defineProps({
   groupData: { type: Object, required: true },
   groupIndex: { type: Number, required: true },
@@ -33,7 +34,7 @@ const { isRowEditing, toggleEdit } = useMobileRowEdit()
 const LONG_PRESS_MS = 700
 let longPressTimer = null
 let longPressTriggered = false
-const longPressColumns = ['worker_t', 'worker_nasa', 'worker_main', 'worker_welding']
+const longPressColumns = ['company', 'worker_t', 'worker_nasa', 'worker_main', 'worker_welding']
 const isLongPressColumn = (columnKey) => longPressColumns.includes(columnKey)
 
 const onCellPointerDown = (row, columnKey) => {
@@ -71,7 +72,6 @@ const onCellClick = (row, columnKey) => {
 }
 const displayCellText = (row, key) => getCellText(row, key, { includeYear: props.showFullDates })
 const displayWorkType = (row) => String(row?.work_type ?? '').trim() || '기타'
-const formatIntegerTotal = (value) => String(Math.round(Number(value || 0)))
 const tableWidthStyle = {
   '--production-plan-table-width': `${totalTableWidth}px`,
 }
@@ -157,11 +157,12 @@ const tableWidthStyle = {
           </p>
           <button
             type="button"
-            class="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-1 font-semibold text-amber-700 whitespace-nowrap"
+            class="inline-flex flex-wrap items-center rounded-full bg-amber-50 px-2.5 py-1 font-semibold text-amber-700"
             :class="{ 'pointer-events-none': !isRowEditing(row) }"
             @click="onMobileCellClick(row, 'inch')"
           >
-            인치 {{ displayCellText(row, 'inch') || '' }}
+            메이커
+            <MakerBadges class="ml-1" :maker="row.maker" />
           </button>
           <p class="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 font-semibold text-emerald-700 whitespace-nowrap">
             중량 {{ displayCellText(row, 'weight') || '' }}
@@ -216,9 +217,6 @@ const tableWidthStyle = {
           </span>
           <span class="rounded-full border border-violet-200 bg-violet-50 px-4 py-2 text-sm font-extrabold text-violet-800 shadow-sm">
             그루브 <span class="ml-1 text-[15px] text-violet-950">{{ overallTotals.groove }}</span>
-          </span>
-          <span class="rounded-full border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-extrabold text-amber-800 shadow-sm">
-            인치 <span class="ml-1 text-[15px] text-amber-950">{{ formatIntegerTotal(overallTotals.inch) }}</span>
           </span>
           <span class="rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-extrabold text-emerald-800 shadow-sm">
             중량 <span class="ml-1 text-[15px] text-emerald-950">{{ overallTotals.weight.toFixed(1) }}</span>
@@ -275,7 +273,8 @@ const tableWidthStyle = {
               <button
                 v-else-if="clickableColumns.includes(column.key)"
                 type="button"
-                class="flex h-full w-full items-center justify-center bg-transparent p-0 text-inherit"
+                class="flex w-full items-center justify-center bg-transparent p-0 text-inherit"
+                :class="column.key === 'inch' ? 'absolute inset-0 overflow-hidden' : 'h-full'"
                 @click="isLongPressColumn(column.key) ? onCellClick(row, column.key) : emit('cell-click', { row, columnKey: column.key })"
                 @mousedown="isLongPressColumn(column.key) ? onCellPointerDown(row, column.key) : undefined"
                 @mouseup="isLongPressColumn(column.key) ? onCellPointerUp() : undefined"
@@ -284,7 +283,8 @@ const tableWidthStyle = {
                 @touchend="isLongPressColumn(column.key) ? onCellPointerUp() : undefined"
                 @touchcancel="isLongPressColumn(column.key) ? onCellPointerUp() : undefined"
               >
-                <span class="cell-fixed-text block w-full" :class="isStatusCompactColumn(column.key) ? 'text-center text-[11px] font-bold' : ''">{{ displayCellText(row, column.key) }}</span>
+                <MakerBadges v-if="column.key === 'inch'" :maker="row.maker" />
+                <span v-else class="cell-fixed-text block w-full" :class="isStatusCompactColumn(column.key) ? 'text-center text-[11px] font-bold' : ''">{{ displayCellText(row, column.key) }}</span>
               </button>
               <span v-else-if="isStatusCompactColumn(column.key) || isCompactTextColumn(column.key)" class="cell-fixed-text block text-center text-[11px] font-bold">
                 {{ displayCellText(row, column.key) }}
@@ -298,7 +298,7 @@ const tableWidthStyle = {
             <td class="h-[50px] border border-slate-200 px-2 py-px align-middle text-center text-[13px]" :style="tableBorderStyle">{{ groupData.totals.head }}</td>
             <td class="h-[50px] border border-slate-200 px-2 py-px align-middle text-center text-[13px]" :style="tableBorderStyle">{{ groupData.totals.hole }}</td>
             <td class="h-[50px] border border-slate-200 px-2 py-px align-middle text-center text-[13px]" :style="tableBorderStyle">{{ groupData.totals.groove }}</td>
-            <td class="h-[50px] border border-slate-200 px-2 py-px align-middle text-center text-[13px]" :style="tableBorderStyle">{{ formatIntegerTotal(groupData.totals.inch) }}</td>
+            <td class="h-[50px] border border-slate-200 px-2 py-px align-middle text-center text-[13px]" :style="tableBorderStyle"></td>
             <td class="h-[50px] border border-slate-200 px-2 py-px align-middle text-center text-[13px]" :style="tableBorderStyle">{{ groupData.totals.weight.toFixed(1) }}</td>
             <td class="h-[50px] border border-slate-200 px-2 py-px align-middle text-center text-[13px]" :style="tableBorderStyle"></td>
             <td class="h-[50px] border border-slate-200 px-2 py-px align-middle text-center text-[13px]" :style="tableBorderStyle"></td>
