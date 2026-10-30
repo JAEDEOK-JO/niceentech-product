@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
+import { GripVertical } from 'lucide-vue-next'
 import { useDialog } from '@/composables/useDialog'
 import {
   RAW_MATERIAL_TYPE,
@@ -7,14 +8,17 @@ import {
   createInventoryMaterialCatalogItem,
   deleteInventoryMaterialCatalogItem,
   fetchInventoryMaterialCatalog,
+  reorderInventoryMaterialCatalog,
   updateInventoryMaterialCatalogItem,
 } from '@/features/inventory/services/inventory.service'
+import { moveOrderedIds, useMaterialRowDrag } from '@/features/settings/useMaterialRowDrag'
 
 const { confirm } = useDialog()
+const { draggingId, overId, onDragStart, onDragOver, takeDrop, onDragEnd } = useMaterialRowDrag()
 
 const materialTypes = [
   { key: RAW_MATERIAL_TYPE, label: '원자재', defaultGroup: '일반강관', defaultUnit: '본' },
-  { key: SUBSIDIARY_MATERIAL_TYPE, label: '부자재', defaultGroup: 'EL (나사)', defaultUnit: 'EA' },
+  { key: SUBSIDIARY_MATERIAL_TYPE, label: '부자재', defaultGroup: 'FL', defaultUnit: 'EA' },
 ]
 
 const activeType = ref(RAW_MATERIAL_TYPE)
@@ -174,6 +178,29 @@ const handleUpdate = async (item) => {
   }
 }
 
+const handleReorder = async (item) => {
+  const move = takeDrop(item)
+  if (!move || saving.value) return
+  const nextIds = moveOrderedIds(activeItems.value.map((target) => target.id), move.fromId, move.toId)
+  const previousItems = materialItems.value.map((target) => ({ ...target }))
+  const sortOrderById = new Map(nextIds.map((id, index) => [String(id), (index + 1) * 10]))
+  materialItems.value = materialItems.value.map((target) =>
+    sortOrderById.has(String(target.id))
+      ? { ...target, sort_order: sortOrderById.get(String(target.id)) }
+      : target,
+  )
+  saving.value = true
+  errorMessage.value = ''
+  try {
+    await reorderInventoryMaterialCatalog(nextIds)
+  } catch (error) {
+    materialItems.value = previousItems
+    errorMessage.value = error instanceof Error ? error.message : '품목 순서를 저장하지 못했습니다.'
+  } finally {
+    saving.value = false
+  }
+}
+
 const handleDelete = async (item) => {
   if (saving.value) return
   if (!await confirm(`${item.material_group} ${item.spec} 품목을 삭제하시겠습니까?`)) return
@@ -258,6 +285,7 @@ onMounted(() => {
       <table class="w-full border-collapse text-sm">
         <thead class="bg-slate-50 text-slate-600">
           <tr>
+            <th class="w-10 border-b border-slate-200 px-2 py-3"></th>
             <th class="border-b border-slate-200 px-3 py-3 text-left">품목 그룹</th>
             <th class="border-b border-slate-200 px-3 py-3 text-left">규격</th>
             <th class="w-24 border-b border-slate-200 px-3 py-3 text-left">단위</th>
@@ -267,7 +295,28 @@ onMounted(() => {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="item in activeItems" :key="item.id" :class="item.is_active ? 'bg-white' : 'bg-slate-50 text-slate-400'">
+          <tr
+            v-for="item in activeItems"
+            :key="item.id"
+            :class="overId === String(item.id) && draggingId
+              ? 'bg-orange-50'
+              : (item.is_active ? 'bg-white' : 'bg-slate-50 text-slate-400')"
+            @dragover="onDragOver(item, $event)"
+            @drop.prevent="handleReorder(item)"
+          >
+            <td class="border-b border-slate-100 px-2 py-2 text-center">
+              <button
+                type="button"
+                class="inline-flex h-8 w-8 cursor-grab items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 active:cursor-grabbing"
+                draggable="true"
+                aria-label="순서"
+                :disabled="saving"
+                @dragstart="onDragStart(item, $event)"
+                @dragend="onDragEnd"
+              >
+                <GripVertical class="h-4 w-4" />
+              </button>
+            </td>
             <td class="border-b border-slate-100 px-3 py-2">
               <input
                 v-if="editingItemId === item.id"
@@ -345,7 +394,7 @@ onMounted(() => {
             </td>
           </tr>
           <tr v-if="activeItems.length === 0">
-            <td colspan="6" class="py-12 text-center text-sm font-bold text-slate-400">
+            <td colspan="7" class="py-12 text-center text-sm font-bold text-slate-400">
               등록된 품목이 없습니다.
             </td>
           </tr>

@@ -6,11 +6,13 @@ export const normalizeDepartment = (value) => String(value ?? '').replaceAll(' '
 
 export const normalizeRole = (value) => String(value ?? '').replaceAll(' ', '').trim()
 
-// 슈퍼 관리자: admin만 접근 가능한 페이지 (관리자도 못 보는 페이지)
+export const isSuperAdmin = (value) => normalizeRole(value).toLowerCase() === PROFILE_ROLES.superAdmin
+
+// 슈퍼 관리자: admin, super_admin만 접근 가능한 페이지 (관리자도 못 보는 페이지)
 export const isRootAdmin = (value) => {
   const normalized = normalizeRole(value)
   if (!normalized) return false
-  return normalized.toLowerCase() === PROFILE_ROLES.rootAdmin
+  return normalized.toLowerCase() === PROFILE_ROLES.rootAdmin || isSuperAdmin(normalized)
 }
 
 // 일반 관리자: 관리자 + admin 둘 다 통과

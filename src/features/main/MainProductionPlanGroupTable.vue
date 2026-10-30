@@ -13,6 +13,7 @@ import { getWorkTypeBadgeClass } from '@/utils/productionStatus'
 import { isPlanSortColumn } from '@/features/main/productionPlanSort'
 import { useMobileRowEdit } from '@/features/main/useMobileRowEdit'
 import MakerBadges from '@/features/main/maker/MakerBadges.vue'
+import OverflowHover from '@/components/ui/OverflowHover.vue'
 const props = defineProps({
   groupData: { type: Object, required: true },
   groupIndex: { type: Number, required: true },

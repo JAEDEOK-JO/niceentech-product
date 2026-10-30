@@ -4,13 +4,14 @@ import { useAuth } from '@/composables/useAuth'
 import { useProfile } from '@/composables/useProfile'
 import { fetchEmployees } from '@/features/attendance/services/attendance.service'
 import AttendanceEmployeeMappingPanel from '@/features/attendance/components/AttendanceEmployeeMappingPanel.vue'
+import ChatbotNotesPanel from '@/features/settings/components/ChatbotNotesPanel.vue'
 import EmployeeAccountRegisterPanel from '@/features/settings/components/EmployeeAccountRegisterPanel.vue'
 import EmployeeOptionSettingsPanel from '@/features/settings/components/EmployeeOptionSettingsPanel.vue'
 import InventoryMaterialSettingsPanel from '@/features/settings/components/InventoryMaterialSettingsPanel.vue'
 import PushRecipientSettingsPanel from '@/features/settings/components/PushRecipientSettingsPanel.vue'
 import { clearCacheAndReload } from '@/features/settings/services/cacheRefresh.service'
 import { useVirtualKeyboardSetting } from '@/features/virtual-keyboard/composables/useVirtualKeyboardSetting'
-import { isAdminRole } from '@/utils/adminAccess'
+import { isAdminRole, isRootAdmin as isRootAdminRole, isSuperAdmin as isSuperAdminRole } from '@/utils/adminAccess'
 import packageJson from '../../package.json'
 
 const appVersion = packageJson.version
@@ -25,7 +26,8 @@ const {
 } = useVirtualKeyboardSetting()
 const showVirtualKeyboardSetting = isWebHost()
 
-const isRootAdmin = computed(() => profile.value?.role === 'admin')
+const isRootAdmin = computed(() => isRootAdminRole(profile.value?.role))
+const isSuperAdmin = computed(() => isSuperAdminRole(profile.value?.role))
 const isAdmin = computed(() => isAdminRole(profile.value?.role))
 const activePanel = ref('app-info')
 
@@ -44,7 +46,14 @@ watch(
       loadEmployees()
       return
     }
-    if (activePanel.value === 'employee-register' || activePanel.value === 'employee-options' || activePanel.value === 'inventory-materials') activePanel.value = 'app-info'
+    if (['employee-register', 'employee-options', 'inventory-materials'].includes(activePanel.value)) activePanel.value = 'app-info'
+  },
+  { immediate: true },
+)
+watch(
+  isSuperAdmin,
+  (v) => {
+    if (!v && activePanel.value === 'chatbot-notes') activePanel.value = 'app-info'
   },
   { immediate: true },
 )
@@ -131,6 +140,15 @@ const handleVirtualKeyboardToggle = async (event) => {
             @click="activePanel = 'inventory-materials'"
           >
             자재 품목
+          </button>
+          <button
+            v-if="isSuperAdmin"
+            type="button"
+            class="rounded-xl px-4 py-3 text-left text-sm font-extrabold transition-colors"
+            :class="activePanel === 'chatbot-notes' ? 'bg-slate-900 text-white' : 'bg-slate-50 text-slate-700 hover:bg-slate-100'"
+            @click="activePanel = 'chatbot-notes'"
+          >
+            챗봇 메모
           </button>
           <button
             v-if="isAdmin"
@@ -222,6 +240,10 @@ const handleVirtualKeyboardToggle = async (event) => {
 
         <InventoryMaterialSettingsPanel
           v-else-if="isRootAdmin && activePanel === 'inventory-materials'"
+        />
+
+        <ChatbotNotesPanel
+          v-else-if="isSuperAdmin && activePanel === 'chatbot-notes'"
         />
 
         <PushRecipientSettingsPanel

@@ -1,4 +1,5 @@
 export const PROFILE_ROLES = {
+  superAdmin: 'super_admin',
   rootAdmin: 'admin',
   admin: '관리자',
   foreman: '작업반장',
@@ -6,7 +7,7 @@ export const PROFILE_ROLES = {
   vendor: '외주',
 }
 
-export const PROFILE_ROLE_OPTIONS = Object.values(PROFILE_ROLES)
+export const PROFILE_ROLE_OPTIONS = Object.values(PROFILE_ROLES).filter((role) => role !== PROFILE_ROLES.superAdmin)
 
 export const PROFILE_WORK_MAN_OPTIONS = [
   '없음',

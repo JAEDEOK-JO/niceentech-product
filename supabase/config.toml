@@ -3,3 +3,6 @@ verify_jwt = false
 
 [functions.register-drawing-quality]
 verify_jwt = false
+
+[functions.chatbot]
+verify_jwt = true

@@ -1,4 +1,4 @@
-import { isWorkingInventoryMemo } from '@/features/inventory/work-status/buildInventoryWorkMemo'
+import { resolveInventoryWorkMemoStatus } from '@/features/inventory/work-status/buildInventoryWorkMemo'
 
 export const formatQuantity = (value) => {
   if (value === null || value === undefined || value === '') return ''
@@ -41,8 +41,11 @@ export const sumIfNegative = (columns, materialId) =>
   }, 0)
 
 export const sumIfNegativeWorking = (columns, materialId) =>
+  sumIfNegativeStatus(columns, materialId, '작업중')
+
+export const sumIfNegativeStatus = (columns, materialId, status) =>
   columns.reduce((sum, column) => {
-    if (!isWorkingInventoryMemo(column.memo)) return sum
+    if (resolveInventoryWorkMemoStatus(column.memo) !== status) return sum
     const number = toNumber(column.quantities?.[materialId] ?? column.quantities?.[String(materialId)])
     return number < 0 ? sum + number : sum
   }, 0)
@@ -59,9 +62,14 @@ export const buildMaterialRows = (materialList) => {
     }
     const groupIndex = group ? groupIndexByName.get(group) : 0
     const isGroupStart = Boolean(group) && (index === 0 || String(materialList[index - 1].group || '') !== group)
-    const groupRowspan = isGroupStart
-      ? materialList.filter((item) => String(item.group || '') === group).length
-      : 0
+    let groupRowspan = 0
+    if (isGroupStart) {
+      groupRowspan = 1
+      for (let nextIndex = index + 1; nextIndex < materialList.length; nextIndex += 1) {
+        if (String(materialList[nextIndex].group || '') !== group) break
+        groupRowspan += 1
+      }
+    }
 
     return {
       ...material,
@@ -89,10 +97,12 @@ export const buildSummaries = (materialList, inboundColumns, outboundColumns) =>
     const inbound = sumIfPositive(inboundColumns, material.id)
     const outbound = sumIfNegative(outboundColumns, material.id)
     const working = sumIfNegativeWorking(outboundColumns, material.id)
+    const completed = sumIfNegativeStatus(outboundColumns, material.id, '작업완료')
     map[material.id] = {
       inbound,
       outbound,
       working,
+      completed,
       inboundNet: remainingAfterAmount(inbound, outbound),
       workingNet: remainingAfterAmount(inbound, working),
     }

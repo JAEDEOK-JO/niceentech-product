@@ -75,7 +75,7 @@ Deno.serve(async (req) => {
     .eq('id', callerId)
     .maybeSingle()
 
-  if (String(callerProfile?.role ?? '').trim() !== 'admin') {
+  if (!['admin', 'super_admin'].includes(String(callerProfile?.role ?? '').trim())) {
     return new Response(JSON.stringify({ error: 'forbidden' }), { status: 403, headers: jsonHeaders })
   }
 

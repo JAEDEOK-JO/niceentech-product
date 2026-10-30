@@ -1,5 +1,7 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import InventorySummaryReveal from '@/features/inventory/components/InventorySummaryReveal.vue'
+import { stockGridColumnCount, stockPreviewRowCount } from '@/features/inventory/summary/stockGridColumns'
 
 const props = defineProps({
   title: { type: String, required: true },
@@ -9,7 +11,27 @@ const props = defineProps({
   compact: { type: Boolean, default: false },
 })
 
-const visibleRows = computed(() => props.rows ?? [])
+const columns = ref(stockGridColumnCount())
+const stockRows = computed(() =>
+  (props.rows ?? []).filter((row) => {
+    const quantity = Number(row?.quantity)
+    return Number.isFinite(quantity) && quantity !== 0
+  }),
+)
+const previewLimit = computed(() => columns.value * stockPreviewRowCount)
+
+const updateColumns = () => {
+  columns.value = stockGridColumnCount()
+}
+
+onMounted(() => {
+  updateColumns()
+  window.addEventListener('resize', updateColumns)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', updateColumns)
+})
 
 const formatNumber = (value) => {
   const number = Number(value || 0)
@@ -35,27 +57,30 @@ const quantityClass = (quantity) => {
         <h2 class="text-sm font-extrabold text-slate-900">{{ title }}</h2>
         <p v-if="description" class="mt-1 text-xs font-bold text-slate-500">{{ description }}</p>
       </div>
-      <span class="text-xs font-bold text-slate-500">{{ visibleRows.length }}개 자재</span>
+      <span class="text-xs font-bold text-slate-500">{{ stockRows.length }}개 자재</span>
     </div>
     <div v-if="loading" class="px-4 py-8 text-center text-sm font-bold text-slate-500">
       재고를 불러오는 중입니다.
     </div>
-    <div
-      v-else
-      class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6"
-      :class="compact ? 'gap-1.5 p-2' : 'gap-2 p-3'"
-    >
-      <div
-        v-for="row in visibleRows"
-        :key="row.id"
-        class="rounded-lg border border-slate-200 bg-slate-50"
-        :class="compact ? 'px-2 py-1.5' : 'px-3 py-2'"
-      >
-        <p class="truncate text-xs font-extrabold text-slate-500">{{ row.label }}</p>
-        <p class="mt-1 font-black" :class="[compact ? 'text-base' : 'text-lg', quantityClass(row.quantity)]">
-          {{ formatNumber(row.quantity) }}{{ row.unit }}
-        </p>
-      </div>
-    </div>
+    <InventorySummaryReveal v-else :count="stockRows.length" :limit="previewLimit">
+      <template #default="{ visibleCount }">
+        <div
+          class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6"
+          :class="compact ? 'gap-1.5 p-2' : 'gap-2 p-3'"
+        >
+          <div
+            v-for="row in stockRows.slice(0, visibleCount)"
+            :key="row.id"
+            class="rounded-lg border border-slate-200 bg-slate-50"
+            :class="compact ? 'px-2 py-1.5' : 'px-3 py-2'"
+          >
+            <p class="truncate text-xs font-extrabold text-slate-500">{{ row.label }}</p>
+            <p class="mt-1 font-black" :class="[compact ? 'text-base' : 'text-lg', quantityClass(row.quantity)]">
+              {{ formatNumber(row.quantity) }}{{ row.unit }}
+            </p>
+          </div>
+        </div>
+      </template>
+    </InventorySummaryReveal>
   </section>
 </template>

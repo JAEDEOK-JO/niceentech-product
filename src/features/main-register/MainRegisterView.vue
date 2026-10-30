@@ -2,6 +2,9 @@
 import { computed, ref } from 'vue'
 import Button from '@/components/ui/button/Button.vue'
 import Input from '@/components/ui/input/Input.vue'
+import MakerDialog from '@/features/main/maker/MakerDialog.vue'
+import { makerTextClass, parseMaker, serializeMaker } from '@/features/main/maker/makerOptions'
+import { useDialog } from '@/composables/useDialog'
 
 defineProps({
   pageTitle: { type: String, default: '생산계획 등록' },
@@ -22,6 +25,22 @@ defineProps({
 
 const calendarWeekLabels = ['일', '월', '화', '수', '목', '금', '토']
 const isCalendarDialogOpen = ref(false)
+const { alert } = useDialog()
+const makerDialogOpen = ref(false)
+const makerNames = computed(() => parseMaker(props.form.maker).presets)
+
+const openMaker = async () => {
+  if (!String(props.form.company ?? '').trim()) {
+    await alert('회사를 먼저 선택해주세요.')
+    return
+  }
+  makerDialogOpen.value = true
+}
+
+const saveMaker = (value) => {
+  emit('update-form', 'maker', serializeMaker(value) || '')
+  makerDialogOpen.value = false
+}
 const localCalendarValue = ref('')
 const localCalendarMonth = ref(new Date())
 
@@ -243,14 +262,15 @@ const selectCalendarDate = (day) => {
               </div>
 
               <div>
-                <p class="mb-2 text-sm font-bold text-slate-700">인치</p>
-                <Input
-                  :model-value="form.inch"
-                  inputmode="decimal"
-                  placeholder="숫자 입력"
-                  @keydown="emit('weight-keydown', $event)"
-                  @update:model-value="emit('update-form', 'inch', $event)"
-                />
+                <p class="mb-2 text-sm font-bold text-slate-700">메이커</p>
+                <button
+                  type="button"
+                  class="flex h-11 w-full items-center gap-2 overflow-hidden rounded-xl border border-slate-200 bg-white px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                  @click="openMaker"
+                >
+                  <span v-if="makerNames.length === 0" class="text-slate-400">메이커</span>
+                  <span v-for="name in makerNames" :key="name" class="font-extrabold" :class="makerTextClass(name)">{{ name }}</span>
+                </button>
               </div>
 
               <div>
@@ -463,5 +483,15 @@ const selectCalendarDate = (day) => {
         </div>
       </div>
     </div>
+
+    <MakerDialog
+      :open="makerDialogOpen"
+      :company="form.company"
+      :place="form.place"
+      :area="form.area"
+      :maker="form.maker"
+      @close="makerDialogOpen = false"
+      @save="saveMaker"
+    />
   </section>
 </template>

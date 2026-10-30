@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { fetchManagerNameById, mapInventoryCompanies } from '@/features/inventory/mapInventoryCompanies'
+import { subsidiaryCatalogGroups } from '@/features/inventory/subsidiaryCatalog'
 import { memoMatchesPlanLabels, resolvePlanMemoLabels } from '@/features/inventory/work-status/planOutboundMatch'
 
 const MATERIAL_TABLE = 'inventory_material_items'
@@ -84,23 +85,7 @@ export const defaultRawMaterialItems = [
   ),
 ]
 
-const subsidiaryDefaultGroups = [
-  ['EL (나사)', ['25A', '32A', '40A', '40A*20A', '40A*25A']],
-  ['EL (용접)', ['25A', '32A', '40A', '50A', '65A', '80A', '100A', '125A', '150A']],
-  ['EL (용접) 45도', ['25A', '32A', '40A', '50A', '65A', '80A', '150A']],
-  ['EL (나사) 45도', ['25A']],
-  ['TEE (나사)', ['25A', '32A*25A', '32A', '40A*25A', '40A*32A', '40A', '50A*25A', '50A*40A', '50A']],
-  ['TEE (용접)', ['80A', '100A', '125A', '150A']],
-  ['레듀샤 (나사)', ['32A*25A', '40A*25A', '40A*32A', '50A*25A', '50A*32A', '50A*40A']],
-  ['레듀샤 (용접)', ['100A*25A', '100A*32A', '100A*40A', '125A*80A', '150A*100A']],
-  ['주물소켓', ['25A', '32A', '40A', '50A']],
-  ['철소켓', ['25A']],
-  ['장니쁠', ['20A', '25A', '32A', '40A', '50A']],
-  ['편니쁠', ['15A*42L', '25A*42L', '40A*135L', '40A*200L', '50A*135L', '65A*200L']],
-  ['후렌지 (용접)', ['50A', '65A', '80A', '100A', '150A']],
-  ['CAP (나사)', ['25A', '32A', '40A', '50A']],
-  ['CAP (용접)', ['25A', '32A', '40A', '80A', '100A', '125A']],
-]
+const subsidiaryDefaultGroups = subsidiaryCatalogGroups
 
 export const defaultSubsidiaryMaterialItems = subsidiaryDefaultGroups.flatMap(([group, specs], groupIndex) =>
   specs.map((spec, specIndex) =>
@@ -245,6 +230,8 @@ const inferTransactionType = (row) => {
 export const formatMaterialLabel = (item) =>
   [item?.name, item?.spec].filter(Boolean).join(' ')
 
+export const buildInventoryStockRows = (materialItems, quantityRows) => buildStockSummary(materialItems, quantityRows)
+
 const buildStockSummary = (materialItems, quantityRows) => {
   const totals = new Map()
   for (const row of quantityRows ?? []) {
@@ -289,6 +276,17 @@ const buildStockTotals = (materialItems, quantityRows) => {
 
 const materialSelectColumns =
   'id,category,material_type,material_group,name,spec,unit,sort_order,is_active,is_default'
+
+const companyMaterialSelect =
+  'material_item_id,sort_order,is_active,inventory_material_items(id,category,material_type,material_group,name,spec,unit,sort_order,is_active,is_default)'
+
+const mapCompanyMaterialRow = (row) => {
+  const item = row.inventory_material_items ?? {}
+  return {
+    ...item,
+    sort_order: item.sort_order ?? row.sort_order,
+  }
+}
 
 const buildMaterialOrderQuery = (query) =>
   query
@@ -365,7 +363,7 @@ export async function fetchInventoryCompanyMaterialItems(companyId, materialType
 
   const companyItemsResult = await supabase
     .from(COMPANY_MATERIAL_TABLE)
-    .select('material_item_id,sort_order,is_active,inventory_material_items(id,category,material_type,material_group,name,spec,unit,is_active,is_default)')
+    .select(companyMaterialSelect)
     .eq('company_id', Number(companyId))
     .eq('material_type', normalizedType)
     .order('sort_order', { ascending: true })
@@ -378,10 +376,7 @@ export async function fetchInventoryCompanyMaterialItems(companyId, materialType
   const companyItemRows = companyItemsResult.data ?? []
   const linkedItems = companyItemRows
     .filter((row) => row.is_active !== false)
-    .map((row) => ({
-      ...(row.inventory_material_items ?? {}),
-      sort_order: row.sort_order,
-    }))
+    .map(mapCompanyMaterialRow)
     .filter((item) => item.id && item.is_active !== false)
 
   if (linkedItems.length > 0) return linkedItems
@@ -404,14 +399,14 @@ export async function fetchInventoryCompanyMaterialItems(companyId, materialType
   const insertResult = await supabase
     .from(COMPANY_MATERIAL_TABLE)
     .insert(linkPayload)
-    .select('material_item_id,sort_order,inventory_material_items(id,category,material_type,material_group,name,spec,unit,is_active,is_default)')
+    .select(companyMaterialSelect)
     .order('sort_order', { ascending: true })
 
   if (insertResult.error) {
     if (isMissingInventoryMaterialTypeSchema(insertResult.error)) return defaultItems
     const retryResult = await supabase
       .from(COMPANY_MATERIAL_TABLE)
-      .select('material_item_id,sort_order,inventory_material_items(id,category,material_type,material_group,name,spec,unit,is_active,is_default)')
+      .select(companyMaterialSelect)
       .eq('company_id', Number(companyId))
       .eq('material_type', normalizedType)
       .eq('is_active', true)
@@ -419,20 +414,14 @@ export async function fetchInventoryCompanyMaterialItems(companyId, materialType
 
     if (retryResult.error) throw insertResult.error
     const retryItems = (retryResult.data ?? [])
-      .map((row) => ({
-        ...(row.inventory_material_items ?? {}),
-        sort_order: row.sort_order,
-      }))
+      .map(mapCompanyMaterialRow)
       .filter((item) => item.id && item.is_active !== false)
 
     return retryItems.length > 0 ? retryItems : defaultItems
   }
 
   return (insertResult.data ?? [])
-    .map((row) => ({
-      ...(row.inventory_material_items ?? {}),
-      sort_order: row.sort_order,
-    }))
+    .map(mapCompanyMaterialRow)
     .filter((item) => item.id && item.is_active !== false)
 }
 
@@ -718,6 +707,56 @@ export async function deleteInventoryMaterialCatalogItem(materialId) {
   }
 }
 
+const chunkList = (items, size) => {
+  const chunks = []
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size))
+  }
+  return chunks
+}
+
+export async function reorderInventoryMaterialCatalog(orderedIds) {
+  await requireAuthenticatedSession()
+
+  const ids = [...new Set(orderedIds.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0))]
+  if (ids.length === 0) return
+
+  const updatedAt = new Date().toISOString()
+  const sortOrderById = new Map(ids.map((id, index) => [id, (index + 1) * 10]))
+
+  const catalogResult = await supabase
+    .from(MATERIAL_TABLE)
+    .select('id,category,material_type,material_group,name,spec,unit,is_active,is_default')
+    .in('id', ids)
+
+  if (catalogResult.error) throwInventoryError(catalogResult.error)
+
+  const catalogRows = (catalogResult.data ?? []).map((item) => ({
+    ...item,
+    sort_order: sortOrderById.get(Number(item.id)),
+    updated_at: updatedAt,
+  }))
+
+  for (const rows of chunkList(catalogRows, 80)) {
+    const result = await supabase.from(MATERIAL_TABLE).upsert(rows, { onConflict: 'id' })
+    if (result.error) throwInventoryError(result.error)
+  }
+
+  for (const idChunk of chunkList(ids, 20)) {
+    await Promise.all(idChunk.map(async (id) => {
+      const result = await supabase
+        .from(COMPANY_MATERIAL_TABLE)
+        .update({
+          sort_order: sortOrderById.get(id) ?? 0,
+          updated_at: updatedAt,
+        })
+        .eq('material_item_id', id)
+
+      if (result.error) throwInventoryError(result.error)
+    }))
+  }
+}
+
 export async function fetchAvailableCompanyMaterialItems(companyId, materialType = RAW_MATERIAL_TYPE) {
   const normalizedType = normalizeMaterialType(materialType)
   if (!companyId) return fetchInventoryMaterialCatalog(normalizedType)
@@ -914,6 +953,58 @@ export async function fetchInventoryStockSummary(materialItems, companyId = null
   return buildStockSummary(materialItems, itemsResult.data ?? [])
 }
 
+export async function fetchInventoryQuantityRows() {
+  const itemsResult = await supabase
+    .from(TRANSACTION_ITEM_TABLE)
+    .select('material_item_id,quantity')
+
+  if (itemsResult.error) {
+    if (isMissingTableError(itemsResult.error)) return []
+    throw itemsResult.error
+  }
+
+  return itemsResult.data ?? []
+}
+
+const chunkValues = (values, size) => {
+  const chunks = []
+  for (let index = 0; index < values.length; index += size) {
+    chunks.push(values.slice(index, index + size))
+  }
+  return chunks
+}
+
+export async function fetchInventoryQuantityRowsByItems(materialItemIds) {
+  const ids = [...new Set((materialItemIds ?? []).map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0))]
+  if (!ids.length) return []
+
+  const rows = []
+  const pageSize = 1000
+  for (const idChunk of chunkValues(ids, 80)) {
+    let from = 0
+    while (true) {
+      const result = await supabase
+        .from(TRANSACTION_ITEM_TABLE)
+        .select('material_item_id,quantity')
+        .in('material_item_id', idChunk)
+        .order('id', { ascending: true })
+        .range(from, from + pageSize - 1)
+
+      if (result.error) {
+        if (isMissingTableError(result.error)) return rows
+        throw result.error
+      }
+
+      const page = result.data ?? []
+      rows.push(...page)
+      if (page.length < pageSize) break
+      from += pageSize
+    }
+  }
+
+  return rows
+}
+
 export async function fetchInventoryStockTotals(materialItems, companyId = null, materialType = RAW_MATERIAL_TYPE) {
   if (!Array.isArray(materialItems) || materialItems.length === 0) return []
 
@@ -944,7 +1035,7 @@ export async function fetchRecentInventoryTransactions(limit = 20, companyId = n
   const normalizedType = normalizeMaterialType(materialType)
   let query = supabase
     .from(TRANSACTION_TABLE)
-    .select('id,transaction_date,transaction_type,material_type,company_name,place_name,memo,manufacturer,supplier,created_at')
+    .select('id,transaction_date,transaction_type,material_type,company_name,place_name,memo,manufacturer,supplier,product_list_id,created_at')
     .order('transaction_date', { ascending: false })
     .order('id', { ascending: false })
     .limit(limit)
@@ -953,6 +1044,18 @@ export async function fetchRecentInventoryTransactions(limit = 20, companyId = n
   query = query.eq('material_type', normalizedType)
 
   let transactionsResult = await query
+
+  if (transactionsResult.error && isMissingProductListIdSchema(transactionsResult.error)) {
+    let fallbackQuery = supabase
+      .from(TRANSACTION_TABLE)
+      .select('id,transaction_date,transaction_type,material_type,company_name,place_name,memo,manufacturer,supplier,created_at')
+      .order('transaction_date', { ascending: false })
+      .order('id', { ascending: false })
+      .limit(limit)
+    if (companyId) fallbackQuery = fallbackQuery.eq('company_id', Number(companyId))
+    fallbackQuery = fallbackQuery.eq('material_type', normalizedType)
+    transactionsResult = await fallbackQuery
+  }
 
   if (transactionsResult.error) {
     if (normalizedType === RAW_MATERIAL_TYPE && isMissingInventoryMaterialTypeSchema(transactionsResult.error)) {

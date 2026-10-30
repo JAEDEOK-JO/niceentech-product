@@ -66,9 +66,22 @@ export const displayColumnDate = (column) => {
   return formatYyMmDd(parts.year, parts.month, parts.day)
 }
 
+export const clearSheetDate = (column) => {
+  column.dateDraft = ''
+  column.year = ''
+  column.month = ''
+  column.day = ''
+  column.transactionDate = ''
+}
+
 export const applySheetDate = (column, value) => {
-  column.dateDraft = value
-  const parsed = parseSheetDate(value)
+  const text = String(value ?? '')
+  if (!text.trim()) {
+    clearSheetDate(column)
+    return false
+  }
+  column.dateDraft = text
+  const parsed = parseSheetDate(text)
   if (!parsed) return false
   Object.assign(column, parsed)
   column.dateDraft = formatYyMmDd(parsed.year, parsed.month, parsed.day)

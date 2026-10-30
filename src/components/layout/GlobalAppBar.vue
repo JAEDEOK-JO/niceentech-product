@@ -42,6 +42,7 @@ const profileSummary = computed(() => {
 
 const navItems = computed(() => {
   const items = [
+    { key: 'chatbot', label: '챗봇', to: { name: 'chatbot' } },
     { key: 'main', label: '생산계획표', to: { name: 'main' } },
     { key: 'quality-list', label: '검수리스트', to: { name: 'quality-list' } },
     { key: 'welding-schedule', label: '용접일정', to: { name: 'welding-schedule' } },
@@ -78,6 +79,7 @@ const activeSection = computed(() => {
   if (route.path.startsWith('/shipment-spec')) return 'shipment-spec'
   if (route.path.startsWith('/shipment-schedule')) return 'shipment-schedule'
   if (route.path.startsWith('/inventory')) return 'inventory'
+  if (route.path.startsWith('/chatbot')) return 'chatbot'
   if (route.path.startsWith('/main')) return 'main'
   return ''
 })

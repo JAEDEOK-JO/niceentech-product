@@ -33,6 +33,7 @@ import AdminOperationsDashboardPage from '@/pages/AdminOperationsDashboardPage.v
 import AdminProductionDashboardPage from '@/pages/AdminProductionDashboardPage.vue'
 import MessengerPage from '@/pages/MessengerPage.vue'
 import AttendancePage from '@/pages/AttendancePage.vue'
+import ChatbotPage from '@/pages/ChatbotPage.vue'
 import AttendanceRequestHistoryPage from '@/pages/AttendanceRequestHistoryPage.vue'
 import CncPage from '@/pages/CncPage.vue'
 import CncStandalonePage from '@/pages/CncStandalonePage.vue'
@@ -43,6 +44,12 @@ const routes = [
   {
     path: '/',
     redirect: '/main',
+  },
+  {
+    path: '/chatbot',
+    name: 'chatbot',
+    component: ChatbotPage,
+    meta: { requiresAuth: true },
   },
   {
     path: '/main',

@@ -4,6 +4,7 @@ import {
   normalizeColumnQuantity,
 } from './mapTransactionsToSheet'
 import {
+  deleteInventoryTransaction,
   saveInventorySheetRows,
   updateInventoryTransactionHeader,
   updateInventoryTransactionItemQuantity,
@@ -31,7 +32,9 @@ const headerDbField = {
 }
 
 export const persistNewColumn = async (side, column, materialItems, company, materialType) => {
-  if (column.saved || !columnHasQuantity(column)) return { column, inserted: false }
+  if (column.saved || !columnHasQuantity(column) || !String(column.transactionDate ?? '').trim()) {
+    return { column, inserted: false }
+  }
 
   const lockKey = column.localId
   if (persistLocks.has(lockKey)) {
@@ -62,6 +65,11 @@ export const persistImportedColumns = async (inboundColumns, outboundColumns, ma
   const rows = columnsToSaveRows(inboundColumns, outboundColumns)
   if (rows.length === 0) return []
   return saveInventorySheetRows(rows, materialItems, company, materialType)
+}
+
+export const deletePersistedSheetColumn = async (column) => {
+  if (!column?.saved || !column.transactionId) return
+  await deleteInventoryTransaction(column.transactionId)
 }
 
 export const persistSavedCell = async (payload) => {

@@ -1,30 +1,134 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import InventorySheetCell from './InventorySheetCell.vue'
+import InventorySheetDateCell from './InventorySheetDateCell.vue'
+import InventorySheetDateDialog from './InventorySheetDateDialog.vue'
+import InventorySheetGroupCell from './InventorySheetGroupCell.vue'
 import { applySheetDate, displayColumnDate } from '../sheet/sheetDate'
 import { buildSheetNavRows, nextSheetCellKey } from '../sheet/sheetKeyboard'
 import { useStickyAddButton } from '../sheet/useStickyAddButton'
 import { buildMaterialRows, buildSummaries, formatBlankZero, formatQuantity, quantityClass } from '../sheet/sheetFormat'
+import {
+  collapseMaterialRows,
+  defaultCollapsedGroupNames,
+  sumColumnQuantities,
+  sumSummaryField,
+} from '../sheet/sheetGroupCollapse'
 import { IN_SUM_BLOCK_PX, OUT_SUM_BLOCK_PX, buildSheetLabelColumnWidths } from '../sheet/sheetLabelWidth'
 import {
   displayInventoryWorkMemo,
   inventoryWorkMemoToneClass,
   replaceInventoryWorkMemoLabel,
+  resolveInventoryWorkMemoStatus,
 } from '@/features/inventory/work-status'
 
 const props = defineProps({
   materials: { type: Array, default: () => [] },
   inboundColumns: { type: Array, default: () => [] },
   outboundColumns: { type: Array, default: () => [] },
+  mode: { type: String, default: 'in' },
 })
 
 const emit = defineEmits(['start-edit', 'commit-edit', 'cancel-edit', 'add-column'])
 
 const materialRows = computed(() => buildMaterialRows(props.materials))
 const summaries = computed(() => buildSummaries(props.materials, props.inboundColumns, props.outboundColumns))
+const collapsedGroupNames = ref([])
+const collapseLocked = ref(false)
+const visibleMaterialRows = computed(() => collapseMaterialRows(materialRows.value, collapsedGroupNames.value))
+const navMaterialIds = computed(() =>
+  visibleMaterialRows.value.filter((row) => !row.collapsed).map((row) => row.id),
+)
+
+const materialIdentity = computed(() =>
+  props.materials.map((material) => `${material.id}:${material.group ?? ''}`).join('|'),
+)
+
+const occupiedMaterialIds = computed(() => {
+  const ids = new Set()
+  for (const column of [...props.inboundColumns, ...props.outboundColumns]) {
+    for (const [materialId, value] of Object.entries(column.quantities ?? {})) {
+      const number = Number(String(value ?? '').replace(/,/g, '').trim())
+      if (Number.isFinite(number) && number !== 0) ids.add(String(materialId))
+    }
+  }
+  return [...ids].sort().join(',')
+})
+
+const applyDefaultCollapse = () => {
+  collapsedGroupNames.value = defaultCollapsedGroupNames(
+    props.materials,
+    props.inboundColumns,
+    props.outboundColumns,
+  )
+}
+
+watch(materialIdentity, () => {
+  collapseLocked.value = false
+  applyDefaultCollapse()
+}, { immediate: true })
+
+watch(occupiedMaterialIds, () => {
+  if (collapseLocked.value) return
+  applyDefaultCollapse()
+})
+
+const toggleGroup = (group) => {
+  collapseLocked.value = true
+  const next = new Set(collapsedGroupNames.value)
+  if (next.has(group)) next.delete(group)
+  else next.add(group)
+  collapsedGroupNames.value = [...next]
+}
+
+const groupField = (row, field) => sumSummaryField(summaries.value, row.groupMaterialIds, field)
+
+const groupColumnValue = (column, row) => sumColumnQuantities(column, row.groupMaterialIds)
 
 const inCount = computed(() => props.inboundColumns.length)
-const outCount = computed(() => props.outboundColumns.length)
+const columnSide = 'out'
+const columnsForStatus = (status) =>
+  props.outboundColumns.filter((column) => resolveInventoryWorkMemoStatus(column.memo) === status)
+
+const standardSums = [
+  { key: 'inbound', label: '총입고', field: 'inbound', stickyClass: 's-0', cellClass: 'sum-in', blankZero: true },
+  { key: 'working', label: '작업중', field: 'working', stickyClass: 's-64', cellClass: 'sum-working', blankZero: true },
+  { key: 'net', label: '합산', field: 'workingNet', stickyClass: 's-128', cellClass: 'sum-net', showZero: true },
+]
+
+const productionStockSums = [
+  { key: 'inbound', label: '입고', field: 'inbound', stickyClass: 's-0', cellClass: 'sum-in', blankZero: true },
+  { key: 'outbound', label: '산출', field: 'outbound', stickyClass: 's-64', cellClass: 'sum-out', blankZero: true },
+  { key: 'balance', label: '잔고', field: 'inboundNet', stickyClass: 's-128', cellClass: 'sum-net', showZero: true },
+]
+
+const outboundBlocks = computed(() => {
+  if (props.mode === 'production') {
+    return [
+      { key: 'working', label: '작업중', columns: columnsForStatus('작업중'), sums: productionStockSums, allowAdd: false },
+      { key: 'completed', label: '작업완료', columns: columnsForStatus('작업완료'), sums: productionStockSums, allowAdd: false },
+    ]
+  }
+  if (props.mode === 'out' || props.mode === 'summary') {
+    return [
+      { key: 'out', label: '산출', columns: props.outboundColumns, sums: standardSums, allowAdd: true },
+    ]
+  }
+  return []
+})
+
+const blockTableStyle = (columns) => ({
+  minWidth: `${OUT_SUM_BLOCK_PX + labelColumnWidths.value.labelBlockWidth + Math.max(columns.length, 1) * 100}px`,
+  '--group-col': `${labelColumnWidths.value.groupColWidth}px`,
+  '--spec-col': `${labelColumnWidths.value.specColWidth}px`,
+  '--label-left': `${OUT_SUM_BLOCK_PX}px`,
+  '--sub-left': `${OUT_SUM_BLOCK_PX + labelColumnWidths.value.groupColWidth}px`,
+})
+
+const blockSummaryValue = (row, field) => {
+  if (!field) return null
+  return row.collapsed ? groupField(row, field) : summaries.value[row.id]?.[field]
+}
 
 const inHeaderRows = [
   { key: 'date', label: '일자' },
@@ -39,10 +143,8 @@ const outHeaderRows = [
 ]
 
 const inColspan = computed(() => 5 + inCount.value)
-const outColspan = computed(() => 5 + outCount.value)
 const labelColumnWidths = computed(() => buildSheetLabelColumnWidths(props.materials))
 const inMinWidth = computed(() => IN_SUM_BLOCK_PX + labelColumnWidths.value.labelBlockWidth + Math.max(inCount.value, 1) * 100)
-const outMinWidth = computed(() => OUT_SUM_BLOCK_PX + labelColumnWidths.value.labelBlockWidth + Math.max(outCount.value, 1) * 100)
 
 const inboundTableStyle = computed(() => ({
   minWidth: `${inMinWidth.value}px`,
@@ -50,14 +152,6 @@ const inboundTableStyle = computed(() => ({
   '--spec-col': `${labelColumnWidths.value.specColWidth}px`,
   '--label-left': `${IN_SUM_BLOCK_PX}px`,
   '--sub-left': `${IN_SUM_BLOCK_PX + labelColumnWidths.value.groupColWidth}px`,
-}))
-
-const outboundTableStyle = computed(() => ({
-  minWidth: `${outMinWidth.value}px`,
-  '--group-col': `${labelColumnWidths.value.groupColWidth}px`,
-  '--spec-col': `${labelColumnWidths.value.specColWidth}px`,
-  '--label-left': `${OUT_SUM_BLOCK_PX}px`,
-  '--sub-left': `${OUT_SUM_BLOCK_PX + labelColumnWidths.value.groupColWidth}px`,
 }))
 
 const topClassByKey = {
@@ -97,28 +191,53 @@ const quantityOf = (column, materialId) => column?.quantities?.[String(materialI
 
 const sheetRoot = ref(null)
 const { addButtonTop } = useStickyAddButton(sheetRoot)
-const inboundNavRows = computed(() =>
-  buildSheetNavRows({
+const inboundNavRows = computed(() => {
+  if (props.mode === 'production') return []
+  return buildSheetNavRows({
     side: 'in',
     headerKeys: inHeaderRows.map((row) => row.key),
     columns: props.inboundColumns,
-    materialIds: materialRows.value.map((row) => row.id),
-  }),
-)
+    materialIds: navMaterialIds.value,
+  })
+})
 const outboundNavRows = computed(() =>
   buildSheetNavRows({
     side: 'out',
     headerKeys: outHeaderRows.map((row) => row.key),
-    columns: props.outboundColumns,
-    materialIds: materialRows.value.map((row) => row.id),
+    columns: outboundBlocks.value.flatMap((block) => block.columns),
+    materialIds: navMaterialIds.value,
   }),
 )
+
+const dateDialog = ref(null)
+
+const dateDialogIso = computed(() => String(dateDialog.value?.column?.transactionDate ?? '').trim())
+
+const openDateDialog = (side, column) => {
+  emit('start-edit', { side, column, field: 'date' })
+  dateDialog.value = { side, column }
+}
+
+const closeDateDialog = () => {
+  const target = dateDialog.value
+  dateDialog.value = null
+  if (!target) return
+  emit('cancel-edit', { side: target.side, column: target.column, field: 'date' })
+}
+
+const applyDateDialog = (value) => {
+  const target = dateDialog.value
+  if (!target) return
+  dateDialog.value = null
+  onHeaderInput(target.column, 'date', value)
+  emit('commit-edit', { side: target.side, column: target.column, field: 'date' })
+}
 
 const focusSheetCell = (editKey) => {
   const input = sheetRoot.value?.querySelector(`[data-edit-key="${CSS.escape(editKey)}"]`)
   if (!input) return
   input.focus()
-  input.select()
+  if (typeof input.select === 'function' && input.tagName !== 'BUTTON') input.select()
   input.scrollIntoView({ block: 'nearest', inline: 'nearest' })
 }
 
@@ -131,7 +250,7 @@ const onNavigate = (editKey, direction) => {
 <template>
   <section class="min-h-0 mb-[10px] mt-[-5px] flex-1 overflow-hidden border border-slate-200 bg-white">
     <div ref="sheetRoot" class="sheet-scroll">
-      <div class="sheet-block">
+      <div v-if="mode === 'in' || mode === 'summary'" class="sheet-block">
       <table class="ui-sheet sheet-in" :style="inboundTableStyle">
         <colgroup>
           <col class="col-sum" />
@@ -163,11 +282,19 @@ const onNavigate = (editKey, direction) => {
               class="head-value"
               :class="headerRow.key === 'memo' ? 'cell-memo' : ''"
             >
+              <InventorySheetDateCell
+                v-if="headerRow.key === 'date'"
+                :model-value="headerValue(column, 'date')"
+                :edit-key="cellKey('in', column, 'date')"
+                @open="openDateDialog('in', column)"
+                @navigate="onNavigate(cellKey('in', column, 'date'), $event)"
+              />
               <InventorySheetCell
+                v-else
                 :model-value="headerValue(column, headerRow.key)"
                 input-type="text"
+                :clamp="headerRow.key === 'memo'"
                 :edit-key="cellKey('in', column, headerRow.key)"
-                :text-class="headerRow.key === 'date' ? 'cell-date' : ''"
                 @start="emit('start-edit', { side: 'in', column, field: headerRow.key })"
                 @update:model-value="onHeaderInput(column, headerRow.key, $event)"
                 @commit="emit('commit-edit', { side: 'in', column, field: headerRow.key })"
@@ -177,29 +304,34 @@ const onNavigate = (editKey, direction) => {
             </td>
           </tr>
 
-          <tr v-for="row in materialRows" :key="`in-${row.id}`" class="in-row">
-            <td class="sticky-col s-0 sum-cell sum-in" :class="quantityClass(summaries[row.id]?.inbound)">
-              {{ formatBlankZero(summaries[row.id]?.inbound) }}
+          <tr v-for="row in visibleMaterialRows" :key="`in-${row.id}`" class="in-row">
+            <td class="sticky-col s-0 sum-cell sum-in" :class="quantityClass(row.collapsed ? groupField(row, 'inbound') : summaries[row.id]?.inbound)">
+              {{ formatBlankZero(row.collapsed ? groupField(row, 'inbound') : summaries[row.id]?.inbound) }}
             </td>
-            <td class="sticky-col s-64 sum-cell sum-out" :class="quantityClass(summaries[row.id]?.outbound)">
-              {{ formatBlankZero(summaries[row.id]?.outbound) }}
+            <td class="sticky-col s-64 sum-cell sum-out" :class="quantityClass(row.collapsed ? groupField(row, 'outbound') : summaries[row.id]?.outbound)">
+              {{ formatBlankZero(row.collapsed ? groupField(row, 'outbound') : summaries[row.id]?.outbound) }}
             </td>
             <td
               class="sticky-col s-128 sum-cell sum-net"
-              :class="quantityClass(summaries[row.id]?.inboundNet, { showZero: true })"
+              :class="quantityClass(row.collapsed ? groupField(row, 'inboundNet') : summaries[row.id]?.inboundNet, { showZero: true })"
             >
-              {{ formatQuantity(summaries[row.id]?.inboundNet) }}
+              {{ formatQuantity(row.collapsed ? groupField(row, 'inboundNet') : summaries[row.id]?.inboundNet) }}
             </td>
-            <template v-if="!row.group">
+            <template v-if="row.collapsed">
+              <td colspan="2" class="sticky-col s-label spec-cell s-edge group-cell">
+                <InventorySheetGroupCell :label="row.group" collapsed @toggle="toggleGroup(row.group)" />
+              </td>
+            </template>
+            <template v-else-if="!row.group">
               <td colspan="2" class="sticky-col s-label spec-cell s-edge">{{ row.spec }}</td>
             </template>
             <template v-else>
               <td
                 v-if="row.renderSpecCell"
                 :rowspan="row.groupRowspan"
-                class="sticky-col s-label spec-cell"
+                class="sticky-col s-label spec-cell group-cell"
               >
-                {{ row.group }}
+                <InventorySheetGroupCell :label="row.group" @toggle="toggleGroup(row.group)" />
               </td>
               <td class="sticky-col s-sub spec-cell s-edge">{{ row.spec }}</td>
             </template>
@@ -207,9 +339,13 @@ const onNavigate = (editKey, direction) => {
               v-for="column in inboundColumns"
               :key="`in-${row.id}-${column.localId}`"
               class="qty-cell"
-              :class="[quantityClass(quantityOf(column, row.id)), row.groupTone]"
+              :class="[quantityClass(row.collapsed ? groupColumnValue(column, row) : quantityOf(column, row.id)), row.groupTone]"
             >
+              <template v-if="row.collapsed">
+                {{ formatBlankZero(groupColumnValue(column, row)) }}
+              </template>
               <InventorySheetCell
+                v-else
                 :model-value="quantityValue(column, row.id)"
                 input-type="number"
                 :edit-key="cellKey('in', column, 'quantity', row.id)"
@@ -229,105 +365,134 @@ const onNavigate = (editKey, direction) => {
       </div>
       </div>
 
-      <div class="sheet-block">
-      <table class="ui-sheet sheet-out" :style="outboundTableStyle">
+      <div v-for="block in outboundBlocks" :key="block.key" class="sheet-block">
+      <table class="ui-sheet sheet-out" :style="blockTableStyle(block.columns)">
         <colgroup>
           <col class="col-sum" />
           <col class="col-sum" />
           <col class="col-sum" />
           <col class="col-spec" />
           <col class="col-sub" />
-          <col v-for="column in outboundColumns" :key="`col-out-${column.localId}`" class="col-event" />
+          <col v-for="column in block.columns" :key="`${block.key}-col-${column.localId}`" class="col-event" />
         </colgroup>
         <tbody>
           <tr class="section-row section-out top-stick t-0">
-            <td colspan="3" class="sticky-col s-0 section-cell">산출</td>
-            <td :colspan="outColspan - 3" class="section-cell"></td>
+            <td colspan="3" class="sticky-col s-0 section-cell">{{ block.label }}</td>
+            <td :colspan="Math.max(block.columns.length, 1) + 2" class="section-cell"></td>
           </tr>
 
           <tr
             v-for="(headerRow, headerIndex) in outHeaderRows"
-            :key="`out-${headerRow.key}`"
+            :key="`${block.key}-${headerRow.key}`"
             class="out-row head-row top-stick"
             :class="topClassByKey[headerRow.key]"
           >
-            <th v-if="headerIndex === 0" :rowspan="outHeaderRows.length" class="sticky-col s-0 sum-head sum-in">총입고</th>
-            <th v-if="headerIndex === 0" :rowspan="outHeaderRows.length" class="sticky-col s-64 sum-head sum-working">작업중</th>
-            <th v-if="headerIndex === 0" :rowspan="outHeaderRows.length" class="sticky-col s-128 sum-head sum-net">합산</th>
+            <template v-if="headerIndex === 0">
+              <th
+                v-for="sum in block.sums"
+                :key="`${block.key}-head-${sum.key}`"
+                :rowspan="outHeaderRows.length"
+                class="sticky-col sum-head"
+                :class="[sum.stickyClass, sum.cellClass]"
+              >
+                {{ sum.label }}
+              </th>
+            </template>
             <th colspan="2" class="sticky-col s-label s-edge label-cell">{{ headerRow.label }}</th>
             <td
-              v-for="column in outboundColumns"
-              :key="`out-${headerRow.key}-${column.localId}`"
+              v-for="column in block.columns"
+              :key="`${block.key}-${headerRow.key}-${column.localId}`"
               class="head-value"
               :class="headerRow.key === 'memo' ? ['cell-memo', outboundMemoClass(column)] : ''"
             >
+              <InventorySheetDateCell
+                v-if="headerRow.key === 'date'"
+                :model-value="headerValue(column, 'date')"
+                :edit-key="cellKey('out', column, 'date')"
+                @open="openDateDialog(columnSide, column)"
+                @navigate="onNavigate(cellKey('out', column, 'date'), $event)"
+              />
               <InventorySheetCell
+                v-else
                 :model-value="headerRow.key === 'memo' ? outboundMemoValue(column) : headerValue(column, headerRow.key)"
                 input-type="text"
                 :multiline="headerRow.key === 'memo'"
                 :edit-key="cellKey('out', column, headerRow.key)"
-                :text-class="headerRow.key === 'date' ? 'cell-date' : ''"
-                @start="emit('start-edit', { side: 'out', column, field: headerRow.key })"
+                @start="emit('start-edit', { side: columnSide, column, field: headerRow.key })"
                 @update:model-value="headerRow.key === 'memo' ? onOutboundMemoInput(column, $event) : onHeaderInput(column, headerRow.key, $event)"
-                @commit="emit('commit-edit', { side: 'out', column, field: headerRow.key })"
-                @cancel="emit('cancel-edit', { side: 'out', column, field: headerRow.key })"
+                @commit="emit('commit-edit', { side: columnSide, column, field: headerRow.key })"
+                @cancel="emit('cancel-edit', { side: columnSide, column, field: headerRow.key })"
                 @navigate="onNavigate(cellKey('out', column, headerRow.key), $event)"
               />
             </td>
           </tr>
 
-          <tr v-for="row in materialRows" :key="`out-${row.id}`" class="out-row">
-            <td class="sticky-col s-0 sum-cell sum-in" :class="quantityClass(summaries[row.id]?.inbound)">
-              {{ formatBlankZero(summaries[row.id]?.inbound) }}
-            </td>
-            <td class="sticky-col s-64 sum-cell sum-working" :class="quantityClass(summaries[row.id]?.working)">
-              {{ formatBlankZero(summaries[row.id]?.working) }}
-            </td>
+          <tr v-for="row in visibleMaterialRows" :key="`${block.key}-${row.id}`" class="out-row">
             <td
-              class="sticky-col s-128 sum-cell sum-net"
-              :class="quantityClass(summaries[row.id]?.workingNet, { showZero: true })"
+              v-for="sum in block.sums"
+              :key="`${block.key}-${row.id}-${sum.key}`"
+              class="sticky-col sum-cell"
+              :class="[sum.stickyClass, sum.cellClass, quantityClass(blockSummaryValue(row, sum.field), { showZero: Boolean(sum.showZero) })]"
             >
-              {{ formatQuantity(summaries[row.id]?.workingNet) }}
+              <template v-if="sum.field">
+                {{ sum.blankZero ? formatBlankZero(blockSummaryValue(row, sum.field)) : formatQuantity(blockSummaryValue(row, sum.field)) }}
+              </template>
             </td>
-            <template v-if="!row.group">
+            <template v-if="row.collapsed">
+              <td colspan="2" class="sticky-col s-label spec-cell s-edge group-cell">
+                <InventorySheetGroupCell :label="row.group" collapsed @toggle="toggleGroup(row.group)" />
+              </td>
+            </template>
+            <template v-else-if="!row.group">
               <td colspan="2" class="sticky-col s-label spec-cell s-edge">{{ row.spec }}</td>
             </template>
             <template v-else>
               <td
                 v-if="row.renderSpecCell"
                 :rowspan="row.groupRowspan"
-                class="sticky-col s-label spec-cell"
+                class="sticky-col s-label spec-cell group-cell"
               >
-                {{ row.group }}
+                <InventorySheetGroupCell :label="row.group" @toggle="toggleGroup(row.group)" />
               </td>
               <td class="sticky-col s-sub spec-cell s-edge">{{ row.spec }}</td>
             </template>
             <td
-              v-for="column in outboundColumns"
-              :key="`out-${row.id}-${column.localId}`"
+              v-for="column in block.columns"
+              :key="`${block.key}-${row.id}-${column.localId}`"
               class="qty-cell"
-              :class="[quantityClass(quantityOf(column, row.id)), row.groupTone]"
+              :class="[quantityClass(row.collapsed ? groupColumnValue(column, row) : quantityOf(column, row.id)), row.groupTone]"
             >
+              <template v-if="row.collapsed">
+                {{ formatBlankZero(groupColumnValue(column, row)) }}
+              </template>
               <InventorySheetCell
+                v-else
                 :model-value="quantityValue(column, row.id)"
                 input-type="number"
                 :edit-key="cellKey('out', column, 'quantity', row.id)"
                 :text-class="quantityClass(quantityValue(column, row.id))"
-                @start="emit('start-edit', { side: 'out', column, field: 'quantity', materialId: row.id })"
+                @start="emit('start-edit', { side: columnSide, column, field: 'quantity', materialId: row.id })"
                 @update:model-value="onQuantityInput(column, row.id, $event)"
-                @commit="emit('commit-edit', { side: 'out', column, field: 'quantity', materialId: row.id })"
-                @cancel="emit('cancel-edit', { side: 'out', column, field: 'quantity', materialId: row.id })"
+                @commit="emit('commit-edit', { side: columnSide, column, field: 'quantity', materialId: row.id })"
+                @cancel="emit('cancel-edit', { side: columnSide, column, field: 'quantity', materialId: row.id })"
                 @navigate="onNavigate(cellKey('out', column, 'quantity', row.id), $event)"
               />
             </td>
           </tr>
         </tbody>
       </table>
-      <div class="add-rail">
-        <button type="button" class="add-column" aria-label="추가" :style="{ top: addButtonTop }" @click="emit('add-column', 'out')">+</button>
+      <div v-if="block.allowAdd" class="add-rail">
+        <button type="button" class="add-column" aria-label="추가" :style="{ top: addButtonTop }" @click="emit('add-column', columnSide)">+</button>
       </div>
       </div>
     </div>
+    <InventorySheetDateDialog
+      :open="Boolean(dateDialog)"
+      :value="dateDialogIso"
+      @close="closeDateDialog"
+      @select="applyDateDialog"
+      @delete="applyDateDialog('')"
+    />
   </section>
 </template>
 

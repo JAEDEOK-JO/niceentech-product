@@ -70,6 +70,7 @@ const toColumn = (transaction, quantities) => ({
   saved: true,
   transactionType: transaction.transaction_type,
   memo: transaction.memo ?? '',
+  productListId: transaction.product_list_id ?? null,
   manufacturer: transaction.manufacturer ?? '',
   supplier: transaction.supplier ?? '',
   quantities,
@@ -167,6 +168,11 @@ export const EMPTY_COLUMN_COUNT = 1
 
 export const columnHasQuantity = (column) =>
   Object.values(column.quantities ?? {}).some((value) => toNumber(value) !== 0)
+
+export const columnHasDraftContent = (column) => {
+  if (columnHasQuantity(column)) return true
+  return ['memo', 'manufacturer', 'supplier'].some((key) => String(column?.[key] ?? '').trim())
+}
 
 export const padEmptyColumns = (columns, side, materialItems, count = EMPTY_COLUMN_COUNT) => {
   const next = [...(columns ?? [])]

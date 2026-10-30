@@ -3,7 +3,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import MainRegisterView from '@/features/main-register/MainRegisterView.vue'
 import { supabase } from '@/lib/supabase'
-import { roundToOneDecimal, sanitizeDecimalOne, sanitizeInteger } from '@/features/main/productionPlanNumbers'
+import { sanitizeDecimalOne, sanitizeInteger } from '@/features/main/productionPlanNumbers'
 
 const route = useRoute()
 const router = useRouter()
@@ -32,7 +32,7 @@ const form = reactive({
   head: '',
   hole: '',
   groove: '',
-  inch: '',
+  maker: '',
   weight: '',
   memo: '',
   isTest: true,
@@ -58,10 +58,6 @@ const formatKoreanDate = (value) => {
 const updateForm = (field, value) => {
   if (field === 'head' || field === 'hole' || field === 'groove') {
     form[field] = sanitizeInteger(value)
-    return
-  }
-  if (field === 'inch') {
-    form.inch = sanitizeDecimalOne(value)
     return
   }
   if (field === 'weight') {
@@ -177,10 +173,10 @@ const fetchRow = async () => {
     .select(columns)
     .eq('id', rowId.value)
     .single()
-  let { data, error } = await selectRow('id,company_info,uid,name,company,place,area,initial,delivery_due_date,head,hole,groove,inch,weight,memo,not_test,work_type,test_date')
-  if (error && String(error.message ?? '').includes('inch')) {
+  let { data, error } = await selectRow('id,company_info,uid,name,company,place,area,initial,delivery_due_date,head,hole,groove,maker,weight,memo,not_test,work_type,test_date')
+  if (error && String(error.message ?? '').includes('maker')) {
     ;({ data, error } = await selectRow('id,company_info,uid,name,company,place,area,initial,delivery_due_date,head,hole,groove,weight,memo,not_test,work_type,test_date'))
-    if (data) data = { ...data, inch: null }
+    if (data) data = { ...data, maker: null }
   }
 
   pageLoading.value = false
@@ -201,7 +197,7 @@ const fetchRow = async () => {
   form.head = data.head == null ? '' : String(data.head)
   form.hole = data.hole == null ? '' : String(data.hole)
   form.groove = data.groove == null ? '' : String(data.groove)
-  form.inch = data.inch == null ? '' : String(data.inch)
+  form.maker = data.maker == null ? '' : String(data.maker)
   form.weight = data.weight == null ? '' : String(data.weight)
   form.memo = String(data.memo ?? '')
   form.isTest = !Boolean(data.not_test)
@@ -243,7 +239,7 @@ const submit = async () => {
       head: form.head === '' ? null : Number(form.head),
       hole: form.hole === '' ? null : Number(form.hole),
       groove: form.groove === '' ? null : Number(form.groove),
-      inch: form.inch === '' ? null : roundToOneDecimal(form.inch),
+      maker: form.maker || null,
       weight: form.weight === '' ? null : Number(form.weight),
       delivery_due_date: form.deliveryDueDate || null,
       memo: String(form.memo).trim() || '',
@@ -256,8 +252,8 @@ const submit = async () => {
   saving.value = false
 
   if (error) {
-    saveError.value = String(error.message ?? '').includes('inch')
-      ? '수정 실패: 인치 DB 컬럼이 아직 적용되지 않았습니다. product_list.inch 컬럼 추가 후 다시 수정해주세요.'
+    saveError.value = String(error.message ?? '').includes('maker')
+      ? '수정 실패: 메이커 컬럼이 없습니다.'
       : `수정 실패: ${error.message}`
     return
   }

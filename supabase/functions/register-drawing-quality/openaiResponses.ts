@@ -14,7 +14,7 @@ export type ResponseSnapshot =
   | { state: 'failed'; reason: string; usage: unknown }
 
 function apiKey() {
-  const key = (Deno.env.get('OPENAI_API_KEY') ?? '').trim()
+  const key = (Deno.env.get('OPENAI_IMAGE_API_KEY') ?? '').trim()
   if (!key) throw new Error('openai_key_missing')
   return key
 }
