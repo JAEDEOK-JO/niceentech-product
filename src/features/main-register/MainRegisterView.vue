@@ -6,7 +6,7 @@ import MakerDialog from '@/features/main/maker/MakerDialog.vue'
 import { makerTextClass, parseMaker, serializeMaker } from '@/features/main/maker/makerOptions'
 import { useDialog } from '@/composables/useDialog'
 
-defineProps({
+const props = defineProps({
   pageTitle: { type: String, default: '생산계획 등록' },
   submitLabel: { type: String, default: '등록' },
   targetDateLabel: { type: String, required: true },
