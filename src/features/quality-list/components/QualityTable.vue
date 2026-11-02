@@ -3,7 +3,10 @@ import { ref, watch } from 'vue'
 import { useQualityRowReorder } from '../composables/useQualityRowReorder'
 import type { QualityCountField } from '../services/quality.service'
 import type { QualityListRow, QualityLotInfo } from '../types/quality'
+import { QUALITY_COUNT_COLUMNS, type QualityCountColumn } from '../utils/countColumns'
 import { formatLotEnd } from '../utils/print/format'
+import QualityCancelCountDialog from './QualityCancelCountDialog.vue'
+import QualityCountCell from './QualityCountCell.vue'
 import QualityExpansionRoundDialog from './QualityExpansionRoundDialog.vue'
 
 const props = defineProps<{
@@ -26,6 +29,7 @@ const emit = defineEmits<{
   notification: [item: QualityListRow]
   stamp: [item: QualityListRow]
   updateCancel: [item: QualityListRow, field: QualityCountField, value: number]
+  toggleReturn: [item: QualityListRow, field: QualityCountField, value: boolean]
   updateRange: [item: QualityListRow, lotStart: number]
   assignExpansion: [item: QualityListRow, payload: { round: string; lot: QualityLotInfo | null }]
   reorder: [items: QualityListRow[]]
@@ -108,37 +112,31 @@ function lotRoundClass(round: string) {
   return ''
 }
 
-function promptCancel(item: QualityListRow, field: QualityCountField, currentValue: number) {
-  const input = window.prompt(`${field.toUpperCase()} 반납 수량`, String(currentValue))
-  if (input == null) return
-  const next = Number.parseInt(input, 10)
-  emit('updateCancel', item, field, Number.isFinite(next) ? next : 0)
+const countCols: QualityCountColumn[] = QUALITY_COUNT_COLUMNS
+
+const cancelDialog = ref<{
+  item: QualityListRow
+  column: QualityCountColumn
+} | null>(null)
+
+function openCancelDialog(item: QualityListRow, column: QualityCountColumn) {
+  cancelDialog.value = { item, column }
 }
 
-interface CountCol {
-  label: string
-  field: QualityCountField
-  valueKey: keyof QualityListRow
-  cancelKey: keyof QualityListRow
-  metric: boolean
+function closeCancelDialog() {
+  cancelDialog.value = null
 }
 
-const countCols: CountCol[] = [
-  { label: '32A',  field: 'a32',  valueKey: 'a32',  cancelKey: 'a32Cancel',  metric: false },
-  { label: '40A',  field: 'a40',  valueKey: 'a40',  cancelKey: 'a40Cancel',  metric: false },
-  { label: '50A',  field: 'a50',  valueKey: 'a50',  cancelKey: 'a50Cancel',  metric: false },
-  { label: '65A',  field: 'a65',  valueKey: 'a65',  cancelKey: 'a65Cancel',  metric: false },
-  { label: '65A',  field: 'm65',  valueKey: 'm65',  cancelKey: 'm65Cancel',  metric: true  },
-  { label: '80A',  field: 'm80',  valueKey: 'm80',  cancelKey: 'm80Cancel',  metric: true  },
-  { label: '100A', field: 'm100', valueKey: 'm100', cancelKey: 'm100Cancel', metric: true  },
-  { label: '125A', field: 'm125', valueKey: 'm125', cancelKey: 'm125Cancel', metric: true  },
-  { label: '150A', field: 'm150', valueKey: 'm150', cancelKey: 'm150Cancel', metric: true  },
-  { label: '200A', field: 'm200', valueKey: 'm200', cancelKey: 'm200Cancel', metric: true  },
-]
+function saveCancelCount(value: number) {
+  const current = cancelDialog.value
+  if (!current) return
+  emit('updateCancel', current.item, current.column.field, value)
+  closeCancelDialog()
+}
 
-const mobileCountRows: CountCol[][] = [
+const mobileCountRows: QualityCountColumn[][] = [
   countCols.filter((col) => ['a32', 'a40', 'a50', 'a65'].includes(col.field)),
-  countCols.filter((col) => ['m80', 'm100', 'm125', 'm150', 'm200'].includes(col.field)),
+  countCols.filter((col) => ['m65', 'm80', 'm100', 'm125', 'm150', 'm200'].includes(col.field)),
 ]
 </script>
 
@@ -198,17 +196,15 @@ const mobileCountRows: CountCol[][] = [
 
           <div class="qt-card-counts">
             <div v-for="(row, rowIndex) in mobileCountRows" :key="rowIndex" class="qt-card-count-row">
-              <button
+              <QualityCountCell
                 v-for="col in row"
                 :key="col.field"
-                type="button"
-                class="qt-card-count"
-                :class="col.metric ? 'qt-card-count--metric' : 'qt-card-count--inch'"
-                @click.stop="promptCancel(item, col.field, item[col.cancelKey] as number)"
-              >
-                <span>{{ col.label }}</span>
-                <strong>{{ (item[col.valueKey] as number) || '-' }}</strong>
-              </button>
+                :item="item"
+                :column="col"
+                variant="card"
+                @open-cancel="openCancelDialog(item, col)"
+                @toggle-return="emit('toggleReturn', item, col.field, $event)"
+              />
             </div>
           </div>
         </article>
@@ -280,17 +276,19 @@ const mobileCountRows: CountCol[][] = [
               v-for="col in countCols"
               :key="col.field"
               class="td-center td-count"
-              :class="col.metric ? 'td-count--metric' : 'td-count--inch'"
+              :class="[
+                col.metric ? 'td-count--metric' : 'td-count--inch',
+                { 'td-count--return': item[col.returnKey] },
+              ]"
             >
-              <button
-                v-if="(item[col.cancelKey] as number) > 0 || (item[col.valueKey] as number) > 0"
-                type="button"
-                class="count-btn"
-                @pointerdown.stop
-                @click="promptCancel(item, col.field, item[col.cancelKey] as number)"
-              >
-                {{ (item[col.valueKey] as number) || '' }}
-              </button>
+              <QualityCountCell
+                v-if="(item[col.cancelKey] as number) > 0 || (item[col.valueKey] as number) > 0 || item[col.returnKey]"
+                :item="item"
+                :column="col"
+                variant="table"
+                @open-cancel="openCancelDialog(item, col)"
+                @toggle-return="emit('toggleReturn', item, col.field, $event)"
+              />
               <span v-else class="count-empty" />
             </td>
             <td class="td-center td-total">{{ item.totalH || '' }}</td>
@@ -312,6 +310,15 @@ const mobileCountRows: CountCol[][] = [
       :item="roundItem"
       @close="roundItem = null"
       @assign="assignRound"
+    />
+
+    <QualityCancelCountDialog
+      v-if="cancelDialog"
+      :label="cancelDialog.column.label"
+      :value="Number(cancelDialog.item[cancelDialog.column.cancelKey] ?? 0)"
+      :max="Number(cancelDialog.item[cancelDialog.column.valueKey] ?? 0)"
+      @close="closeCancelDialog"
+      @save="saveCancelCount"
     />
 
     <!-- 메뉴 다이얼로그 -->
@@ -581,20 +588,7 @@ const mobileCountRows: CountCol[][] = [
 .td-count { padding: 0; font-weight: 700; }
 .td-count--inch   { background: #ffffff; }
 .td-count--metric { background: #fff7ed; }
-
-.count-btn {
-  display: block;
-  width: 100%;
-  height: 64px;
-  padding: 0;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  font-size: 15px;
-  font-weight: 700;
-  color: #111827;
-}
-.count-btn:hover { background: rgba(0,0,0,0.06); }
+.td-count--return { background: #ef4444; }
 .count-empty { display: block; height: 64px; }
 
 /* 합계 */
@@ -849,7 +843,7 @@ const mobileCountRows: CountCol[][] = [
   }
 
   .qt-card--open .qt-card-counts {
-    max-height: 150px;
+    max-height: 190px;
     margin-top: 10px;
     opacity: 1;
   }
@@ -862,40 +856,9 @@ const mobileCountRows: CountCol[][] = [
   }
 
   .qt-card-count-row:nth-child(2) {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
     margin-bottom: 0;
   }
 
-  .qt-card-count {
-    min-height: 52px;
-    border: 1px solid #dbe3ef;
-    border-radius: 12px;
-    background: #fff;
-    padding: 7px 4px;
-    color: #0f172a;
-    text-align: center;
-  }
-
-  .qt-card-count span,
-  .qt-card-count strong {
-    display: block;
-  }
-
-  .qt-card-count span {
-    color: #64748b;
-    font-size: 9px;
-    font-weight: 900;
-  }
-
-  .qt-card-count strong {
-    margin-top: 3px;
-    font-size: 13px;
-    font-weight: 900;
-  }
-
-  .qt-card-count--metric {
-    background: #fff7ed;
-    border-color: #fed7aa;
-  }
 }
 </style>

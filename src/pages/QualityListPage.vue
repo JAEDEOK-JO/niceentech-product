@@ -36,6 +36,7 @@ import {
   saveNoticeBundleToFolder,
 } from '@/features/quality-list/services/notice.service'
 import { formatIsoDate, formatQualityDate, getNextTuesday, moveByWeeks, parseQualityDate } from '@/features/quality-list/utils/date'
+import { cancelFieldKey, returnFieldKey } from '@/features/quality-list/utils/countColumns'
 import { exportQualityStampToExcel } from '@/features/quality-list/utils/print'
 import {
   applyMainPipeGrouping,
@@ -416,12 +417,33 @@ async function onAssignExpansion(item: QualityListRow, payload: { round: string;
   }
 }
 
+function patchQualityRow(id: number, patch: Partial<QualityListRow>) {
+  items.value = items.value.map((row) => (row.id === id ? { ...row, ...patch } : row))
+}
+
 async function onUpdateCancel(item: QualityListRow, field: QualityCountField, value: number) {
-  await updateCancelCount(item.id, field, value)
+  const previous = items.value
+  patchQualityRow(item.id, { [cancelFieldKey(field)]: value } as Partial<QualityListRow>)
+  try {
+    await updateCancelCount(item.id, field, value)
+  } catch (error) {
+    items.value = previous
+    await alert(error instanceof Error ? error.message : '취소수량을 저장하지 못했습니다.')
+  }
 }
 
 async function onToggleReturn(item: QualityListRow, field: QualityCountField, value: boolean) {
-  await updateReturnFlag(item.id, field, value)
+  const previous = items.value
+  patchQualityRow(item.id, {
+    [returnFieldKey(field)]: value,
+    [cancelFieldKey(field)]: 0,
+  } as Partial<QualityListRow>)
+  try {
+    await updateReturnFlag(item.id, field, value)
+  } catch (error) {
+    items.value = previous
+    await alert(error instanceof Error ? error.message : '취소 표시를 저장하지 못했습니다.')
+  }
 }
 
 const canReorder = computed(() => !showAllRecords.value && !searchQuery.value.trim())
@@ -551,6 +573,7 @@ onBeforeUnmount(() => {
         @update-range="onUpdateRange"
         @assign-expansion="onAssignExpansion"
         @update-cancel="onUpdateCancel"
+        @toggle-return="onToggleReturn"
         @reorder="onReorder"
         @transfer="transferItem = $event"
         @undo-merge="onUndoMerge"
