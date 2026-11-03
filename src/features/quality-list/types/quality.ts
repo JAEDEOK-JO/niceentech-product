@@ -40,6 +40,10 @@ export interface QualityListRow {
   lotCertification: string
   lotKsdNum: string
   lotNumH: number
+  lotNumH2: string
+  lotNameH2: string
+  lotNumStartH2: string
+  lotNumEndH2: string
   print: boolean
   a32: number
   a40: number
@@ -176,6 +180,10 @@ export function mapQualityListRow(raw: Record<string, unknown>): QualityListRow 
     lotCertification: toStringValue(raw.lot_certification),
     lotKsdNum: toStringValue(raw.lot_ksd_num),
     lotNumH: toNumber(raw.lot_numH),
+    lotNumH2: toStringValue(raw.lot_numH2).trim(),
+    lotNameH2: toStringValue(raw.lot_nameH2).trim(),
+    lotNumStartH2: toStringValue(raw.lot_number_startH2).trim(),
+    lotNumEndH2: toStringValue(raw.lot_number_endH2).trim(),
     print: toBoolean(raw.print),
     a32: toNumber(raw.a32),
     a40: toNumber(raw.a40),

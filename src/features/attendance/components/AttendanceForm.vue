@@ -42,6 +42,8 @@ const props = defineProps<{
   hideEmployeeSelector?: boolean
   excludeRequestId?: number | null
   uploadUserId?: string
+  localEvidence?: boolean
+  showRequestHistory?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -334,6 +336,7 @@ function onEndDateChange(date: string) {
       <button
         type="button"
         class="mt-4 w-full rounded-xl bg-emerald-600 py-3.5 text-base font-extrabold text-white transition-colors hover:bg-emerald-500"
+        v-if="showRequestHistory !== false"
         @click="emit('viewHistory', { name: selectedEmployee.name, department: selectedEmployee.department })"
       >
         신청현황 보기
@@ -478,6 +481,7 @@ function onEndDateChange(date: string) {
       :model-value="form.evidenceUrls ?? []"
       :user-id="uploadUserId || ''"
       :disabled="loading"
+      :local-only="localEvidence"
       @update:model-value="emitUpdate({ ...form, evidenceUrls: $event })"
     />
 

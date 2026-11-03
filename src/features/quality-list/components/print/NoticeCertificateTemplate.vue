@@ -41,10 +41,16 @@ defineProps<{
         <tr v-for="(row, index) in model.qtyRows" :key="row.label">
           <td v-if="index === 0" class="cell-span" :rowspan="model.qtyRows.length">{{ model.receiptNum }}</td>
           <td v-if="index === 0" class="cell-span" :rowspan="model.qtyRows.length">{{ model.certification }}</td>
-          <td v-if="index === 0" class="cell-span" :rowspan="model.qtyRows.length">{{ model.lotNumH }}</td>
+          <td v-if="index === 0" class="cell-span cell-stack" :rowspan="model.qtyRows.length">
+            <span>{{ model.lotNumH }}</span>
+            <span v-if="model.lotNumH2">{{ model.lotNumH2 }}</span>
+          </td>
           <td class="cell-size">{{ row.label }}</td>
           <td class="cell-qty">{{ row.qty }}</td>
-          <td v-if="index === 0" class="cell-span" :rowspan="model.qtyRows.length">{{ model.passNumber }}</td>
+          <td v-if="index === 0" class="cell-span cell-stack" :rowspan="model.qtyRows.length">
+            <span>{{ model.passNumber }}</span>
+            <span v-if="model.passNumber2">{{ model.passNumber2 }}</span>
+          </td>
         </tr>
       </tbody>
       <tfoot>

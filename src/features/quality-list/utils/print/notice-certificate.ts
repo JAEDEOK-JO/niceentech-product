@@ -1,4 +1,5 @@
 import type { QualityListRow } from '../../types/quality'
+import { manualPassNumber } from '../manualExpansion'
 import { formatPrintQty } from './format'
 
 export interface NoticeQtyRow {
@@ -12,7 +13,9 @@ export interface NoticeCertificateModel {
   receiptNum: string
   certification: string
   lotNumH: string
+  lotNumH2: string
   passNumber: string
+  passNumber2: string
   qtyRows: NoticeQtyRow[]
   totalH: string
   testDate: string
@@ -48,7 +51,9 @@ export function buildNoticeCertificateModel(
     receiptNum: String(receiptNum ?? ''),
     certification: row.lotCertification,
     lotNumH: String(row.lotNumH ?? ''),
+    lotNumH2: row.lotNumH2,
     passNumber: `${row.lotNameH} ${start} ~ ${end}`.trim(),
+    passNumber2: manualPassNumber(row),
     qtyRows: [
       { label: '32A', qty: formatPrintQty(row.a32) },
       { label: '40A', qty: formatPrintQty(row.a40) },

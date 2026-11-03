@@ -22,6 +22,7 @@ import DailyWorkHoursPanel from './DailyWorkHoursPanel.vue'
 import AttendanceEvidencePicker from './AttendanceEvidencePicker.vue'
 import AttendanceEvidenceGalleryDialog from './AttendanceEvidenceGalleryDialog.vue'
 import AttendanceRequestTable from './AttendanceRequestTable.vue'
+import AttendanceGuestQrDialog from '../guest/AttendanceGuestQrDialog.vue'
 import type { DailyWorkHour } from '../types/attendance'
 import { isDeptHeadPending, isFinalApprovalPending, isGyeongyuPending } from '../utils/attendanceApprover'
 import type { AttendanceStatusChangeValue } from '../utils/attendanceRequestStatus'
@@ -113,6 +114,7 @@ const emit = defineEmits<{
   (e: 'viewHistory', payload: { name: string; department: string }): void
 }>()
 
+const guestQrOpen = ref(false)
 const evidenceGalleryVisible = ref(false)
 const evidenceGalleryUrls = ref<string[]>([])
 const evidenceGalleryIndex = ref(0)
@@ -501,9 +503,18 @@ watch(
         <!-- 직원 명단 -->
         <div v-if="userTab === 'leave'" class="rounded-2xl border border-slate-200 bg-white p-5">
           <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <h2 class="text-base font-extrabold text-slate-800">
-              {{ selectedDirectoryDept ? `${selectedDirectoryDept} 직원 명단` : '직원 명단' }}
-            </h2>
+            <div class="flex items-center gap-2">
+              <h2 class="text-base font-extrabold text-slate-800">
+                {{ selectedDirectoryDept ? `${selectedDirectoryDept} 직원 명단` : '직원 명단' }}
+              </h2>
+              <button
+                type="button"
+                class="rounded-lg bg-slate-900 px-3 py-2 text-sm font-bold text-white"
+                @click="guestQrOpen = true"
+              >
+                휴대폰 신청
+              </button>
+            </div>
             <button
               v-if="selectedDirectoryDept"
               type="button"
@@ -545,6 +556,12 @@ watch(
           </div>
         </div>
       </template>
+
+      <AttendanceGuestQrDialog
+        v-if="guestQrOpen"
+        :user-id="currentUserId"
+        @close="guestQrOpen = false"
+      />
 
       <!-- 비밀번호 키패드 -->
       <AttendancePasswordKeypad

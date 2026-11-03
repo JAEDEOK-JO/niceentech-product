@@ -13,6 +13,9 @@ export default defineConfig({
       strategies: 'injectManifest',
       srcDir: 'src',
       filename: 'sw.js',
+      injectManifest: {
+        maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
+      },
       includeAssets: ['icon-512.svg', 'icon-192.svg'],
       manifest: {
         name: 'NICEENTECH',

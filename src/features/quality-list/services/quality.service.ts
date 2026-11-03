@@ -11,6 +11,7 @@ import {
   type QualityListRow,
   type QualityLotInfo,
 } from '../types/quality'
+import type { ManualExpansionInput } from '../utils/manualExpansion'
 
 const LOT_META: Record<
   string,
@@ -108,7 +109,7 @@ function transferFullText(
   row: QualityListRow,
   lot: { lot_nameH: string | null; lot_numH: number | null },
 ) {
-  return `${row.company} ${row.place} ${row.area} ${row.initial} ${lot.lot_nameH ?? ''} ${lot.lot_numH ?? ''}`
+  return `${row.company} ${row.place} ${row.area} ${row.initial} ${lot.lot_nameH ?? ''} ${lot.lot_numH ?? ''} ${row.lotNameH2} ${row.lotNumH2}`
     .trim()
     .replace(/\s+/g, ' ')
 }
@@ -285,10 +286,39 @@ export async function assignQualityExpansion(
     lot_ksd: meta?.lotKsd ?? null,
     lot_certification: meta?.lotCertification ?? null,
     lot_ksd_num: meta?.lotKsdNum ?? null,
-    full_text: `${row.company} ${row.place} ${row.area} ${row.initial} ${lotName} ${lotNum ?? ''}`
-      .trim()
-      .replace(/\s+/g, ' '),
+    full_text: expansionFullText(row, lotName, lotNum, row),
   })
+}
+
+export async function updateManualExpansion(row: QualityListRow, input: ManualExpansionInput) {
+  const lotNum = input.lotNumH2.trim()
+  const lotName = input.lotNameH2.trim()
+  const start = input.lotNumStartH2.trim()
+  const end = input.lotNumEndH2.trim()
+  const next = {
+    lotNumH2: lotNum,
+    lotNameH2: lotName,
+    lotNumStartH2: start,
+    lotNumEndH2: end,
+  }
+  await updateQualityItem(row.id, {
+    lot_numH2: lotNum || null,
+    lot_nameH2: lotName || null,
+    lot_number_startH2: start || null,
+    lot_number_endH2: end || null,
+    full_text: expansionFullText(row, row.lotNameH, row.lotNumH || null, next),
+  })
+}
+
+function expansionFullText(
+  row: QualityListRow,
+  lotName: string,
+  lotNum: number | null,
+  manual: Pick<QualityListRow, 'lotNameH2' | 'lotNumH2'>,
+) {
+  return `${row.company} ${row.place} ${row.area} ${row.initial} ${lotName} ${lotNum ?? ''} ${manual.lotNameH2} ${manual.lotNumH2}`
+    .trim()
+    .replace(/\s+/g, ' ')
 }
 
 export async function updateLotRange(row: QualityListRow, lotStart: number) {
@@ -343,6 +373,10 @@ export async function copyQualityItem(row: QualityListRow, newTestDate: string) 
     full_text: transferFullText(row, lotFields),
     sort: await fetchNextSortValue(newTestDate),
     ...lotFields,
+    lot_numH2: row.lotNumH2 || null,
+    lot_nameH2: row.lotNameH2 || null,
+    lot_number_startH2: row.lotNumStartH2 || null,
+    lot_number_endH2: row.lotNumEndH2 || null,
   }
 
   for (const key of ALL_COUNT_FIELDS) {

@@ -4,6 +4,7 @@ import { useQualityRowReorder } from '../composables/useQualityRowReorder'
 import type { QualityCountField } from '../services/quality.service'
 import type { QualityListRow, QualityLotInfo } from '../types/quality'
 import { QUALITY_COUNT_COLUMNS, type QualityCountColumn } from '../utils/countColumns'
+import { manualExpansionLabel, type ManualExpansionInput } from '../utils/manualExpansion'
 import { formatLotEnd } from '../utils/print/format'
 import QualityCancelCountDialog from './QualityCancelCountDialog.vue'
 import QualityCountCell from './QualityCountCell.vue'
@@ -32,6 +33,7 @@ const emit = defineEmits<{
   toggleReturn: [item: QualityListRow, field: QualityCountField, value: boolean]
   updateRange: [item: QualityListRow, lotStart: number]
   assignExpansion: [item: QualityListRow, payload: { round: string; lot: QualityLotInfo | null }]
+  saveManual: [item: QualityListRow, payload: ManualExpansionInput]
   reorder: [items: QualityListRow[]]
   transfer: [item: QualityListRow]
   undoMerge: [item: QualityListRow]
@@ -90,6 +92,12 @@ function assignRound(payload: { round: string; lot: QualityLotInfo | null }) {
   if (!item) return
   emit('assignExpansion', item, payload)
   roundItem.value = null
+}
+
+function saveManual(payload: ManualExpansionInput) {
+  const item = roundItem.value
+  if (!item) return
+  emit('saveManual', item, payload)
 }
 
 function toggleCard(item: QualityListRow) {
@@ -180,11 +188,14 @@ const mobileCountRows: QualityCountColumn[][] = [
             <span>합계 {{ item.totalH || 0 }}</span>
           </div>
 
-          <div class="qt-card-lot" :class="lotRoundClass(item.lotRound)" @click.stop="openRoundDialog(item)">
-            <span class="qt-card-lot-name">{{ item.lotNameH || '-' }}</span>
-            <span class="qt-card-lot-num">({{ item.lotNumH ? String(item.lotNumH).slice(-3) : '---' }})</span>
-            <span class="qt-card-lot-start">{{ rangeInputs[item.id] || 0 }}</span>
-            <span>~ {{ formatLotEnd(item.lotNumEndH) }}</span>
+          <div class="qt-card-lot lot-stack" :class="lotRoundClass(item.lotRound)" @click.stop="openRoundDialog(item)">
+            <div class="lot-inner">
+              <span class="qt-card-lot-name">{{ item.lotNameH || '-' }}</span>
+              <span class="qt-card-lot-num">({{ item.lotNumH ? String(item.lotNumH).slice(-3) : '---' }})</span>
+              <span class="qt-card-lot-start">{{ rangeInputs[item.id] || 0 }}</span>
+              <span>~ {{ formatLotEnd(item.lotNumEndH) }}</span>
+            </div>
+            <span v-if="manualExpansionLabel(item)" class="lot-manual">{{ manualExpansionLabel(item) }}</span>
           </div>
 
           <div class="qt-card-toggle">
@@ -256,20 +267,23 @@ const mobileCountRows: QualityCountColumn[][] = [
               <span v-if="showAllRecords && item.testDate" class="place-date">{{ formatShortDate(item.testDate) }}</span>
             </td>
             <td class="td-lot">
-              <div class="lot-inner" :class="lotRoundClass(item.lotRound)" @click="openRoundDialog(item)">
-                <span class="lot-num">({{ item.lotNumH ? String(item.lotNumH).slice(-3) : '---' }})</span>
-                <span class="lot-name">{{ item.lotNameH || '-' }}</span>
-                <input
-                  v-model="rangeInputs[item.id]"
-                  type="number"
-                  inputmode="numeric"
-                  min="0"
-                  class="lot-input"
-                  @click.stop
-                  @keydown.enter="saveRange(item)"
-                  @keydown="(e) => ['e','E','+','-','.'].includes(e.key) && e.preventDefault()"
-                />
-                <span class="lot-end">~ {{ formatLotEnd(item.lotNumEndH) }}</span>
+              <div class="lot-stack" :class="lotRoundClass(item.lotRound)" @click="openRoundDialog(item)">
+                <div class="lot-inner">
+                  <span class="lot-num">({{ item.lotNumH ? String(item.lotNumH).slice(-3) : '---' }})</span>
+                  <span class="lot-name">{{ item.lotNameH || '-' }}</span>
+                  <input
+                    v-model="rangeInputs[item.id]"
+                    type="number"
+                    inputmode="numeric"
+                    min="0"
+                    class="lot-input"
+                    @click.stop
+                    @keydown.enter="saveRange(item)"
+                    @keydown="(e) => ['e','E','+','-','.'].includes(e.key) && e.preventDefault()"
+                  />
+                  <span class="lot-end">~ {{ formatLotEnd(item.lotNumEndH) }}</span>
+                </div>
+                <span v-if="manualExpansionLabel(item)" class="lot-manual">{{ manualExpansionLabel(item) }}</span>
               </div>
             </td>
             <td
@@ -310,6 +324,7 @@ const mobileCountRows: QualityCountColumn[][] = [
       :item="roundItem"
       @close="roundItem = null"
       @assign="assignRound"
+      @save-manual="saveManual"
     />
 
     <QualityCancelCountDialog
@@ -514,6 +529,14 @@ const mobileCountRows: QualityCountColumn[][] = [
   padding: 0 4px;
   vertical-align: middle;
 }
+.lot-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  cursor: pointer;
+}
 .lot-inner {
   display: flex;
   flex-direction: row;
@@ -521,7 +544,12 @@ const mobileCountRows: QualityCountColumn[][] = [
   justify-content: center;
   gap: 3px;
   white-space: nowrap;
-  cursor: pointer;
+}
+.lot-manual {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 .lot-num {
   font-size: 12px;
@@ -570,19 +598,23 @@ const mobileCountRows: QualityCountColumn[][] = [
 /* 차수별 색상 (입력창 제외) */
 .round-1 .lot-num,
 .round-1 .lot-name,
-.round-1 .lot-end { color: #111827; }
+.round-1 .lot-end,
+.round-1 .lot-manual { color: #111827; }
 
 .round-2 .lot-num,
 .round-2 .lot-name,
-.round-2 .lot-end { color: #ea580c; }
+.round-2 .lot-end,
+.round-2 .lot-manual { color: #ea580c; }
 
 .round-3 .lot-num,
 .round-3 .lot-name,
-.round-3 .lot-end { color: #16a34a; }
+.round-3 .lot-end,
+.round-3 .lot-manual { color: #16a34a; }
 
 .round-4 .lot-num,
 .round-4 .lot-name,
-.round-4 .lot-end { color: #7c3aed; }
+.round-4 .lot-end,
+.round-4 .lot-manual { color: #7c3aed; }
 
 /* 카운트 셀 */
 .td-count { padding: 0; font-weight: 700; }
@@ -783,7 +815,8 @@ const mobileCountRows: QualityCountColumn[][] = [
 
   .qt-card-lot {
     display: flex;
-    align-items: center;
+    flex-direction: column;
+    align-items: flex-start;
     gap: 6px;
     cursor: pointer;
     margin-top: 10px;

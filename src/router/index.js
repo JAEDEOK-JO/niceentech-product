@@ -33,6 +33,7 @@ import AdminOperationsDashboardPage from '@/pages/AdminOperationsDashboardPage.v
 import AdminProductionDashboardPage from '@/pages/AdminProductionDashboardPage.vue'
 import MessengerPage from '@/pages/MessengerPage.vue'
 import AttendancePage from '@/pages/AttendancePage.vue'
+import AttendanceGuestPage from '@/pages/AttendanceGuestPage.vue'
 import ChatbotPage from '@/pages/ChatbotPage.vue'
 import AttendanceRequestHistoryPage from '@/pages/AttendanceRequestHistoryPage.vue'
 import CncPage from '@/pages/CncPage.vue'
@@ -156,6 +157,11 @@ const routes = [
     name: 'attendance',
     component: AttendancePage,
     meta: { requiresAuth: true },
+  },
+  {
+    path: '/attendance/guest/:token(.*)',
+    name: 'attendance-guest',
+    component: AttendanceGuestPage,
   },
   {
     path: '/attendance/history',
@@ -313,6 +319,8 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to) => {
+  if (to.name === 'attendance-guest' || to.path.startsWith('/attendance/guest')) return true
+
   const { data } = await supabase.auth.getSession()
   const isLoggedIn = !!data.session
 

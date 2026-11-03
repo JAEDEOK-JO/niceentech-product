@@ -6,11 +6,13 @@ import {
   isAllowedEvidenceFile,
   uploadAttendanceEvidenceFiles,
 } from '../utils/attendanceEvidence'
+import { encodeEvidenceImage } from '../guest/encodeEvidenceImage'
 
 const props = defineProps<{
   modelValue: string[]
   userId: string
   disabled?: boolean
+  localOnly?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -43,14 +45,16 @@ async function onFileChange(event: Event) {
     return
   }
 
-  if (!props.userId) {
+  if (!props.localOnly && !props.userId) {
     errorMessage.value = '업로드할 수 없습니다.'
     return
   }
 
   uploading.value = true
   try {
-    const next = await uploadAttendanceEvidenceFiles(valid, props.userId, urls.value)
+    const next = props.localOnly
+      ? [...urls.value, ...(await Promise.all(valid.slice(0, remaining.value).map((file) => encodeEvidenceImage(file))))].slice(0, ATTENDANCE_EVIDENCE_MAX)
+      : await uploadAttendanceEvidenceFiles(valid, props.userId, urls.value)
     emit('update:modelValue', next)
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '업로드에 실패했습니다.'

@@ -12,6 +12,7 @@ import {
   preserveWorkerDoneStatus,
 } from '@/utils/productionStatus'
 import { fetchCncProductListIdSet } from '@/features/cnc/services/cnc.service'
+import { deletePlanOutboundTransactions } from '@/features/inventory/services/deletePlanOutbound'
 import {
   DEFAULT_PLAN_SORT_DIR,
   DEFAULT_PLAN_SORT_KEY,
@@ -971,6 +972,26 @@ export function useProductionPlan(session) {
 
   const deletePlanRow = async ({ rowId }) => {
     if (!rowId) return { ok: false, reason: 'invalid_row' }
+
+    const { data: planRow, error: planLoadError } = await supabase
+      .from(PRODUCT_LIST_TABLE)
+      .select('id,company,place,area,initial,name')
+      .eq('id', rowId)
+      .maybeSingle()
+
+    if (planLoadError) {
+      planError.value = `행 삭제 실패: ${planLoadError.message}`
+      return { ok: false, reason: 'db_error' }
+    }
+
+    if (planRow) {
+      try {
+        await deletePlanOutboundTransactions(planRow)
+      } catch (error) {
+        planError.value = `입출고 내역 삭제 실패: ${error.message}`
+        return { ok: false, reason: 'db_error' }
+      }
+    }
 
     const { error: weldingDeleteError } = await supabase
       .from('welding_inspections')

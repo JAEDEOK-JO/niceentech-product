@@ -82,6 +82,11 @@
   font-size: 14pt;
 }
 
+.notice-table .cell-stack span {
+  display: block;
+  line-height: 1.25;
+}
+
 .notice-table tbody tr:nth-child(odd) .cell-size,
 .notice-table tbody tr:nth-child(odd) .cell-qty {
   background: #f3f3f3;

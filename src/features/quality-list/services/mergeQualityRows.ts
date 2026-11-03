@@ -49,6 +49,10 @@ export async function mergeQualityRows(rows: QualityListRow[], input: MergeQuali
       lot_numH: null,
       lot_number_startH: 0,
       lot_number_endH: 0,
+      lot_numH2: null,
+      lot_nameH2: null,
+      lot_number_startH2: null,
+      lot_number_endH2: null,
       full_text: `${keeper.company} ${keeper.place} ${area} ${initial}`.trim().replace(/\s+/g, ' '),
     })
     .eq('id', keeper.id)

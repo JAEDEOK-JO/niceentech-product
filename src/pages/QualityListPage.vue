@@ -25,6 +25,7 @@ import {
   updateCancelCount,
   assignQualityExpansion,
   updateLotRange,
+  updateManualExpansion,
   updateReturnFlag,
   uploadNoticePdf,
 } from '@/features/quality-list/services/quality.service'
@@ -37,6 +38,7 @@ import {
 } from '@/features/quality-list/services/notice.service'
 import { formatIsoDate, formatQualityDate, getNextTuesday, moveByWeeks, parseQualityDate } from '@/features/quality-list/utils/date'
 import { cancelFieldKey, returnFieldKey } from '@/features/quality-list/utils/countColumns'
+import { manualExpansionLabel, type ManualExpansionInput } from '@/features/quality-list/utils/manualExpansion'
 import { exportQualityStampToExcel } from '@/features/quality-list/utils/print'
 import {
   applyMainPipeGrouping,
@@ -417,6 +419,17 @@ async function onAssignExpansion(item: QualityListRow, payload: { round: string;
   }
 }
 
+async function onSaveManual(item: QualityListRow, input: ManualExpansionInput) {
+  const previous = items.value
+  patchQualityRow(item.id, input)
+  try {
+    await updateManualExpansion(item, input)
+  } catch (error) {
+    items.value = previous
+    await alert(error instanceof Error ? error.message : '수기입력을 저장하지 못했습니다.')
+  }
+}
+
 function patchQualityRow(id: number, patch: Partial<QualityListRow>) {
   items.value = items.value.map((row) => (row.id === id ? { ...row, ...patch } : row))
 }
@@ -572,6 +585,7 @@ onBeforeUnmount(() => {
         @stamp="onStamp"
         @update-range="onUpdateRange"
         @assign-expansion="onAssignExpansion"
+        @save-manual="onSaveManual"
         @update-cancel="onUpdateCancel"
         @toggle-return="onToggleReturn"
         @reorder="onReorder"
@@ -663,10 +677,13 @@ onBeforeUnmount(() => {
                 </div>
               </td>
               <td class="quality-print-lot">
-                <div class="quality-print-lot-inner" :style="getLotRoundStyle(item.lotRound)">
-                  <span>({{ item.lotNumH ? String(item.lotNumH).slice(-3) : '---' }})</span>
-                  <strong>{{ item.lotNameH || '-' }}</strong>
-                  <span>{{ item.lotNumStartH || '' }} ~ {{ item.lotNumEndH || '' }}</span>
+                <div class="quality-print-lot-stack">
+                  <div class="quality-print-lot-inner" :style="getLotRoundStyle(item.lotRound)">
+                    <span>({{ item.lotNumH ? String(item.lotNumH).slice(-3) : '---' }})</span>
+                    <strong>{{ item.lotNameH || '-' }}</strong>
+                    <span>{{ item.lotNumStartH || '' }} ~ {{ item.lotNumEndH || '' }}</span>
+                  </div>
+                  <div v-if="manualExpansionLabel(item)" class="quality-print-lot-manual">{{ manualExpansionLabel(item) }}</div>
                 </div>
               </td>
               <td
@@ -929,11 +946,26 @@ onBeforeUnmount(() => {
     overflow: visible;
   }
 
+  .quality-print-lot-stack {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+  }
+
   .quality-print-lot-inner {
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 3px;
+    white-space: nowrap;
+  }
+
+  .quality-print-lot-manual {
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.1;
     white-space: nowrap;
   }
 
