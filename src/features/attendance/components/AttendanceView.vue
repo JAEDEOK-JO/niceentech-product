@@ -22,6 +22,7 @@ import DailyWorkHoursPanel from './DailyWorkHoursPanel.vue'
 import AttendanceEvidencePicker from './AttendanceEvidencePicker.vue'
 import AttendanceEvidenceGalleryDialog from './AttendanceEvidenceGalleryDialog.vue'
 import AttendanceRequestTable from './AttendanceRequestTable.vue'
+import AttendanceRequestStatusDialog from './AttendanceRequestStatusDialog.vue'
 import AttendanceGuestQrDialog from '../guest/AttendanceGuestQrDialog.vue'
 import type { DailyWorkHour } from '../types/attendance'
 import { isDeptHeadPending, isFinalApprovalPending, isGyeongyuPending } from '../utils/attendanceApprover'
@@ -111,10 +112,14 @@ const emit = defineEmits<{
   (e: 'deleteDailyWorkHoursBulk', payload: { workDate: string; employeeIds: number[] }): void
   (e: 'selectDailyWorkDate', workDate: string): void
   (e: 'updateDailyWorkHours', records: { workDate: string; employeeId: number; endTime: string }[]): void
-  (e: 'viewHistory', payload: { name: string; department: string }): void
 }>()
 
 const guestQrOpen = ref(false)
+const requestStatusVisible = ref(false)
+
+watch(() => props.formVisible, (visible) => {
+  if (!visible) requestStatusVisible.value = false
+})
 const evidenceGalleryVisible = ref(false)
 const evidenceGalleryUrls = ref<string[]>([])
 const evidenceGalleryIndex = ref(0)
@@ -659,9 +664,19 @@ watch(
         class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
       >
         <div class="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
-          <h2 class="mb-5 text-lg font-extrabold text-slate-900">
-            {{ isEditForm ? '휴가 신청 수정' : '휴가 신청' }}
-          </h2>
+          <div class="mb-5 flex items-center justify-between gap-3">
+            <h2 class="text-lg font-extrabold text-slate-900">
+              {{ isEditForm ? '휴가 신청 수정' : '휴가 신청' }}
+            </h2>
+            <button
+              v-if="formData.selectedEmployeeName && formData.selectedDepartment"
+              type="button"
+              class="shrink-0 text-sm font-extrabold text-emerald-700 hover:text-emerald-600"
+              @click="requestStatusVisible = true"
+            >
+              신청현황
+            </button>
+          </div>
           <AttendanceForm
             :key="String(isEditForm) + formData.startDate"
             :model-value="formData"
@@ -674,11 +689,17 @@ watch(
             @update:model-value="emit('update:formData', $event)"
             @submit="emit('submitForm')"
             @cancel="emit('closeForm')"
-            @view-history="emit('viewHistory', $event)"
           />
         </div>
       </div>
     </Teleport>
+
+    <AttendanceRequestStatusDialog
+      v-if="formVisible && requestStatusVisible"
+      :user-name="formData.selectedEmployeeName"
+      :department="formData.selectedDepartment"
+      @close="requestStatusVisible = false"
+    />
 
     <!-- 반려 사유 모달 -->
     <Teleport to="body">

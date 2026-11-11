@@ -200,7 +200,6 @@ onBeforeUnmount(() => {
           :employees="employees"
           hide-employee-selector
           local-evidence
-          :show-request-history="false"
           upload-user-id="guest"
           @update:model-value="formData = $event"
           @submit="signatureVisible = true"

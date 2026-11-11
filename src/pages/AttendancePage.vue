@@ -9,7 +9,6 @@
  * 관리자 판별: profiles.role === '관리자' (isAdminRole 사용)
  */
 import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
 import { useDialog } from '@/composables/useDialog'
 import { useAuth } from '@/composables/useAuth'
 import { useProfile } from '@/composables/useProfile'
@@ -100,7 +99,6 @@ watch(
 const { confirm, alert } = useDialog()
 const isRootAdminUser = computed(() => isRootAdmin(profile.value?.role))
 const canManagePending = computed(() => canManageAttendancePending(currentUserName.value))
-const router = useRouter()
 
 // ─── 필터 ──────────────────────────────────────────────────────────────────────
 const thisYear = new Date().getFullYear()
@@ -501,14 +499,6 @@ function closeForm() {
   formVisible.value = false
 }
 
-function handleViewHistory(payload: { name: string; department: string }) {
-  formVisible.value = false
-  router.push({
-    name: 'attendance-history',
-    query: { name: payload.name, department: payload.department },
-  })
-}
-
 function openEditForm(item: AttendanceRequest) {
   formData.value = {
     selectedDepartment: item.department,
@@ -882,7 +872,6 @@ async function handleDeleteEmployee(id: number) {
     @open-summary-request="openSummaryRequest"
     @open-form="openForm"
     @close-form="closeForm"
-    @view-history="handleViewHistory"
     @submit-form="submitForm"
     @edit="openEditForm"
     @delete="handleDelete"
