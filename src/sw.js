@@ -10,6 +10,13 @@ clientsClaim()
 precacheAndRoute(self.__WB_MANIFEST)
 cleanupOutdatedCaches()
 
+self.addEventListener('fetch', (event) => {
+  if (event.request.mode !== 'navigate') return
+  const path = new URL(event.request.url).pathname
+  if (path !== '/worker' && !path.startsWith('/worker/')) return
+  event.respondWith(fetch(event.request))
+})
+
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -21,19 +28,23 @@ const firebaseConfig = {
 const hasFirebaseConfig = Object.values(firebaseConfig).every((value) => String(value || '').trim())
 
 if (hasFirebaseConfig) {
-  const app = initializeApp(firebaseConfig)
-  const messaging = getMessaging(app)
+  try {
+    const app = initializeApp(firebaseConfig)
+    const messaging = getMessaging(app)
 
-  onBackgroundMessage(messaging, (payload) => {
-    const title = payload.notification?.title || payload.data?.title || '알림'
-    const body = payload.notification?.body || payload.data?.body || ''
-    const url = payload.data?.url || '/attendance'
+    onBackgroundMessage(messaging, (payload) => {
+      const title = payload.notification?.title || payload.data?.title || '알림'
+      const body = payload.notification?.body || payload.data?.body || ''
+      const url = payload.data?.url || '/attendance'
 
-    self.registration.showNotification(
-      title,
-      buildPushNotificationOptions({ body, url, tag: 'niceentech-push' }),
-    )
-  })
+      self.registration.showNotification(
+        title,
+        buildPushNotificationOptions({ body, url, tag: 'niceentech-push' }),
+      )
+    })
+  } catch {
+    // 알림 초기화 실패가 설치를 막지 않게 한다.
+  }
 }
 
 self.addEventListener('notificationclick', (event) => {

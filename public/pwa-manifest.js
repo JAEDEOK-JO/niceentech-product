@@ -5,11 +5,13 @@
   else if (path === '/worker' || path.indexOf('/worker/') === 0) href = '/manifest-worker.webmanifest'
 
   window.__workerInstallEvent = null
+  window.__workerInstallWantsNative = false
   window.addEventListener('beforeinstallprompt', function (event) {
     var current = location.pathname
     if (current !== '/worker' && current.indexOf('/worker/') !== 0) return
-    event.preventDefault()
     window.__workerInstallEvent = event
+    if (window.__workerInstallWantsNative) return
+    event.preventDefault()
     window.dispatchEvent(new Event('workerinstallready'))
   })
 

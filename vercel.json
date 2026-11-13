@@ -2,9 +2,16 @@
   "framework": "vite",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "rewrites": [
+  "redirects": [
     {
       "source": "/worker",
+      "destination": "/worker/",
+      "permanent": false
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/worker/",
       "destination": "/worker.html"
     },
     {

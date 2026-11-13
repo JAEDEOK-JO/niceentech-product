@@ -37,6 +37,7 @@ export function promptWorkerInstall() {
     workerCanInstall.value = false
     return event.prompt()
   }
+  window.__workerInstallWantsNative = true
   if (isInAppAndroidBrowser()) openAndroidChrome()
   return Promise.resolve(false)
 }
