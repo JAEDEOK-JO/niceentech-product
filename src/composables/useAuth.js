@@ -7,6 +7,7 @@ let isManualLogout = false
 
 export function useAuth() {
   const session = ref(null)
+  const ready = ref(false)
   const loading = ref(false)
   const message = ref('')
   let authSubscription = null
@@ -67,6 +68,7 @@ export function useAuth() {
   onMounted(async () => {
     const { data } = await supabase.auth.getSession()
     session.value = data.session
+    ready.value = true
 
     const { data: listener } = supabase.auth.onAuthStateChange((event, nextSession) => {
       // 사용자가 직접 로그아웃을 누른 게 아니면 SIGNED_OUT 무시
@@ -85,6 +87,7 @@ export function useAuth() {
 
   return {
     session,
+    ready,
     loading,
     message,
     login,

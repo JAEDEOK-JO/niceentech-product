@@ -38,7 +38,9 @@ import ChatbotPage from '@/pages/ChatbotPage.vue'
 import AttendanceRequestHistoryPage from '@/pages/AttendanceRequestHistoryPage.vue'
 import CncPage from '@/pages/CncPage.vue'
 import CncStandalonePage from '@/pages/CncStandalonePage.vue'
+import WorkerAppPage from '@/pages/WorkerAppPage.vue'
 import { isAdminRole, isDesignDepartment, isRootAdmin } from '@/utils/adminAccess'
+import { isPublicAttendanceRoute, redirectForSessionRole } from '@/router/roleAccess'
 
 
 const routes = [
@@ -173,6 +175,12 @@ const routes = [
     path: '/cnc-only',
     name: 'cnc-only',
     component: CncStandalonePage,
+    meta: { standalone: true },
+  },
+  {
+    path: '/worker',
+    name: 'worker',
+    component: WorkerAppPage,
     meta: { standalone: true },
   },
   {
@@ -319,32 +327,39 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to) => {
-  if (to.name === 'attendance-guest' || to.path.startsWith('/attendance/guest')) return true
+  if (isPublicAttendanceRoute(to)) return true
 
   const { data } = await supabase.auth.getSession()
   const isLoggedIn = !!data.session
+  const userId = data.session?.user?.id ?? null
 
   if (to.meta.requiresAuth && !isLoggedIn) {
     return { name: 'login' }
+  }
+
+  let profile = null
+  if (isLoggedIn && userId) {
+    const { data: row } = await supabase.from('profiles').select('role,department').eq('id', userId).maybeSingle()
+    profile = row
+  }
+
+  if (isLoggedIn) {
+    const roleRedirect = redirectForSessionRole(profile?.role, to)
+    if (roleRedirect) return roleRedirect
   }
 
   if (to.meta.guestOnly && isLoggedIn) {
     return { name: 'main' }
   }
 
-  if (to.meta.requiresRootAdmin || to.meta.requiresAdmin || to.meta.requiresDesignDepartment) {
-    const userId = data.session?.user?.id ?? null
-    if (!userId) return { name: 'login' }
-    const { data: profile } = await supabase.from('profiles').select('role,department').eq('id', userId).maybeSingle()
-    if (to.meta.requiresRootAdmin && !isRootAdmin(profile?.role)) {
-      return { name: 'main' }
-    }
-    if (to.meta.requiresAdmin && !isAdminRole(profile?.role)) {
-      return { name: 'main' }
-    }
-    if (to.meta.requiresDesignDepartment && !isAdminRole(profile?.role) && !isDesignDepartment(profile?.department)) {
-      return { name: 'main' }
-    }
+  if (to.meta.requiresRootAdmin && !isRootAdmin(profile?.role)) {
+    return { name: 'main' }
+  }
+  if (to.meta.requiresAdmin && !isAdminRole(profile?.role)) {
+    return { name: 'main' }
+  }
+  if (to.meta.requiresDesignDepartment && !isAdminRole(profile?.role) && !isDesignDepartment(profile?.department)) {
+    return { name: 'main' }
   }
 
   return true

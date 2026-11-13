@@ -36,6 +36,8 @@ export const isForemanWorkMan = (value) => {
   return normalized === normalizeWorkMan(PROFILE_ROLES.foreman)
 }
 
+export const isWorkerRole = (value) => normalizeRole(value) === normalizeRole(PROFILE_ROLES.worker)
+
 export const isDesignDepartment = (value) => {
   const normalized = normalizeDepartment(value)
   if (!normalized) return false
