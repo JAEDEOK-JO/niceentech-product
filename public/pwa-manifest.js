@@ -4,14 +4,25 @@
   if (path === '/cnc-only') href = '/manifest-cnc-only.webmanifest'
   else if (path === '/worker' || path.indexOf('/worker/') === 0) href = '/manifest-worker.webmanifest'
 
-  var link = document.createElement('link')
-  link.rel = 'manifest'
-  link.href = href
-  document.head.appendChild(link)
+  window.__workerInstallEvent = null
+  window.addEventListener('beforeinstallprompt', function (event) {
+    var current = location.pathname
+    if (current !== '/worker' && current.indexOf('/worker/') !== 0) return
+    event.preventDefault()
+    window.__workerInstallEvent = event
+    window.dispatchEvent(new Event('workerinstallready'))
+  })
 
-  new MutationObserver(function () {
-    document.querySelectorAll('link[rel="manifest"]').forEach(function (node) {
-      if (node !== link) node.remove()
-    })
-  }).observe(document.documentElement, { childList: true, subtree: true })
+  function applyManifest() {
+    var link = document.querySelector('link[rel="manifest"]')
+    if (!link) {
+      link = document.createElement('link')
+      link.rel = 'manifest'
+      document.head.appendChild(link)
+    }
+    if (link.getAttribute('href') !== href) link.setAttribute('href', href)
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', applyManifest)
+  else applyManifest()
 })()

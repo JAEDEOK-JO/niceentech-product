@@ -3,6 +3,7 @@ import vue from '@vitejs/plugin-vue'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import { fileURLToPath, URL } from 'node:url'
+import { workerHtmlPlugin } from './scripts/workerHtmlPlugin.js'
 
 export default defineConfig({
   plugins: [
@@ -52,6 +53,7 @@ export default defineConfig({
         ],
       },
     }),
+    workerHtmlPlugin(),
   ],
   resolve: {
     alias: {
