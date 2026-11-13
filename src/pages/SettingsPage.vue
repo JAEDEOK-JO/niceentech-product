@@ -9,6 +9,8 @@ import EmployeeAccountRegisterPanel from '@/features/settings/components/Employe
 import EmployeeOptionSettingsPanel from '@/features/settings/components/EmployeeOptionSettingsPanel.vue'
 import InventoryMaterialSettingsPanel from '@/features/settings/components/InventoryMaterialSettingsPanel.vue'
 import PushRecipientSettingsPanel from '@/features/settings/components/PushRecipientSettingsPanel.vue'
+import WorkerApprovalPanel from '@/features/settings/components/WorkerApprovalPanel.vue'
+import WorkerRewardPanel from '@/features/settings/components/WorkerRewardPanel.vue'
 import { clearCacheAndReload } from '@/features/settings/services/cacheRefresh.service'
 import { useVirtualKeyboardSetting } from '@/features/virtual-keyboard/composables/useVirtualKeyboardSetting'
 import { isAdminRole, isRootAdmin as isRootAdminRole, isSuperAdmin as isSuperAdminRole } from '@/utils/adminAccess'
@@ -61,6 +63,8 @@ watch(
   isAdmin,
   (v) => {
     if (!v && activePanel.value === 'push-recipients') activePanel.value = 'app-info'
+    if (!v && activePanel.value === 'worker-approval') activePanel.value = 'app-info'
+    if (!v && activePanel.value === 'worker-reward') activePanel.value = 'app-info'
   },
   { immediate: true },
 )
@@ -149,6 +153,24 @@ const handleVirtualKeyboardToggle = async (event) => {
             @click="activePanel = 'chatbot-notes'"
           >
             챗봇 메모
+          </button>
+          <button
+            v-if="isAdmin"
+            type="button"
+            class="rounded-xl px-4 py-3 text-left text-sm font-extrabold transition-colors"
+            :class="activePanel === 'worker-approval' ? 'bg-slate-900 text-white' : 'bg-slate-50 text-slate-700 hover:bg-slate-100'"
+            @click="activePanel = 'worker-approval'"
+          >
+            가입승인
+          </button>
+          <button
+            v-if="isAdmin"
+            type="button"
+            class="rounded-xl px-4 py-3 text-left text-sm font-extrabold transition-colors"
+            :class="activePanel === 'worker-reward' ? 'bg-slate-900 text-white' : 'bg-slate-50 text-slate-700 hover:bg-slate-100'"
+            @click="activePanel = 'worker-reward'"
+          >
+            포상
           </button>
           <button
             v-if="isAdmin"
@@ -244,6 +266,14 @@ const handleVirtualKeyboardToggle = async (event) => {
 
         <ChatbotNotesPanel
           v-else-if="isSuperAdmin && activePanel === 'chatbot-notes'"
+        />
+
+        <WorkerApprovalPanel
+          v-else-if="isAdmin && activePanel === 'worker-approval'"
+        />
+
+        <WorkerRewardPanel
+          v-else-if="isAdmin && activePanel === 'worker-reward'"
         />
 
         <PushRecipientSettingsPanel

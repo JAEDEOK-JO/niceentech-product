@@ -56,7 +56,7 @@ export const tableColumns: Record<string, string> = {
   sales_weekly_entries: "id, created_at, updated_at, target_month, week_index, sales_amount, note, created_by, sales_amount_head, sales_amount_screw, sales_amount_supipe",
   setting: "id, created_at, version, urls, test_version, update_message, hole_time, welding_head_time, nasa_head_time, virtual_keyboard_enabled",
   setting_updates: "id, version, summary, detail, released_at, sort_order",
-  shipment_schedule: "id, created_at, shipment_date, company, place, area, schedule_type, arrival_time, float_status, manager_id, misc, initial",
+  shipment_schedule: "id, created_at, shipment_date, company, place, area, schedule_type, arrival_time, weight, manager_id, misc, initial",
   time_calc_settings: "id, fixed_minutes, minutes_per_head, minutes_per_wp, a_label, a_minutes_per_unit, b_label, b_minutes_per_unit, c_label, c_minutes_per_unit, d_label, d_minutes_per_unit, e_label, e_minutes_per_unit, updated_at, extra_items",
   unit_price_ranges: "id, item_type, start_mm, end_mm, unit_price, created_at, lsp_32a, lsp_40a, lsp_50a",
   welding_inspections: "id, product_list_id, company, place, area, head_count, drawing_no, test_date, inspector, created_at, welding_status",

@@ -16,12 +16,14 @@ const SCHEDULE_TYPE_OPTIONS = [
   { value: 'day', label: '당착' },
   { value: 'night', label: '야상' },
 ]
-const FLOAT_STATUS_OPTIONS = [
-  { value: 'O', label: 'O' },
-  { value: 'X', label: 'X' },
-]
 
 const normalizeText = (value) => String(value ?? '').trim()
+const formatWeight = (value) => {
+  const text = normalizeText(value).replace(/,/g, '')
+  if (!text) return ''
+  const number = Number(text)
+  return Number.isFinite(number) ? String(number) : ''
+}
 const formatIsoDate = (date = new Date()) => {
   const year = String(date.getFullYear()).padStart(4, '0')
   const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -64,8 +66,7 @@ const form = reactive({
   shipmentDate: '',
   scheduleType: 'day',
   arrivalTime: '',
-  hasPlot: false,
-  floatStatus: 'O',
+  weight: '',
   misc: '',
 })
 
@@ -107,8 +108,6 @@ const formatShipmentListTitle = computed(() => {
 })
 const getScheduleTypeLabel = (value) =>
   SCHEDULE_TYPE_OPTIONS.find((item) => item.value === value)?.label ?? (normalizeText(value) || '-')
-const getFloatStatusLabel = (value) =>
-  FLOAT_STATUS_OPTIONS.find((item) => item.value === value)?.label ?? (normalizeText(value) || '-')
 const normalizeRow = (row) => ({
   id: row.id,
   company: normalizeText(row.company),
@@ -118,7 +117,7 @@ const normalizeRow = (row) => ({
   shipmentDate: normalizeText(row.shipment_date),
   scheduleType: normalizeText(row.schedule_type),
   arrivalTime: normalizeText(row.arrival_time),
-  floatStatus: normalizeText(row.float_status),
+  weight: formatWeight(row.weight),
   misc: normalizeText(row.misc),
   managerId: row.manager_id ? String(row.manager_id) : '',
   createdAt: normalizeText(row.created_at),
@@ -147,7 +146,7 @@ const filteredRows = computed(() => {
     })
   if (!keyword) return baseRows
   return baseRows.filter((row) => {
-    const target = `${row.managerName} ${row.company} ${row.place} ${row.area} ${row.initial} ${row.misc}`.toLowerCase()
+    const target = `${row.managerName} ${row.company} ${row.place} ${row.area} ${row.initial} ${row.weight} ${row.misc}`.toLowerCase()
     return target.includes(keyword)
   })
 })
@@ -162,8 +161,7 @@ const resetForm = () => {
   form.shipmentDate = currentViewDate.value || formatIsoDate()
   form.scheduleType = 'day'
   form.arrivalTime = ''
-  form.hasPlot = false
-  form.floatStatus = 'O'
+  form.weight = ''
   form.misc = ''
   companyPlaceSearchText.value = ''
   companyPlaceResults.value = []
@@ -185,8 +183,7 @@ const openEditDialog = (row) => {
   form.shipmentDate = row.shipmentDate
   form.scheduleType = row.scheduleType || 'day'
   form.arrivalTime = row.arrivalTime || ''
-  form.hasPlot = Boolean(row.floatStatus)
-  form.floatStatus = row.floatStatus || 'O'
+  form.weight = row.weight || ''
   form.misc = row.misc || ''
   companyPlaceSearchText.value = [row.company, row.place].filter(Boolean).join(' / ')
   companyPlaceResults.value = []
@@ -422,7 +419,7 @@ const fetchShipmentSchedules = async () => {
 
   loading.value = true
   errorMessage.value = ''
-  const scheduleSelect = 'id,company,place,manager_id,area,initial,shipment_date,schedule_type,arrival_time,float_status,misc,created_at'
+  const scheduleSelect = 'id,company,place,manager_id,area,initial,shipment_date,schedule_type,arrival_time,weight,misc,created_at'
   const loadSchedules = (columns) => supabase
     .from(SHIPMENT_SCHEDULE_TABLE)
     .select(columns)
@@ -519,7 +516,7 @@ const submit = async () => {
   const shipmentDate = normalizeText(form.shipmentDate)
   const scheduleType = normalizeText(form.scheduleType)
   const arrivalTime = normalizeText(form.arrivalTime)
-  const floatStatus = form.hasPlot ? normalizeText(form.floatStatus || 'O') : ''
+  const weightText = normalizeText(form.weight).replace(/,/g, '')
   const misc = normalizeText(form.misc)
 
   if (!company) {
@@ -538,9 +535,13 @@ const submit = async () => {
     saveError.value = '일정 구분을 선택해주세요.'
     return
   }
-  if (form.hasPlot && !['O', 'X'].includes(floatStatus)) {
-    saveError.value = '플롯 상태를 선택해주세요.'
-    return
+  let weight = null
+  if (weightText) {
+    weight = Number(weightText)
+    if (!Number.isFinite(weight) || weight < 0) {
+      saveError.value = '중량을 확인해주세요.'
+      return
+    }
   }
 
   saving.value = true
@@ -560,7 +561,7 @@ const submit = async () => {
     shipment_date: shipmentDate,
     schedule_type: scheduleType,
     arrival_time: arrivalTime || null,
-    float_status: form.hasPlot ? floatStatus : null,
+    weight,
     misc: misc || null,
   }
 
@@ -787,9 +788,9 @@ onMounted(async () => {
                   class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-800"
                 >야상 {{ row.arrivalTime || 'O' }}</span>
                 <span
-                  v-if="row.floatStatus"
-                  class="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-bold text-violet-800"
-                >플롯 {{ row.floatStatus }}</span>
+                  v-if="row.weight"
+                  class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-700"
+                >중량 {{ row.weight }}</span>
               </div>
               <p v-if="row.misc" class="mt-1.5 text-xs leading-5 text-slate-500">{{ row.misc }}</p>
             </button>
@@ -805,8 +806,8 @@ onMounted(async () => {
               <col :style="{ width: isRangeFilterActive ? '22%' : '22%' }" />
               <col :style="{ width: isRangeFilterActive ? '8%' : '9%' }" />
               <col :style="{ width: isRangeFilterActive ? '8%' : '9%' }" />
-              <col :style="{ width: isRangeFilterActive ? '5%' : '6%' }" />
-              <col :style="{ width: isRangeFilterActive ? '12%' : '14%' }" />
+              <col :style="{ width: isRangeFilterActive ? '8%' : '8%' }" />
+              <col :style="{ width: isRangeFilterActive ? '9%' : '12%' }" />
             </colgroup>
             <thead class="bg-slate-50 text-slate-600">
               <tr>
@@ -818,7 +819,7 @@ onMounted(async () => {
                 <th class="border border-slate-200 px-3 py-3 text-center font-bold">구역명</th>
                 <th class="border border-slate-200 px-3 py-3 text-center font-bold">당착</th>
                 <th class="border border-slate-200 px-3 py-3 text-center font-bold">야상</th>
-                <th class="border border-slate-200 px-3 py-3 text-center font-bold">플롯</th>
+                <th class="border border-slate-200 px-3 py-3 text-center font-bold">중량</th>
                 <th class="border border-slate-200 px-3 py-3 text-center font-bold">기타</th>
               </tr>
             </thead>
@@ -840,7 +841,7 @@ onMounted(async () => {
                 <td class="border border-slate-200 px-3 py-3 text-center text-slate-700">{{ row.area || '' }}</td>
                 <td class="border border-slate-200 px-3 py-3 text-center text-slate-700">{{ row.scheduleType === 'day' ? (row.arrivalTime || 'O') : '' }}</td>
                 <td class="border border-slate-200 px-3 py-3 text-center text-slate-700">{{ row.scheduleType === 'night' ? (row.arrivalTime || 'O') : '' }}</td>
-                <td class="border border-slate-200 px-3 py-3 text-center text-slate-700">{{ row.floatStatus || '' }}</td>
+                <td class="border border-slate-200 px-3 py-3 text-center text-slate-700">{{ row.weight || '' }}</td>
                 <td class="border border-slate-200 px-3 py-3 text-center text-slate-700">{{ row.misc || '' }}</td>
               </tr>
             </tbody>
@@ -1030,10 +1031,6 @@ onMounted(async () => {
                 <input v-model="form.scheduleType" type="radio" :value="option.value" />
                 <span>{{ option.label }}</span>
               </label>
-              <label class="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700">
-                <input v-model="form.hasPlot" type="checkbox" />
-                <span>플롯</span>
-              </label>
             </div>
           </div>
           <div class="space-y-2">
@@ -1045,18 +1042,16 @@ onMounted(async () => {
               class="h-11 w-full rounded-xl border border-slate-300 px-4 text-sm text-slate-700"
             />
           </div>
-          <div v-if="form.hasPlot" class="space-y-2">
-            <label class="text-sm font-bold text-slate-700">플롯 상태</label>
-            <div class="flex gap-2">
-              <label
-                v-for="option in FLOAT_STATUS_OPTIONS"
-                :key="option.value"
-                class="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700"
-              >
-                <input v-model="form.floatStatus" type="radio" :value="option.value" />
-                <span>{{ option.label }}</span>
-              </label>
-            </div>
+          <div class="space-y-2">
+            <label class="text-sm font-bold text-slate-700">중량</label>
+            <input
+              v-model="form.weight"
+              type="number"
+              min="0"
+              step="any"
+              inputmode="decimal"
+              class="h-11 w-full rounded-xl border border-slate-300 px-4 text-sm text-slate-700"
+            />
           </div>
           <div class="space-y-2 md:col-span-2">
             <label class="text-sm font-bold text-slate-700">기타</label>

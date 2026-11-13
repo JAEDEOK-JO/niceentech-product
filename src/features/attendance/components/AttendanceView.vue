@@ -16,21 +16,20 @@ import AttendanceAnalysisPanel from './AttendanceAnalysisPanel.vue'
 import AttendanceSummaryBoard from './AttendanceSummaryBoard.vue'
 import AttendanceDetailModal from './AttendanceDetailModal.vue'
 import AttendanceRequestSignatureDialog from './AttendanceRequestSignatureDialog.vue'
-import AttendancePasswordKeypad from './AttendancePasswordKeypad.vue'
-import DailyWorkHoursInputDialog from './DailyWorkHoursInputDialog.vue'
+import AttendanceRequestStatusDialog from './AttendanceRequestStatusDialog.vue'
+import WorkerAppDownloadPanel from '../guest/WorkerAppDownloadPanel.vue'
 import DailyWorkHoursPanel from './DailyWorkHoursPanel.vue'
 import AttendanceEvidencePicker from './AttendanceEvidencePicker.vue'
 import AttendanceEvidenceGalleryDialog from './AttendanceEvidenceGalleryDialog.vue'
 import AttendanceRequestTable from './AttendanceRequestTable.vue'
-import AttendanceRequestStatusDialog from './AttendanceRequestStatusDialog.vue'
-import AttendanceGuestQrDialog from '../guest/AttendanceGuestQrDialog.vue'
+import DailyWorkHoursInputDialog from './DailyWorkHoursInputDialog.vue'
 import type { DailyWorkHour } from '../types/attendance'
 import { isDeptHeadPending, isFinalApprovalPending, isGyeongyuPending } from '../utils/attendanceApprover'
 import type { AttendanceStatusChangeValue } from '../utils/attendanceRequestStatus'
 import { formatLeaveDaysCountLabel, isHalfDayLeaveType, LEAVE_TYPE_ABSENCE, LEAVE_TYPE_HOME, LEAVE_TYPE_OUTING } from '../utils/attendanceLeaveType'
 
 type AdminTab = 'requests' | 'employees' | 'summary' | 'analysis' | 'approval' | 'daepyo' | 'gyeongyu' | 'workhours'
-type UserTab = 'leave' | 'workhours'
+type UserTab = 'download' | 'workhours'
 
 const props = defineProps<{
   items: AttendanceRequest[]
@@ -114,7 +113,6 @@ const emit = defineEmits<{
   (e: 'updateDailyWorkHours', records: { workDate: string; employeeId: number; endTime: string }[]): void
 }>()
 
-const guestQrOpen = ref(false)
 const requestStatusVisible = ref(false)
 
 watch(() => props.formVisible, (visible) => {
@@ -133,24 +131,8 @@ function openEvidenceGallery(urls: string[], index = 0) {
 function closeEvidenceGallery() {
   evidenceGalleryVisible.value = false
 }
-const keypadEmployee = ref<Employee | null>(null)
-
-function openKeypad(emp: Employee) {
-  keypadEmployee.value = emp
-}
-
-function closeKeypad() {
-  keypadEmployee.value = null
-}
-
-function onKeypadSuccess(emp: Employee) {
-  keypadEmployee.value = null
-  emit('openFormForEmployee', emp)
-}
-
-// 관리자 탭
 const activeTab = ref<AdminTab>('requests')
-const userTab = ref<UserTab>('leave')
+const userTab = ref<UserTab>('download')
 
 const userTabBtnClass = (tab: UserTab) =>
   userTab.value === tab
@@ -179,24 +161,6 @@ const selectedDailyWorkHours = computed(() =>
 )
 const REQUESTS_PER_PAGE = 10
 const requestsPage = ref(1)
-
-// ─── 일반 사용자: 직원 명단 부서 선택 ──────────────────────────────────────────
-const DEPT_ORDER = ['생산부', '용접부', '나사부', 'CNC', '지게차']
-const directoryDepartments = computed(() => {
-  const set = new Set(props.employees.map((e) => e.department).filter(Boolean))
-  const ordered = DEPT_ORDER.filter((d) => set.has(d))
-  const extras = [...set].filter((d) => !DEPT_ORDER.includes(d)).sort()
-  return [...ordered, ...extras]
-})
-const selectedDirectoryDept = ref('')
-const directoryEmployees = computed(() =>
-  selectedDirectoryDept.value
-    ? props.employees
-        .filter((e) => e.department === selectedDirectoryDept.value)
-        .slice()
-        .sort((a, b) => a.name.localeCompare(b.name, 'ko'))
-    : [],
-)
 
 
 const statusBadge = (status: string) => {
@@ -251,11 +215,12 @@ watch(
     <div class="w-full px-[5px] pb-8 pt-[15px] sm:px-5">
 
       <!-- 페이지 헤더 -->
-      <div class="mb-7 flex flex-wrap items-start justify-between gap-3">
+      <div class="mb-7 flex flex-wrap items-start justify-between gap-6">
         <div>
           <h1 class="text-2xl font-extrabold text-slate-900">생산부 근태관리</h1>
           <p class="mt-1 text-sm text-slate-500">{{ periodLabel }} 휴가 신청 및 근태 현황</p>
         </div>
+        <WorkerAppDownloadPanel v-if="isAdmin" class="w-full max-w-sm" />
       </div>
 
       <!-- 통계 카드 (관리자만) -->
@@ -458,25 +423,29 @@ watch(
         />
       </template>
 
-      <!-- ═══ 일반 사용자 뷰 ═══ -->
       <template v-if="!isAdmin">
-        <div class="mb-5 flex flex-wrap gap-1 rounded-xl border border-slate-200 bg-white p-1 w-fit">
+        <div class="mb-5 flex w-fit flex-wrap gap-1 rounded-xl border border-slate-200 bg-white p-1">
           <button
             type="button"
             class="rounded-lg px-3.5 py-2 text-sm font-bold transition-colors"
-            :class="userTabBtnClass('leave')"
-            @click="userTab = 'leave'"
-          >휴가 신청</button>
+            :class="userTabBtnClass('download')"
+            @click="userTab = 'download'"
+          >
+            작업자 어플
+          </button>
           <button
             type="button"
             class="rounded-lg px-3.5 py-2 text-sm font-bold transition-colors"
             :class="userTabBtnClass('workhours')"
             @click="userTab = 'workhours'"
-          >작업시간</button>
+          >
+            작업시간
+          </button>
         </div>
 
+        <WorkerAppDownloadPanel v-if="userTab === 'download'" />
         <DailyWorkHoursPanel
-          v-if="userTab === 'workhours'"
+          v-else
           :employees="employees"
           :requests="dailyWorkRequests"
           :work-hours="dailyWorkHours"
@@ -489,92 +458,7 @@ watch(
           @save="emit('updateDailyWorkHours', $event)"
           @select-date="emit('selectDailyWorkDate', $event)"
         />
-
-        <!-- 내 연차 현황 -->
-        <div v-if="userTab === 'leave' && quota" class="mb-5 rounded-2xl border border-slate-200 bg-white p-4">
-          <div class="mb-2 flex items-center justify-between text-sm">
-            <span class="font-bold text-slate-700">내 연차 현황</span>
-            <span class="text-slate-500">{{ quota.usedDays }} / {{ quota.totalDays }}일 사용</span>
-          </div>
-          <div class="h-2 w-full overflow-hidden rounded-full bg-slate-100">
-            <div
-              class="h-full rounded-full bg-emerald-500 transition-all"
-              :style="{ width: `${quota.totalDays > 0 ? Math.min(100, (quota.usedDays / quota.totalDays) * 100) : 0}%` }"
-            />
-          </div>
-          <p class="mt-1.5 text-right text-xs text-slate-400">잔여 {{ quota.remainingDays }}일</p>
-        </div>
-
-        <!-- 직원 명단 -->
-        <div v-if="userTab === 'leave'" class="rounded-2xl border border-slate-200 bg-white p-5">
-          <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <div class="flex items-center gap-2">
-              <h2 class="text-base font-extrabold text-slate-800">
-                {{ selectedDirectoryDept ? `${selectedDirectoryDept} 직원 명단` : '직원 명단' }}
-              </h2>
-              <button
-                type="button"
-                class="rounded-lg bg-slate-900 px-3 py-2 text-sm font-bold text-white"
-                @click="guestQrOpen = true"
-              >
-                휴대폰 신청
-              </button>
-            </div>
-            <button
-              v-if="selectedDirectoryDept"
-              type="button"
-              class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
-              @click="selectedDirectoryDept = ''"
-            >
-              ← 돌아가기
-            </button>
-          </div>
-
-          <!-- 부서 선택 (초기 화면) -->
-          <div v-if="!selectedDirectoryDept" class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <button
-              v-for="d in directoryDepartments"
-              :key="d"
-              type="button"
-              class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-8 text-base font-extrabold text-slate-800 transition-colors hover:bg-slate-900 hover:text-white"
-              @click="selectedDirectoryDept = d"
-            >
-              {{ d }}
-            </button>
-          </div>
-
-          <!-- 직원 카드 (부서 선택 후) -->
-          <div v-else-if="directoryEmployees.length === 0" class="py-12 text-center text-sm text-slate-400">
-            해당 부서에 등록된 직원이 없습니다.
-          </div>
-          <div v-else class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-            <button
-              v-for="emp in directoryEmployees"
-              :key="emp.id"
-              type="button"
-              class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-4 text-center transition-colors hover:border-slate-900 hover:bg-white"
-              @click="openKeypad(emp)"
-            >
-              <p class="truncate text-sm font-extrabold text-slate-900">{{ emp.name }}</p>
-              <p class="mt-1 text-[11px] font-bold text-slate-500">{{ emp.assignedDepartment || emp.department || '-' }}</p>
-            </button>
-          </div>
-        </div>
       </template>
-
-      <AttendanceGuestQrDialog
-        v-if="guestQrOpen"
-        :user-id="currentUserId"
-        @close="guestQrOpen = false"
-      />
-
-      <!-- 비밀번호 키패드 -->
-      <AttendancePasswordKeypad
-        v-if="keypadEmployee"
-        :employee="keypadEmployee"
-        @success="onKeypadSuccess"
-        @cancel="closeKeypad"
-      />
 
       <!-- 금일 작업시간 입력 다이얼로그 -->
       <DailyWorkHoursInputDialog

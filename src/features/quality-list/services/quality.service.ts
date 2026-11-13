@@ -329,6 +329,12 @@ export async function updateLotRange(row: QualityListRow, lotStart: number) {
   })
 }
 
+export async function updateLotEnd(rowId: number, lotEnd: number) {
+  await updateQualityItem(rowId, {
+    lot_number_endH: lotEnd,
+  })
+}
+
 export async function moveQualityItemDate(row: QualityListRow, newTestDate: string) {
   if (row.testDate === newTestDate) {
     throw new Error('같은 날짜로는 이동할 수 없습니다.')

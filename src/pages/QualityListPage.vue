@@ -24,6 +24,7 @@ import {
   subscribeQualityList,
   updateCancelCount,
   assignQualityExpansion,
+  updateLotEnd,
   updateLotRange,
   updateManualExpansion,
   updateReturnFlag,
@@ -411,6 +412,17 @@ async function onUpdateRange(item: QualityListRow, lotStart: number) {
   await updateLotRange(item, lotStart)
 }
 
+async function onUpdateLotEnd(item: QualityListRow, lotEnd: number) {
+  const previous = items.value
+  patchQualityRow(item.id, { lotNumEndH: lotEnd })
+  try {
+    await updateLotEnd(item.id, lotEnd)
+  } catch (error) {
+    items.value = previous
+    await alert(error instanceof Error ? error.message : '끝번호를 저장하지 못했습니다.')
+  }
+}
+
 async function onAssignExpansion(item: QualityListRow, payload: { round: string; lot: QualityLotInfo | null }) {
   try {
     await assignQualityExpansion(item, payload.round, payload.lot)
@@ -584,6 +596,7 @@ onBeforeUnmount(() => {
         @notification="onNoticeDownload"
         @stamp="onStamp"
         @update-range="onUpdateRange"
+        @update-lot-end="onUpdateLotEnd"
         @assign-expansion="onAssignExpansion"
         @save-manual="onSaveManual"
         @update-cancel="onUpdateCancel"

@@ -4,11 +4,13 @@ import { useQualityRowReorder } from '../composables/useQualityRowReorder'
 import type { QualityCountField } from '../services/quality.service'
 import type { QualityListRow, QualityLotInfo } from '../types/quality'
 import { QUALITY_COUNT_COLUMNS, type QualityCountColumn } from '../utils/countColumns'
+import { isEditedLotEnd } from '../utils/lotEnd'
 import { manualExpansionLabel, type ManualExpansionInput } from '../utils/manualExpansion'
 import { formatLotEnd } from '../utils/print/format'
 import QualityCancelCountDialog from './QualityCancelCountDialog.vue'
 import QualityCountCell from './QualityCountCell.vue'
 import QualityExpansionRoundDialog from './QualityExpansionRoundDialog.vue'
+import QualityLotEndDialog from './QualityLotEndDialog.vue'
 
 const props = defineProps<{
   items: QualityListRow[]
@@ -32,6 +34,7 @@ const emit = defineEmits<{
   updateCancel: [item: QualityListRow, field: QualityCountField, value: number]
   toggleReturn: [item: QualityListRow, field: QualityCountField, value: boolean]
   updateRange: [item: QualityListRow, lotStart: number]
+  updateLotEnd: [item: QualityListRow, lotEnd: number]
   assignExpansion: [item: QualityListRow, payload: { round: string; lot: QualityLotInfo | null }]
   saveManual: [item: QualityListRow, payload: ManualExpansionInput]
   reorder: [items: QualityListRow[]]
@@ -81,6 +84,17 @@ function saveRange(item: QualityListRow) {
 const menuDialogItem = ref<QualityListRow | null>(null)
 function openMenuDialog(item: QualityListRow) { menuDialogItem.value = item }
 function closeMenuDialog() { menuDialogItem.value = null }
+
+const lotEndItem = ref<QualityListRow | null>(null)
+function openLotEndDialog(item: QualityListRow) {
+  lotEndItem.value = item
+}
+function saveLotEnd(value: number) {
+  const item = lotEndItem.value
+  if (!item) return
+  emit('updateLotEnd', item, value)
+  lotEndItem.value = null
+}
 
 const roundItem = ref<QualityListRow | null>(null)
 function openRoundDialog(item: QualityListRow) {
@@ -193,7 +207,9 @@ const mobileCountRows: QualityCountColumn[][] = [
               <span class="qt-card-lot-name">{{ item.lotNameH || '-' }}</span>
               <span class="qt-card-lot-num">({{ item.lotNumH ? String(item.lotNumH).slice(-3) : '---' }})</span>
               <span class="qt-card-lot-start">{{ rangeInputs[item.id] || 0 }}</span>
-              <span>~ {{ formatLotEnd(item.lotNumEndH) }}</span>
+              <button type="button" class="lot-end" @click.stop="openLotEndDialog(item)">
+                ~ <span :class="{ 'lot-end-num--edited': isEditedLotEnd(item) }">{{ formatLotEnd(item.lotNumEndH) }}</span>
+              </button>
             </div>
             <span v-if="manualExpansionLabel(item)" class="lot-manual">{{ manualExpansionLabel(item) }}</span>
           </div>
@@ -281,7 +297,9 @@ const mobileCountRows: QualityCountColumn[][] = [
                     @keydown.enter="saveRange(item)"
                     @keydown="(e) => ['e','E','+','-','.'].includes(e.key) && e.preventDefault()"
                   />
-                  <span class="lot-end">~ {{ formatLotEnd(item.lotNumEndH) }}</span>
+                  <button type="button" class="lot-end" @click.stop="openLotEndDialog(item)">
+                    ~ <span :class="{ 'lot-end-num--edited': isEditedLotEnd(item) }">{{ formatLotEnd(item.lotNumEndH) }}</span>
+                  </button>
                 </div>
                 <span v-if="manualExpansionLabel(item)" class="lot-manual">{{ manualExpansionLabel(item) }}</span>
               </div>
@@ -325,6 +343,13 @@ const mobileCountRows: QualityCountColumn[][] = [
       @close="roundItem = null"
       @assign="assignRound"
       @save-manual="saveManual"
+    />
+
+    <QualityLotEndDialog
+      v-if="lotEndItem"
+      :value="lotEndItem.lotNumEndH"
+      @close="lotEndItem = null"
+      @save="saveLotEnd"
     />
 
     <QualityCancelCountDialog
@@ -590,9 +615,17 @@ const mobileCountRows: QualityCountColumn[][] = [
   box-shadow: 0 0 0 2px rgba(59,130,246,0.2);
 }
 .lot-end {
+  padding: 0;
+  border: none;
+  background: transparent;
+  font: inherit;
   font-size: 13px;
   color: #111827;
   white-space: nowrap;
+  cursor: pointer;
+}
+.lot-end-num--edited {
+  color: #ef4444;
 }
 
 /* 차수별 색상 (입력창 제외) */
@@ -844,6 +877,10 @@ const mobileCountRows: QualityCountColumn[][] = [
     flex-shrink: 0;
     font-size: 11px;
     font-weight: 800;
+  }
+
+  .qt-card-lot .lot-end {
+    font-size: 11px;
   }
 
   .qt-card-toggle {
