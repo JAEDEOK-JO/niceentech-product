@@ -32,15 +32,25 @@ export async function attachRewardPhotoUrls(rows) {
   }))
 }
 
-export async function fetchMyRewards(userId) {
+export async function fetchRewardFeed() {
   const { data, error } = await supabase
     .from('worker_reward_reports')
-    .select('id,photo_path,photo_paths,normal_photo_paths,original_note,found_note,status,amount,created_at')
-    .eq('user_id', userId)
+    .select('id,user_id,photo_path,photo_paths,normal_photo_paths,original_note,found_note,status,amount,created_at')
     .order('created_at', { ascending: false })
 
   if (error) throw error
-  return attachRewardPhotoUrls(data ?? [])
+  const rows = await attachRewardPhotoUrls(data ?? [])
+  const userIds = [...new Set(rows.map((row) => row.user_id).filter(Boolean))]
+  const names = new Map()
+  if (userIds.length > 0) {
+    const { data: profiles, error: profileError } = await supabase
+      .from('profiles')
+      .select('id,name')
+      .in('id', userIds)
+    if (profileError) throw profileError
+    for (const profile of profiles ?? []) names.set(profile.id, profile.name || '')
+  }
+  return rows.map((row) => ({ ...row, name: names.get(row.user_id) || '' }))
 }
 
 async function uploadPhotos(userId, files) {

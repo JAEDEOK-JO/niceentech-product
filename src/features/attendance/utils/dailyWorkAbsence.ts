@@ -1,7 +1,7 @@
 import type { AttendanceRequest, Employee } from '../types/attendance'
 import { formatHomeLeaveLabel, isEmployeeOnHomeLeave } from './homeLeave'
 import { isDeptHeadApproved } from './attendanceApprover'
-import { LEAVE_TYPE_ABSENCE, LEAVE_TYPE_OUTING } from './attendanceLeaveType'
+import { LEAVE_TYPE_ABSENCE, LEAVE_TYPE_OUTING, LEAVE_TYPE_UNPAID } from './attendanceLeaveType'
 
 export interface DailyWorkAbsence {
   type: 'home-leave' | 'annual-leave' | 'half-day' | 'outing' | 'absence'
@@ -25,12 +25,13 @@ const formatLeaveLabel = (leaveType: string) => {
   if (leaveType === '반차(오후)') return '반차(오후)'
   if (leaveType === LEAVE_TYPE_OUTING) return '외출(2시간)'
   if (leaveType === LEAVE_TYPE_ABSENCE) return '결근'
+  if (leaveType === LEAVE_TYPE_UNPAID) return '무급휴가'
   return ''
 }
 
 const resolveAbsenceType = (leaveType: string): DailyWorkAbsence['type'] | null => {
   if (leaveType === '연차') return 'annual-leave'
-  if (leaveType === LEAVE_TYPE_ABSENCE) return 'absence'
+  if (leaveType === LEAVE_TYPE_ABSENCE || leaveType === LEAVE_TYPE_UNPAID) return 'absence'
   if (leaveType === LEAVE_TYPE_OUTING) return 'outing'
   if (leaveType === '반차(오전)' || leaveType === '반차(오후)') return 'half-day'
   return null

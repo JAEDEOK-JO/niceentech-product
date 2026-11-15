@@ -47,8 +47,12 @@ const props = defineProps<{
   summaryRequests: AttendanceRequest[]
   currentUserId: string
   isAdmin: boolean
+  scopedDepartments?: readonly string[] | null
   isRootAdmin: boolean
   canManagePending: boolean
+  canDeptHeadApprove?: (item: AttendanceRequest) => boolean
+  canGyeongyu?: boolean
+  canFinalApprove?: boolean
   approvalPendingCount: number
   daepyoPendingCount: number
   gyeongyuPendingCount: number
@@ -57,6 +61,8 @@ const props = defineProps<{
   formLoading: boolean
   formData: AttendanceFormState
   isEditForm: boolean
+  isReapply?: boolean
+  reapplyRejected?: boolean
   hideFormEmployeeSelector: boolean
   editRequestId?: number | null
   toast: { show: boolean; message: string; type: 'success' | 'error' }
@@ -139,6 +145,8 @@ const userTabBtnClass = (tab: UserTab) =>
     ? 'bg-slate-900 text-white'
     : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'
 
+const departmentLocked = computed(() => (props.scopedDepartments?.length ?? 0) === 1)
+
 const tabBtnClass = (tab: AdminTab) =>
   activeTab.value === tab
     ? 'bg-slate-900 text-white'
@@ -178,6 +186,7 @@ const leaveTypeBadge = (type: string) => {
   if (type === LEAVE_TYPE_HOME) return 'bg-indigo-100 text-indigo-700'
   if (type === '병가') return 'bg-purple-100 text-purple-700'
   if (type === '연차') return 'bg-slate-100 text-slate-700'
+  if (type === '무급휴가') return 'bg-orange-100 text-orange-700'
   return 'bg-slate-100 text-slate-500'
 }
 
@@ -211,8 +220,108 @@ watch(
 </script>
 
 <template>
-  <div class="min-h-screen bg-slate-50">
-    <div class="w-full px-[5px] pb-8 pt-[15px] sm:px-5">
+  <div class="min-h-screen bg-white">
+    <div class="w-full px-[5px] pb-8 sm:px-5">
+
+      <!-- 관리자 탭 -->
+      <div v-if="isAdmin" class="sticky top-[126px] z-20 -mx-[5px] mb-5 border-b border-slate-200 bg-white px-[5px] py-2 print:static sm:-mx-5 sm:px-5 md:top-[142px]">
+      <div class="flex w-fit flex-wrap gap-1 rounded-xl border border-slate-200 bg-white p-1">
+        <button
+          type="button"
+          class="rounded-lg px-3.5 py-2 text-sm font-bold transition-colors"
+          :class="tabBtnClass('requests')"
+          @click="activeTab = 'requests'"
+        >신청 현황</button>
+        <button
+          type="button"
+          class="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-bold transition-colors"
+          :class="tabBtnClass('approval')"
+          @click="activeTab = 'approval'"
+        >
+          부서장 대기
+          <span
+            v-if="approvalPendingCount > 0"
+            class="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-extrabold text-white"
+          >{{ approvalPendingCount }}</span>
+        </button>
+        <button
+          v-if="canGyeongyu"
+          type="button"
+          class="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-bold transition-colors"
+          :class="tabBtnClass('gyeongyu')"
+          @click="activeTab = 'gyeongyu'"
+        >
+          경유 대기
+          <span
+            v-if="gyeongyuPendingCount > 0"
+            class="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-extrabold text-white"
+          >{{ gyeongyuPendingCount }}</span>
+        </button>
+        <button
+          v-if="canFinalApprove"
+          type="button"
+          class="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-bold transition-colors"
+          :class="tabBtnClass('daepyo')"
+          @click="activeTab = 'daepyo'"
+        >
+          최종승인 대기
+          <span
+            v-if="daepyoPendingCount > 0"
+            class="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-purple-500 px-1 text-[10px] font-extrabold text-white"
+          >{{ daepyoPendingCount }}</span>
+        </button>
+        <button
+          v-if="!scopedDepartments"
+          type="button"
+          class="rounded-lg px-3.5 py-2 text-sm font-bold transition-colors"
+          :class="tabBtnClass('summary')"
+          @click="activeTab = 'summary'"
+        >근태요약</button>
+        <button
+          v-if="!scopedDepartments"
+          type="button"
+          class="rounded-lg px-3.5 py-2 text-sm font-bold transition-colors"
+          :class="tabBtnClass('employees')"
+          @click="activeTab = 'employees'"
+        >직원 목록</button>
+        <button
+          v-if="!scopedDepartments"
+          type="button"
+          class="rounded-lg px-3.5 py-2 text-sm font-bold transition-colors"
+          :class="tabBtnClass('analysis')"
+          @click="activeTab = 'analysis'"
+        >근태 분석</button>
+        <button
+          type="button"
+          class="rounded-lg px-3.5 py-2 text-sm font-bold transition-colors"
+          :class="tabBtnClass('workhours')"
+          @click="activeTab = 'workhours'"
+        >작업시간</button>
+      </div>
+      </div>
+
+      <template v-if="!isAdmin">
+        <div class="sticky top-[56px] z-20 -mx-[5px] mb-5 border-b border-slate-200 bg-white px-[5px] py-2 print:static sm:-mx-5 sm:px-5 md:top-[72px]">
+        <div class="flex w-fit flex-wrap gap-1 rounded-xl border border-slate-200 bg-white p-1">
+          <button
+            type="button"
+            class="rounded-lg px-3.5 py-2 text-sm font-bold transition-colors"
+            :class="userTabBtnClass('download')"
+            @click="userTab = 'download'"
+          >
+            작업자 어플
+          </button>
+          <button
+            type="button"
+            class="rounded-lg px-3.5 py-2 text-sm font-bold transition-colors"
+            :class="userTabBtnClass('workhours')"
+            @click="userTab = 'workhours'"
+          >
+            작업시간
+          </button>
+        </div>
+        </div>
+      </template>
 
       <!-- 페이지 헤더 -->
       <div class="mb-7 flex flex-wrap items-start justify-between gap-6">
@@ -220,7 +329,6 @@ watch(
           <h1 class="text-2xl font-extrabold text-slate-900">생산부 근태관리</h1>
           <p class="mt-1 text-sm text-slate-500">{{ periodLabel }} 휴가 신청 및 근태 현황</p>
         </div>
-        <WorkerAppDownloadPanel v-if="isAdmin" class="w-full max-w-sm" />
       </div>
 
       <!-- 통계 카드 (관리자만) -->
@@ -251,76 +359,6 @@ watch(
         </div>
       </div>
 
-      <!-- 관리자 탭 -->
-      <div v-if="isAdmin" class="mb-5 flex flex-wrap gap-1 rounded-xl border border-slate-200 bg-white p-1 w-fit">
-        <button
-          type="button"
-          class="rounded-lg px-3.5 py-2 text-sm font-bold transition-colors"
-          :class="tabBtnClass('requests')"
-          @click="activeTab = 'requests'"
-        >신청 현황</button>
-        <button
-          type="button"
-          class="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-bold transition-colors"
-          :class="tabBtnClass('approval')"
-          @click="activeTab = 'approval'"
-        >
-          부서장 대기
-          <span
-            v-if="approvalPendingCount > 0"
-            class="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-extrabold text-white"
-          >{{ approvalPendingCount }}</span>
-        </button>
-        <button
-          type="button"
-          class="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-bold transition-colors"
-          :class="tabBtnClass('gyeongyu')"
-          @click="activeTab = 'gyeongyu'"
-        >
-          경유 대기
-          <span
-            v-if="gyeongyuPendingCount > 0"
-            class="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-extrabold text-white"
-          >{{ gyeongyuPendingCount }}</span>
-        </button>
-        <button
-          type="button"
-          class="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-bold transition-colors"
-          :class="tabBtnClass('daepyo')"
-          @click="activeTab = 'daepyo'"
-        >
-          최종승인 대기
-          <span
-            v-if="daepyoPendingCount > 0"
-            class="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-purple-500 px-1 text-[10px] font-extrabold text-white"
-          >{{ daepyoPendingCount }}</span>
-        </button>
-        <button
-          type="button"
-          class="rounded-lg px-3.5 py-2 text-sm font-bold transition-colors"
-          :class="tabBtnClass('summary')"
-          @click="activeTab = 'summary'"
-        >근태요약</button>
-        <button
-          type="button"
-          class="rounded-lg px-3.5 py-2 text-sm font-bold transition-colors"
-          :class="tabBtnClass('employees')"
-          @click="activeTab = 'employees'"
-        >직원 목록</button>
-        <button
-          type="button"
-          class="rounded-lg px-3.5 py-2 text-sm font-bold transition-colors"
-          :class="tabBtnClass('analysis')"
-          @click="activeTab = 'analysis'"
-        >근태 분석</button>
-        <button
-          type="button"
-          class="rounded-lg px-3.5 py-2 text-sm font-bold transition-colors"
-          :class="tabBtnClass('workhours')"
-          @click="activeTab = 'workhours'"
-        >작업시간</button>
-      </div>
-
       <!-- ═══ 작업시간 달력 (관리자) ═══ -->
       <DailyWorkHoursPanel
         v-if="isAdmin && activeTab === 'workhours'"
@@ -339,7 +377,7 @@ watch(
 
       <!-- ═══ 직원 목록 탭 (관리자) ═══ -->
       <AttendanceEmployeeList
-        v-if="isAdmin && activeTab === 'employees'"
+        v-if="isAdmin && !scopedDepartments && activeTab === 'employees'"
         :employees="employees"
         :loading="employeesLoading"
         @create="emit('createEmployee', $event)"
@@ -349,12 +387,12 @@ watch(
 
       <!-- ═══ 근태 분석 탭 (관리자) ═══ -->
       <AttendanceAnalysisPanel
-        v-if="isAdmin && activeTab === 'analysis'"
+        v-if="isAdmin && !scopedDepartments && activeTab === 'analysis'"
         :employees="employees"
       />
 
       <AttendanceSummaryBoard
-        v-if="isAdmin && activeTab === 'summary'"
+        v-if="isAdmin && !scopedDepartments && activeTab === 'summary'"
         :requests="summaryRequests"
         :loading="summaryLoading"
         :year="summaryYear"
@@ -374,6 +412,7 @@ watch(
           v-else
           :items="deptHeadPendingItems"
           mode="approval"
+          :can-dept-head-approve="canDeptHeadApprove"
           :leave-badge-class="leaveTypeBadge"
           @open-detail="emit('openDetail', $event)"
           @open-evidence="openEvidenceGallery($event.urls, $event.index)"
@@ -393,7 +432,9 @@ watch(
           :items="gyeongyuPendingItems"
           mode="gyeongyu"
           :can-manage="canManagePending"
+          :can-gyeongyu="canGyeongyu"
           :leave-badge-class="leaveTypeBadge"
+          @reject="emit('openReject', $event)"
           @open-detail="emit('openDetail', $event)"
           @open-evidence="openEvidenceGallery($event.urls, $event.index)"
           @gyeongyu="emit('gyeongyu', $event)"
@@ -413,6 +454,7 @@ watch(
           :items="finalApprovalPendingItems"
           mode="daepyo"
           :can-manage="canManagePending"
+          :can-final-approve="canFinalApprove"
           :leave-badge-class="leaveTypeBadge"
           @open-detail="emit('openDetail', $event)"
           @open-evidence="openEvidenceGallery($event.urls, $event.index)"
@@ -424,25 +466,6 @@ watch(
       </template>
 
       <template v-if="!isAdmin">
-        <div class="mb-5 flex w-fit flex-wrap gap-1 rounded-xl border border-slate-200 bg-white p-1">
-          <button
-            type="button"
-            class="rounded-lg px-3.5 py-2 text-sm font-bold transition-colors"
-            :class="userTabBtnClass('download')"
-            @click="userTab = 'download'"
-          >
-            작업자 어플
-          </button>
-          <button
-            type="button"
-            class="rounded-lg px-3.5 py-2 text-sm font-bold transition-colors"
-            :class="userTabBtnClass('workhours')"
-            @click="userTab = 'workhours'"
-          >
-            작업시간
-          </button>
-        </div>
-
         <WorkerAppDownloadPanel v-if="userTab === 'download'" />
         <DailyWorkHoursPanel
           v-else
@@ -480,6 +503,7 @@ watch(
             :filters="filters"
             :departments="departments"
             :is-admin="isAdmin"
+            :lock-department="departmentLocked"
             @update:filters="emit('update:filters', $event)"
             @print-all-approved="emit('printAllApproved')"
           />
@@ -505,6 +529,10 @@ watch(
                   :items="pagedRequestItems"
                   mode="requests"
                   :is-root-admin="isRootAdmin"
+                  :can-dept-head-approve="canDeptHeadApprove"
+                  :can-gyeongyu="canGyeongyu"
+                  :can-final-approve="canFinalApprove"
+                  :reapply-rejected="reapplyRejected"
                   :leave-badge-class="leaveTypeBadge"
                   :status-badge-class="statusBadge"
                   @open-detail="emit('openDetail', $event)"
@@ -550,7 +578,7 @@ watch(
         <div class="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
           <div class="mb-5 flex items-center justify-between gap-3">
             <h2 class="text-lg font-extrabold text-slate-900">
-              {{ isEditForm ? '휴가 신청 수정' : '휴가 신청' }}
+              {{ isReapply ? '재신청' : isEditForm ? '휴가 신청 수정' : '휴가 신청' }}
             </h2>
             <button
               v-if="formData.selectedEmployeeName && formData.selectedDepartment"
@@ -566,7 +594,9 @@ watch(
             :model-value="formData"
             :loading="formLoading"
             :is-edit="isEditForm"
+            :reapply="isReapply"
             :employees="employees"
+            :allowed-departments="scopedDepartments ?? undefined"
             :hide-employee-selector="hideFormEmployeeSelector"
             :exclude-request-id="editRequestId"
             :upload-user-id="currentUserId"

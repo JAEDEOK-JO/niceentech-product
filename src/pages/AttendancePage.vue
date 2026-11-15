@@ -20,6 +20,7 @@ import {
   createAttendanceRequest,
   updateAttendanceRequest,
   adminUpdateAttendanceRequest,
+  resubmitAttendanceRequest,
   deleteAttendanceRequest,
   adminDeleteAttendanceRequest,
   approveAttendanceRequest,
@@ -60,15 +61,21 @@ import {
 } from '@/features/attendance/types/attendance'
 import { validateHomeLeaveForm } from '@/features/attendance/utils/homeLeavePolicy'
 import AttendanceView from '@/features/attendance/components/AttendanceView.vue'
+import WorkerManagementTabs from '@/features/worker-management/components/WorkerManagementTabs.vue'
+import RewardDashboard from '@/features/worker-management/reward/RewardDashboard.vue'
 import { printAttendanceLeaveApplication, printAllApprovedAttendanceLeaveApplications } from '@/features/attendance/utils/attendanceLeavePrint'
 import { isDeptHeadPending, isFinalApprovalPending, isGyeongyuPending, getAttendanceStatusLabel } from '@/features/attendance/utils/attendanceApprover'
 import type { AttendanceStatusChangeValue } from '@/features/attendance/utils/attendanceRequestStatus'
 import {
   ATTENDANCE_APPROVAL_DENIED_MESSAGE,
-  canDeptHeadApprove,
+  canDeptHeadApproveItem,
   canFinalApprove,
   canGyeongyuApprove,
   canManageAttendancePending,
+  canRejectAttendanceItem,
+  canSetAttendanceStatus,
+  usesAttendanceReapply,
+  getScopedAttendanceDepartments,
   TEMP_FINAL_APPROVER_NAME,
   TEMP_GYEONGYU_APPROVER_NAME,
 } from '@/features/attendance/utils/attendanceApprovalAccess'
@@ -83,6 +90,25 @@ const currentDept = computed(() => profile.value?.department ?? '')
 
 // 관리자 판별: profiles.role 컬럼 기준
 const isAdmin = computed(() => isAdminRole(profile.value?.role))
+const managementSection = ref<'reward' | 'attendance'>('attendance')
+const scopedDepartments = computed(() =>
+  getScopedAttendanceDepartments(profile.value?.role, currentUserName.value),
+)
+const visibleDepartments = computed(() => scopedDepartments.value ?? departments.value)
+
+function inAttendanceScope(department: string) {
+  const scope = scopedDepartments.value
+  return !scope || scope.includes(department)
+}
+
+function scopedRequestFilters(source: AttendanceFilters = filters): AttendanceFilters {
+  const scope = scopedDepartments.value
+  if (!scope) return { ...source }
+  const department = scope.length === 1
+    ? scope[0]
+    : (scope.includes(source.department) ? source.department : '')
+  return { ...source, department }
+}
 const {
   unreadCount: attendanceUnreadCount,
   markAllAsRead: markAllAttendanceNotificationsAsRead,
@@ -99,6 +125,12 @@ watch(
 const { confirm, alert } = useDialog()
 const isRootAdminUser = computed(() => isRootAdmin(profile.value?.role))
 const canManagePending = computed(() => canManageAttendancePending(currentUserName.value))
+const userCanGyeongyu = computed(() => canGyeongyuApprove(currentUserName.value))
+const userCanFinal = computed(() => canFinalApprove(currentUserName.value))
+
+function userCanDeptHeadApprove(item: AttendanceRequest) {
+  return canDeptHeadApproveItem(currentUserName.value, profile.value?.role, item.department)
+}
 
 // ─── 필터 ──────────────────────────────────────────────────────────────────────
 const thisYear = new Date().getFullYear()
@@ -286,6 +318,8 @@ const summaryRequests = ref<AttendanceRequest[]>([])
 const formVisible = ref(false)
 const formLoading = ref(false)
 const isEditForm = ref(false)
+const isReapplyForm = ref(false)
+const userUsesReapply = computed(() => usesAttendanceReapply(currentUserName.value))
 const editTargetId = ref<number | null>(null)
 const formData = ref<AttendanceFormState>(createEmptyForm())
 const hideFormEmployeeSelector = ref(false)
@@ -339,11 +373,14 @@ async function loadItems({ silent = false } = {}) {
   if (!silent) loading.value = true
   try {
     // 관리자: 필터 적용 전체, 일반: 전체 목록(필터 없이) 조회
-    if (isAdmin.value) {
-      items.value = await fetchAttendanceRequests({ ...filters })
-    } else {
-      items.value = await fetchAttendanceRequests({ ...filters, searchQuery: '' })
-    }
+    const requestFilters = scopedRequestFilters({
+      ...filters,
+      searchQuery: isAdmin.value ? filters.searchQuery : '',
+    })
+    const rows = await fetchAttendanceRequests(requestFilters)
+    items.value = requestFilters.department
+      ? rows
+      : rows.filter((item) => inAttendanceScope(item.department))
   } catch {
     showToast('목록을 불러오지 못했습니다.', 'error')
   } finally {
@@ -357,7 +394,8 @@ async function loadPendingItems({ silent = false } = {}) {
     return
   }
   try {
-    pendingItems.value = await fetchPendingAttendanceRequests()
+    const rows = await fetchPendingAttendanceRequests()
+    pendingItems.value = rows.filter((item) => inAttendanceScope(item.department))
   } catch {
     if (!silent) showToast('승인 대기 목록을 불러오지 못했습니다.', 'error')
     pendingItems.value = []
@@ -400,10 +438,11 @@ async function loadMonthlySummary({ silent = false } = {}) {
 
   if (!silent) summaryLoading.value = true
   try {
-    summaryRequests.value = await fetchApprovedAttendanceRequestsByMonth(
+    const rows = await fetchApprovedAttendanceRequestsByMonth(
       summaryYear.value,
       summaryMonth.value,
     )
+    summaryRequests.value = rows.filter((item) => inAttendanceScope(item.department))
   } catch {
     summaryRequests.value = []
     showToast('근태요약을 불러오지 못했습니다.', 'error')
@@ -441,8 +480,16 @@ watch([summaryYear, summaryMonth, isAdmin], () => {
   void loadMonthlySummary()
 })
 
+function applyFilters(next: AttendanceFilters) {
+  const scoped = scopedRequestFilters(next)
+  Object.assign(filters, next, { department: scoped.department })
+}
+
 watch(() => profile.value, async (p) => {
   if (!p) return
+  const scope = getScopedAttendanceDepartments(p.role, p.name)
+  if (scope?.length === 1) filters.department = scope[0]
+  else if (scope && filters.department && !scope.includes(filters.department)) filters.department = ''
   await Promise.all([
     loadItems(),
     loadPendingItems(),
@@ -478,6 +525,7 @@ onUnmounted(() => {
 function openForm() {
   formData.value = createEmptyForm()
   isEditForm.value = false
+  isReapplyForm.value = false
   editTargetId.value = null
   hideFormEmployeeSelector.value = false
   formVisible.value = true
@@ -490,6 +538,7 @@ function openFormForEmployee(emp: Employee) {
     selectedEmployeeName: emp.name,
   }
   isEditForm.value = false
+  isReapplyForm.value = false
   editTargetId.value = null
   hideFormEmployeeSelector.value = true
   formVisible.value = true
@@ -497,6 +546,7 @@ function openFormForEmployee(emp: Employee) {
 
 function closeForm() {
   formVisible.value = false
+  isReapplyForm.value = false
 }
 
 function openEditForm(item: AttendanceRequest) {
@@ -511,6 +561,7 @@ function openEditForm(item: AttendanceRequest) {
     evidenceUrls: [...(item.evidenceUrls ?? [])],
   }
   isEditForm.value = true
+  isReapplyForm.value = false
   editTargetId.value = item.id
   hideFormEmployeeSelector.value = false
   formVisible.value = true
@@ -519,6 +570,10 @@ function openEditForm(item: AttendanceRequest) {
 async function submitForm() {
   if (!formData.value.selectedEmployeeName) {
     showToast('직원을 선택해주세요.', 'error')
+    return
+  }
+  if (!inAttendanceScope(formData.value.selectedDepartment)) {
+    showToast('부서를 선택해주세요.', 'error')
     return
   }
 
@@ -557,12 +612,14 @@ async function submitForm() {
   if (isEditForm.value && editTargetId.value !== null) {
     formLoading.value = true
     try {
-      if (isAdmin.value) {
+      if (isReapplyForm.value) {
+        await resubmitAttendanceRequest(editTargetId.value, formData.value)
+      } else if (isAdmin.value) {
         await adminUpdateAttendanceRequest(editTargetId.value, formData.value)
       } else {
         await updateAttendanceRequest(editTargetId.value, formData.value)
       }
-      showToast('수정되었습니다.')
+      showToast(isReapplyForm.value ? '재신청되었습니다.' : '수정되었습니다.')
       markLocalAttendanceMutation()
       formVisible.value = false
       await refreshAttendanceAfterMutation()
@@ -634,6 +691,7 @@ function handleAdminEdit(item: AttendanceRequest) {
     evidenceUrls: [...(item.evidenceUrls ?? [])],
   }
   isEditForm.value = true
+  isReapplyForm.value = item.status === '반려' && userUsesReapply.value
   editTargetId.value = item.id
   hideFormEmployeeSelector.value = false
   formVisible.value = true
@@ -673,10 +731,10 @@ async function handlePrint(item: AttendanceRequest) {
 async function handlePrintAllApproved() {
   if (!isAdmin.value) return
   try {
-    const approvedItems = await fetchAttendanceRequests({
+    const approvedItems = (await fetchAttendanceRequests(scopedRequestFilters({
       ...filters,
       status: '승인',
-    })
+    }))).filter((item) => inAttendanceScope(item.department))
     const printed = await printAllApprovedAttendanceLeaveApplications(approvedItems, employees.value)
     if (!printed) return
     const ids = approvedItems.map((item) => item.id)
@@ -734,7 +792,7 @@ async function handleGyeongyu(item: AttendanceRequest) {
 
 // ─── 승인 ──────────────────────────────────────────────────────────────────────
 async function handleApprove(item: AttendanceRequest) {
-  if (!await ensureApprovalAccess(canDeptHeadApprove(currentUserName.value))) return
+  if (!await ensureApprovalAccess(canDeptHeadApproveItem(currentUserName.value, profile.value?.role, item.department))) return
   if (!await confirm(`${item.userName}의 신청을 승인하시겠습니까?`)) return
   try {
     await approveAttendanceRequest(item.id, currentUserName.value)
@@ -763,6 +821,15 @@ function closeRejectDialog() {
 
 async function submitReject() {
   if (!rejectTarget.value) return
+  if (!canRejectAttendanceItem(
+    currentUserName.value,
+    profile.value?.role,
+    rejectTarget.value.department,
+    rejectTarget.value.status,
+  )) {
+    await alert(ATTENDANCE_APPROVAL_DENIED_MESSAGE)
+    return
+  }
   if (!rejectReason.value.trim()) {
     showToast('반려 사유를 입력해주세요.', 'error')
     return
@@ -786,6 +853,10 @@ async function submitReject() {
 async function handleChangeStatus(payload: { item: AttendanceRequest; status: AttendanceStatusChangeValue }) {
   const { item, status } = payload
   if (item.status !== '반려' || status === '반려') return
+  if (!canSetAttendanceStatus(currentUserName.value, profile.value?.role, item.department, status)) {
+    await alert(ATTENDANCE_APPROVAL_DENIED_MESSAGE)
+    return
+  }
   const label = getAttendanceStatusLabel(status)
   if (!await confirm(`${item.userName}의 상태를 '${label}'(으)로 변경하시겠습니까?`)) return
   try {
@@ -831,11 +902,20 @@ async function handleDeleteEmployee(id: number) {
 </script>
 
 <template>
+  <div class="min-h-screen bg-white">
+  <div v-if="isAdmin" class="sticky top-[56px] z-30 flex h-[70px] items-center border-b border-slate-200 bg-white px-[5px] print:static sm:px-5 md:top-[72px]">
+    <WorkerManagementTabs v-model="managementSection" />
+  </div>
+  <div v-if="isAdmin && managementSection === 'reward'" class="bg-white px-[5px] pb-8 sm:px-5">
+    <RewardDashboard />
+  </div>
   <AttendanceView
+    v-else
     :items="items"
     :pending-items="pendingItems"
     :filters="filters"
-    :departments="departments"
+    :departments="visibleDepartments"
+    :scoped-departments="scopedDepartments"
     :quota="quota"
     :stats="stats"
     :employees="employees"
@@ -848,6 +928,9 @@ async function handleDeleteEmployee(id: number) {
     :is-admin="isAdmin"
     :is-root-admin="isRootAdminUser"
     :can-manage-pending="canManagePending"
+    :can-dept-head-approve="userCanDeptHeadApprove"
+    :can-gyeongyu="userCanGyeongyu"
+    :can-final-approve="userCanFinal"
     :approval-pending-count="approvalPendingCount"
     :daepyo-pending-count="daepyoPendingCount"
     :gyeongyu-pending-count="gyeongyuPendingCount"
@@ -856,6 +939,8 @@ async function handleDeleteEmployee(id: number) {
     :form-loading="formLoading"
     :form-data="formData"
     :is-edit-form="isEditForm"
+    :is-reapply="isReapplyForm"
+    :reapply-rejected="userUsesReapply"
     :hide-form-employee-selector="hideFormEmployeeSelector"
     :edit-request-id="editTargetId"
     :toast="toast"
@@ -863,7 +948,7 @@ async function handleDeleteEmployee(id: number) {
     :reject-target="rejectTarget"
     :reject-reason="rejectReason"
     :reject-evidence-urls="rejectEvidenceUrls"
-    @update:filters="Object.assign(filters, $event)"
+    @update:filters="applyFilters"
     @update:summary-year="summaryYear = $event"
     @update:summary-month="summaryMonth = $event"
     @update:form-data="formData = $event"
@@ -908,4 +993,5 @@ async function handleDeleteEmployee(id: number) {
     @update-daily-work-hours="handleUpdateDailyWorkHours"
     @select-daily-work-date="setDailyWorkDate"
   />
+  </div>
 </template>

@@ -22,10 +22,10 @@ const DAEPYO_PROFILE_NAME = '__daepyo__'
 const DAEPYO_DISPLAY_NAME = '이용필'
 
 const DEPARTMENT_MANAGER_BY_DEPARTMENT: Record<string, string> = {
-  용접부: '민뚜라',
+  용접부: '김동완',
   나사부: '압둘라',
-  CNC: '소히돌',
-  CNC부: '소히돌',
+  CNC: '김동완',
+  CNC부: '김동완',
   지게차: '최용식',
 }
 const PRODUCTION_MANAGER_BY_ASSIGNED_DEPARTMENT: Record<string, string> = {
@@ -69,11 +69,10 @@ const approvalSigners = computed(() => [
 const isApproved = computed(() => props.item.status === ATTENDANCE_WORKFLOW_STATUS.APPROVED)
 const isBuseojanApproved = computed(() => isDeptHeadApproved(props.item))
 
-const shouldShowSignature = (name: string) => {
-  if (!name) return false
-  if (name === managerDisplayName.value) return true
-  if (name === buseojangDisplayName.value) return isBuseojanApproved.value
-  if (name === DAEPYO_PROFILE_NAME) return isApproved.value && !!props.item.daepyoBy
+const shouldShowSignature = (role: string) => {
+  if (role === '담당') return Boolean(managerDisplayName.value)
+  if (role === '부서장') return isBuseojanApproved.value && Boolean(buseojangDisplayName.value)
+  if (role === '대표이사') return isApproved.value && !!props.item.daepyoBy
   return false
 }
 
@@ -86,10 +85,10 @@ const formatSignerDate = (value: string | null) => {
   const [, year, month, day] = matched
   return `${year.slice(2)}.${month}.${day}`
 }
-const getSignerDate = (profileName: string) => {
-  if (profileName === managerDisplayName.value) return formatSignerDate(props.item.createdAt)
-  if (profileName === buseojangDisplayName.value && isBuseojanApproved.value) return formatSignerDate(props.item.approvedAt)
-  if (profileName === DAEPYO_PROFILE_NAME && isApproved.value) return formatSignerDate(props.item.daepyoAt)
+const getSignerDate = (role: string) => {
+  if (role === '담당') return formatSignerDate(props.item.createdAt)
+  if (role === '부서장' && isBuseojanApproved.value) return formatSignerDate(props.item.approvedAt)
+  if (role === '대표이사' && isApproved.value) return formatSignerDate(props.item.daepyoAt)
   return ''
 }
 
@@ -176,7 +175,7 @@ const statusLabel = computed(() => {
         <tbody>
           <tr>
             <td v-for="signer in approvalSigners" :key="signer.role" class="stamp-cell">
-              <template v-if="shouldShowSignature(signer.profileName)">
+              <template v-if="shouldShowSignature(signer.role)">
                 <div class="stamp-wrap">
                   <img :src="approvalStampUrl" :alt="`${signer.displayName} 도장`" class="stamp-img" />
                   <span class="stamp-name">{{ signer.displayName }}</span>
@@ -186,7 +185,7 @@ const statusLabel = computed(() => {
           </tr>
           <tr>
             <td v-for="signer in approvalSigners" :key="`${signer.role}_date`" class="date-cell">
-              {{ getSignerDate(signer.profileName) || '-' }}
+              {{ getSignerDate(signer.role) || '-' }}
             </td>
           </tr>
         </tbody>

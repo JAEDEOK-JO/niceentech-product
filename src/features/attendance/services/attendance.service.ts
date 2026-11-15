@@ -240,6 +240,40 @@ export async function adminDeleteAttendanceRequest(id: number): Promise<void> {
   await cleanupEvidenceStorage(evidenceUrls)
 }
 
+// ─── 반려 건 재신청 (대기중으로 되돌림) ───────────────────────────────────────
+export async function resubmitAttendanceRequest(
+  id: number,
+  form: AttendanceFormState,
+): Promise<void> {
+  const { data, error } = await supabase
+    .from('attendance_requests')
+    .update({
+      leave_type: form.leaveType,
+      start_date: form.startDate,
+      end_date: form.endDate,
+      days_count: form.daysCount,
+      reason: form.reason,
+      evidence_urls: form.evidenceUrls ?? [],
+      user_name: form.selectedEmployeeName,
+      department: form.selectedDepartment,
+      status: '대기중',
+      reject_reason: null,
+      approved_by: null,
+      approved_at: null,
+      gyeongyu_by: null,
+      gyeongyu_at: null,
+      daepyo_by: null,
+      daepyo_at: null,
+    })
+    .eq('id', id)
+    .eq('status', '반려')
+    .select('id')
+    .maybeSingle()
+
+  if (error) throw error
+  if (!data) throw new Error('재신청할 수 없는 상태입니다.')
+}
+
 // ─── 신청 수정 (관리자, 상태 무관) ────────────────────────────────────────────
 export async function adminUpdateAttendanceRequest(
   id: number,
@@ -369,7 +403,7 @@ export async function rejectAttendanceRequest(
   rejectReason: string,
   evidenceUrls?: string[],
 ): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('attendance_requests')
     .update({
       status: '반려',
@@ -379,8 +413,12 @@ export async function rejectAttendanceRequest(
       ...(evidenceUrls ? { evidence_urls: evidenceUrls } : {}),
     })
     .eq('id', id)
+    .in('status', ['대기중', '경유대기', '부서장승인', '최종대기'])
+    .select('id')
+    .maybeSingle()
 
   if (error) throw error
+  if (!data) throw new Error('반려할 수 없는 상태입니다.')
 }
 
 export async function markAttendanceRequestPrinted(id: number): Promise<string> {

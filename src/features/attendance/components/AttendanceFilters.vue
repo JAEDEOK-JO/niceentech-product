@@ -6,6 +6,7 @@ const props = defineProps<{
   filters: AttendanceFilters
   departments: string[]
   isAdmin: boolean
+  lockDepartment?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -64,7 +65,7 @@ const selectClass =
         :class="[selectClass, 'min-w-[6.5rem]']"
         @change="update('department', ($event.target as HTMLSelectElement).value)"
       >
-        <option value="">전체 부서</option>
+        <option v-if="!lockDepartment" value="">전체 부서</option>
         <option v-for="dept in departments" :key="dept" :value="dept">{{ dept }}</option>
       </select>
 

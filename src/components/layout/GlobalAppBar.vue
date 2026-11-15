@@ -60,12 +60,14 @@ const navItems = computed(() => {
     to: { name: 'messenger' },
     badgeCount: totalUnreadCount.value,
   })
-  items.push({
-    key: 'attendance',
-    label: '근태관리',
-    to: { name: 'attendance' },
-    badgeCount: isAdminRole(profile.value?.role) ? attendanceUnreadCount.value : 0,
-  })
+  if (isAdminRole(profile.value?.role)) {
+    items.push({
+      key: 'attendance',
+      label: '작업자 관리',
+      to: { name: 'attendance' },
+      badgeCount: attendanceUnreadCount.value,
+    })
+  }
   return items
 })
 

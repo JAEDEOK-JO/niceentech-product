@@ -13,11 +13,19 @@ const props = defineProps<{
   item: AttendanceRequest
   badgeClass?: string
   editable?: boolean
+  allowedStatuses?: readonly AttendanceStatusChangeValue[]
 }>()
 
 const emit = defineEmits<{
   (e: 'change', status: AttendanceStatusChangeValue): void
 }>()
+
+const options = computed(() => {
+  if (!props.allowedStatuses) return attendanceStatusChangeOptions
+  const allowed = new Set<string>(props.allowedStatuses)
+  allowed.add(props.item.status)
+  return attendanceStatusChangeOptions.filter((option) => allowed.has(option.value))
+})
 
 const showSelect = computed(() => props.editable && canChangeAttendanceStatus(props.item.status))
 
@@ -41,7 +49,7 @@ function onChange(event: Event) {
       @change="onChange"
     >
       <option
-        v-for="option in attendanceStatusChangeOptions"
+        v-for="option in options"
         :key="option.value"
         :value="option.value"
       >

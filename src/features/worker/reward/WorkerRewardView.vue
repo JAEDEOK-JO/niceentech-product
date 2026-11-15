@@ -4,7 +4,9 @@ import RewardPhotoViewer from './RewardPhotoViewer.vue'
 import RewardReportSides from './RewardReportSides.vue'
 import { formatRewardWon } from './rewardAmount'
 import { reportInRewardMonth, rewardMonthLabel, shiftRewardMonth } from './rewardMonth'
-import { fetchMyRewards } from './reward.service'
+import { rewardRanks } from './rewardRanks'
+import { fetchRewardFeed } from './reward.service'
+import RewardMonthRanks from './RewardMonthRanks.vue'
 import WorkerRewardRegisterView from './WorkerRewardRegisterView.vue'
 
 const props = defineProps({
@@ -25,6 +27,7 @@ const monthTitle = computed(() => rewardMonthLabel(monthOffset.value))
 const visibleItems = computed(() =>
   items.value.filter((item) => reportInRewardMonth(item.created_at, monthOffset.value)),
 )
+const ranks = computed(() => rewardRanks(visibleItems.value))
 const approvedTotal = computed(() =>
   visibleItems.value
     .filter((item) => item.status === '승인')
@@ -49,7 +52,7 @@ async function load() {
   loading.value = true
   loadFailed.value = false
   try {
-    items.value = await fetchMyRewards(props.userId)
+    items.value = await fetchRewardFeed()
   } catch {
     items.value = []
     loadFailed.value = true
@@ -116,6 +119,8 @@ onMounted(load)
       </button>
     </div>
 
+    <RewardMonthRanks :ranks="ranks" />
+
     <div v-if="loading" class="py-16 text-center">
       <div class="inline-block h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-slate-700" />
     </div>
@@ -132,8 +137,11 @@ onMounted(load)
         :key="item.id"
         class="rounded-2xl border border-slate-200 bg-white p-3"
       >
-        <div class="mb-3 flex items-center justify-between gap-3">
-          <p class="text-xs font-bold text-slate-400">{{ formatWhen(item.created_at) }}</p>
+        <div class="mb-3 flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <p class="truncate text-sm font-extrabold text-slate-900">{{ item.name }}</p>
+            <p class="mt-0.5 text-xs font-bold text-slate-400">{{ formatWhen(item.created_at) }}</p>
+          </div>
           <div class="flex shrink-0 items-center gap-2">
             <p v-if="item.status === '승인'" class="text-xs font-extrabold text-amber-700">
               {{ formatRewardWon(item.amount) }}

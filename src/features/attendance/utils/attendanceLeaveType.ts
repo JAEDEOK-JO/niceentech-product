@@ -1,11 +1,13 @@
 export const LEAVE_TYPE_OUTING = '외출'
 export const LEAVE_TYPE_ABSENCE = '결근'
 export const LEAVE_TYPE_HOME = '귀국휴가'
+export const LEAVE_TYPE_UNPAID = '무급휴가'
 
 export const LEAVE_TYPES = [
   '연차',
   '반차(오전)',
   '반차(오후)',
+  LEAVE_TYPE_UNPAID,
   LEAVE_TYPE_ABSENCE,
   LEAVE_TYPE_HOME,
 ] as const
@@ -69,6 +71,7 @@ export function getLeaveApplicationDocumentTitle(leaveType: string): string {
   if (isHomeLeaveType(leaveType)) return '귀국휴가계'
   if (leaveType === LEAVE_TYPE_OUTING) return '외출계'
   if (leaveType === LEAVE_TYPE_ABSENCE) return '결근계'
+  if (leaveType === LEAVE_TYPE_UNPAID) return '휴가계'
   const label = String(leaveType ?? '').trim()
   return label ? `${label}계` : '휴가신청서'
 }

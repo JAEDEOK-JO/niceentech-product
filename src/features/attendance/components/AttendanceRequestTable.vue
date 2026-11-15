@@ -10,6 +10,10 @@ const props = defineProps<{
   mode: 'requests' | 'approval' | 'gyeongyu' | 'daepyo'
   isRootAdmin?: boolean
   canManage?: boolean
+  canDeptHeadApprove?: (item: AttendanceRequest) => boolean
+  canGyeongyu?: boolean
+  canFinalApprove?: boolean
+  reapplyRejected?: boolean
   leaveBadgeClass: (type: string) => string
   statusBadgeClass?: (status: string) => string
 }>()
@@ -63,15 +67,30 @@ const BTN = {
   printedOrange: 'rounded-lg border border-orange-200 bg-orange-100 px-3 py-1.5 text-xs font-bold text-orange-800 hover:bg-orange-200',
 }
 
+function changeableStatuses(item: AttendanceRequest): AttendanceStatusChangeValue[] {
+  const statuses: AttendanceStatusChangeValue[] = []
+  if (props.canDeptHeadApprove?.(item)) statuses.push('대기중')
+  if (props.canGyeongyu) statuses.push('경유대기')
+  if (props.canFinalApprove) statuses.push('최종대기')
+  return statuses
+}
+
 function actionsFor(item: AttendanceRequest): ActionDef[] {
   if (props.mode === 'approval') {
+    if (!props.canDeptHeadApprove?.(item)) return []
     return [
       { key: 'approve', label: '승인', buttonClass: BTN.emerald },
       { key: 'reject', label: '반려', buttonClass: BTN.red },
     ]
   }
   if (props.mode === 'gyeongyu') {
-    const actions: ActionDef[] = [{ key: 'gyeongyu', label: '경유', buttonClass: BTN.blue }]
+    const actions: ActionDef[] = []
+    if (props.canGyeongyu) {
+      actions.push(
+        { key: 'gyeongyu', label: '경유', buttonClass: BTN.blue },
+        { key: 'reject', label: '반려', buttonClass: BTN.red },
+      )
+    }
     if (props.canManage) {
       actions.push(
         { key: 'adminEdit', label: '수정', buttonClass: BTN.outline },
@@ -81,10 +100,13 @@ function actionsFor(item: AttendanceRequest): ActionDef[] {
     return actions
   }
   if (props.mode === 'daepyo') {
-    const actions: ActionDef[] = [
-      { key: 'daepyoApprove', label: '최종승인', buttonClass: BTN.purple },
-      { key: 'reject', label: '반려', buttonClass: BTN.red },
-    ]
+    const actions: ActionDef[] = []
+    if (props.canFinalApprove) {
+      actions.push(
+        { key: 'daepyoApprove', label: '최종승인', buttonClass: BTN.purple },
+        { key: 'reject', label: '반려', buttonClass: BTN.red },
+      )
+    }
     if (props.canManage) {
       actions.push(
         { key: 'adminEdit', label: '수정', buttonClass: BTN.outline },
@@ -94,8 +116,9 @@ function actionsFor(item: AttendanceRequest): ActionDef[] {
     return actions
   }
   if (item.status !== '승인') {
+    const editLabel = item.status === '반려' && props.reapplyRejected ? '재신청' : '수정'
     return [
-      { key: 'adminEdit', label: '수정', buttonClass: BTN.outline },
+      { key: 'adminEdit', label: editLabel, buttonClass: BTN.outline },
       { key: 'adminDelete', label: '삭제', buttonClass: BTN.outlineRed },
     ]
   }
@@ -182,7 +205,8 @@ function runAction(key: ActionKey, item: AttendanceRequest) {
             <AttendanceRequestStatusSelect
               :item="item"
               :badge-class="statusClass(item)"
-              :editable="true"
+              :editable="item.status === '반려' && changeableStatuses(item).length > 0"
+              :allowed-statuses="changeableStatuses(item)"
               @change="onStatusChange(item, $event)"
             />
           </td>
@@ -233,7 +257,8 @@ function runAction(key: ActionKey, item: AttendanceRequest) {
             v-if="mode === 'requests'"
             :item="item"
             :badge-class="statusClass(item)"
-            :editable="true"
+            :editable="item.status === '반려' && changeableStatuses(item).length > 0"
+            :allowed-statuses="changeableStatuses(item)"
             @change="onStatusChange(item, $event)"
           />
         </div>

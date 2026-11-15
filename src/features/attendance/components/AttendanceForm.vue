@@ -38,7 +38,9 @@ const props = defineProps<{
   modelValue: AttendanceFormState
   loading: boolean
   isEdit: boolean
+  reapply?: boolean
   employees: Employee[]
+  allowedDepartments?: readonly string[]
   hideEmployeeSelector?: boolean
   excludeRequestId?: number | null
   uploadUserId?: string
@@ -62,7 +64,11 @@ const homeLeaveLoading = ref(false)
 const DEPT_ORDER = ['생산부', '용접부', '나사부', 'CNC', '지게차']
 const departments = computed(() => {
   const set = new Set(props.employees.map((e) => e.department).filter(Boolean))
-  return DEPT_ORDER.filter((d) => set.has(d))
+  const ordered = DEPT_ORDER.filter((d) => set.has(d))
+  const allowed = props.allowedDepartments
+  if (!allowed?.length) return ordered
+  const allowedSet = new Set(allowed)
+  return ordered.filter((d) => allowedSet.has(d))
 })
 
 // 선택된 부서의 직원 이름 목록
@@ -488,7 +494,7 @@ function onEndDateChange(date: string) {
         class="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-bold text-white hover:bg-slate-700 disabled:opacity-50"
         :disabled="loading || cannotSubmitForLeaveBalance || cannotSubmitForHomeLeave || homeLeaveLoading"
       >
-        {{ loading ? '처리 중...' : isEdit ? '수정' : '신청' }}
+        {{ loading ? '처리 중...' : reapply ? '재신청' : isEdit ? '수정' : '신청' }}
       </button>
     </div>
   </form>
