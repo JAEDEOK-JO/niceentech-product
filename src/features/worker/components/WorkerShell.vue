@@ -31,7 +31,12 @@ const emit = defineEmits<{
         :name="name"
         :department="department"
       />
-      <WorkerRewardView v-else-if="tab === 'reward'" :user-id="userId" />
+      <WorkerRewardView
+        v-else-if="tab === 'reward'"
+        :user-id="userId"
+        :name="name"
+        :department="department"
+      />
       <WorkerProfileView v-else :name="name" @logout="emit('logout')" />
     </main>
     <WorkerBottomNav v-model="tab" />

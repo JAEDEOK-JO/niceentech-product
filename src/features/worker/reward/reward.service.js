@@ -41,16 +41,19 @@ export async function fetchRewardFeed() {
   if (error) throw error
   const rows = await attachRewardPhotoUrls(data ?? [])
   const userIds = [...new Set(rows.map((row) => row.user_id).filter(Boolean))]
-  const names = new Map()
+  const profilesById = new Map()
   if (userIds.length > 0) {
     const { data: profiles, error: profileError } = await supabase
       .from('profiles')
-      .select('id,name')
+      .select('id,name,assigned_department')
       .in('id', userIds)
     if (profileError) throw profileError
-    for (const profile of profiles ?? []) names.set(profile.id, profile.name || '')
+    for (const profile of profiles ?? []) profilesById.set(profile.id, profile)
   }
-  return rows.map((row) => ({ ...row, name: names.get(row.user_id) || '' }))
+  return rows.map((row) => {
+    const profile = profilesById.get(row.user_id)
+    return { ...row, name: profile?.name || '', department: profile?.assigned_department || '' }
+  })
 }
 
 async function uploadPhotos(userId, files) {

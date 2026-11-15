@@ -6,12 +6,20 @@ const props = defineProps({
     type: Array,
     required: true,
   },
+  labels: {
+    type: Array,
+    default: () => [],
+  },
+  start: {
+    type: Number,
+    default: 0,
+  },
 })
 
 const emit = defineEmits(['close'])
 
 const rootRef = ref(null)
-const index = ref(0)
+const index = ref(Math.min(Math.max(0, props.start), Math.max(0, props.urls.length - 1)))
 const scale = ref(1)
 const pan = ref({ x: 0, y: 0 })
 const points = new Map()
@@ -109,7 +117,16 @@ onMounted(() => {
     >
       <div class="flex items-center justify-between gap-3 px-4 py-3">
         <button type="button" class="text-sm font-bold" @click="emit('close')">닫기</button>
-        <p v-if="urls.length > 1" class="text-sm font-bold">{{ index + 1 }}/{{ urls.length }}</p>
+        <div class="flex items-center gap-2 text-sm font-bold">
+          <span
+            v-if="labels[index]"
+            class="rounded-md px-1.5 py-0.5 text-xs font-extrabold"
+            :class="labels[index] === '문제' ? 'bg-rose-500' : 'bg-white/20'"
+          >
+            {{ labels[index] }}
+          </span>
+          <span v-if="urls.length > 1">{{ index + 1 }}/{{ urls.length }}</span>
+        </div>
       </div>
 
       <div

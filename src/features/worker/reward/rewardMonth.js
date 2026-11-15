@@ -8,7 +8,11 @@ function rewardMonthDate(offset, today) {
 
 export function rewardMonthLabel(offset, today = new Date()) {
   const date = rewardMonthDate(offset, today)
-  return `${date.getFullYear()}년 ${date.getMonth() + 1}월 포상 내역`
+  return `${date.getFullYear()}년 ${date.getMonth() + 1}월`
+}
+
+export function rewardMonthShortLabel(offset, today = new Date()) {
+  return `${rewardMonthDate(offset, today).getMonth() + 1}월`
 }
 
 export function reportInRewardMonth(createdAt, offset, today = new Date()) {
