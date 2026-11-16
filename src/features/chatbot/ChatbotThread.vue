@@ -1,4 +1,5 @@
 <script setup>
+import ChatbotAnswer from '@/features/chatbot/ChatbotAnswer.vue'
 import ChatbotThinking from '@/features/chatbot/ChatbotThinking.vue'
 
 defineProps({
@@ -27,7 +28,7 @@ function showsThinking(message) {
           :duration-ms="message.duration_ms"
           :reasoning="message.reasoning || ''"
         />
-        <p class="whitespace-pre-wrap text-[15px] leading-7 text-slate-800">{{ message.content }}</p>
+        <ChatbotAnswer :content="message.content" />
       </div>
     </div>
     <ChatbotThinking v-if="sending" live :reasoning="liveReasoning" />

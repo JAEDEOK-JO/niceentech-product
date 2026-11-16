@@ -83,6 +83,10 @@ export function screenGuide() {
 - 근태에서 연차 몇 번은 attendance_requests 다. user_name 으로 사람을 찾고 leave_type 이 연차, 반차(오전), 반차(오후) 인 신청 건수를 센다. 종류와 status 를 함께 말한다. 이번 달은 start_date 와 end_date 가 그 달과 겹치는 신청이다. status 가 반려인 것은 뺀다. 연차 잔여와 총일수는 attendance_annual_quota 의 total_days, used_days 와 employees 의 remaining_annual_leave_count 다.
 - 출퇴근은 attendance_logs 의 raw_name, work_date, clock_in, clock_out 이다.
 - 회사는 company_list, 출하일정은 shipment_schedule, 출하명세서는 issued_transaction_statements, 입출고는 inventory_transactions 와 inventory_transactions_pipe, inventory_transactions_fitting, 용접일정은 welding_inspections 와 product_list 의 welding_schedule_date, 메신저는 chat_rooms 와 chat_messages 다.
+- 출하 관련 질문은 생산계획표와 출하일정을 함께 본다. 어디까지 출하됐는지, 남은 구역은 product_list 의 shipment 다. true 면 출하된 구역, false 면 아직이다. company, place, area, head, hole, groove, shipment 을 고른다. shipment 를 글자와 비교하지 않는다.
+- 출하 날짜, 도착 시간, 일정 내용은 shipment_schedule 의 shipment_date, arrival_time, company, place, area, schedule_type, weight, misc 다.
+- 진행과 일정을 같이 물으면 product_list 와 shipment_schedule 을 company, place 로만 join 한다. area 문장은 서로 달라서 등호로 묶지 않는다.
+- 회사와 현장 이름은 띄어쓰기와 오타가 있을 수 있다. 핵심 단어만 ILIKE 로 찾는다. 질문 문장을 그대로 등호로 비교하지 않는다.
 - 날짜가 없고 전체라고 하면 날짜 조건을 넣지 않는다.
 - 대소문자가 섞인 컬럼은 큰따옴표로 감싼다.
 - 답과 생각에는 화면 이름만 쓴다.

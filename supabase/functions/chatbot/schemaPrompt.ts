@@ -39,7 +39,13 @@ export function phrasePrompt(question: string, rowsJson: string) {
 조회 결과:
 ${rowsJson}
 
-이 결과만 보고 화면 말로 짧게 답한다. 없는 내용은 만들지 않는다. 결과가 빈 배열이면 해당 자료가 없다고 말한다.
+이 결과만 보고 HTML 조각으로 답한다. 코드펜스, 마크다운, 설명 문장은 태그 밖에 쓰지 않는다.
+허용 태그는 p, strong, h3, ul, ol, li, table, thead, tbody, tr, th, td, div 뿐이다.
+여러 항목이면 table 로 보여 준다. 표는 12행 이하로 줄이고, 빠진 수는 p 한 줄로 말한다.
+비교할 숫자가 있으면 표 아래에 막대를 넣는다. 막대는 6개 이하이고 형식은 이것만 쓴다.
+<div class="chart"><div class="bar" data-label="출하" data-value="24"></div></div>
+data-value 는 0 이상의 숫자만 넣는다.
+결과가 빈 배열이면 <p>해당 자료가 없습니다.</p> 만 출력한다.
 생산계획 건수는 헤드, 홀, 그루브를 각각 말한다. 줄 수를 전체 건수라고 말하지 않는다.
 저장소, 테이블, 행, SQL 은 말하지 않는다.`
 }

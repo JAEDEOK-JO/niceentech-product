@@ -168,7 +168,7 @@ async function selectRows(
       relay.gap()
       const phrased = await completeText(phrasePrompt(question, rows), relay.delta)
       if (phrased.reasoning) notes.push(phrased.reasoning)
-      return { text: clip(phrased.text, 2000) || FAILURE, reasoning: joinReasoning(notes) }
+      return { text: clip(phrased.text, 3900) || FAILURE, reasoning: joinReasoning(notes) }
     } catch (error) {
       console.error('chatbot query failed', error)
       reason = FAILURE
@@ -194,7 +194,7 @@ async function saveMessages(
     {
       user_id: userId,
       role: 'assistant',
-      content: clip(answer, 2000),
+      content: clip(answer, 3900),
       reasoning: reasoning || null,
       duration_ms: durationMs,
     },
