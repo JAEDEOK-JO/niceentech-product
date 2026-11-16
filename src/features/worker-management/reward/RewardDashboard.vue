@@ -17,6 +17,10 @@ const message = ref('')
 const savingId = ref('')
 const viewerUrls = ref([])
 
+defineProps({
+  canReview: { type: Boolean, default: false },
+})
+
 const summary = computed(() => {
   const approved = items.value.filter((item) => item.status === '승인')
   return {
@@ -94,6 +98,7 @@ onMounted(load)
       v-else
       :items="visibleItems"
       :saving-id="savingId"
+      :can-review="canReview"
       @review="review"
       @open="viewerUrls = $event"
     />

@@ -39,7 +39,9 @@ import AttendanceRequestHistoryPage from '@/pages/AttendanceRequestHistoryPage.v
 import CncPage from '@/pages/CncPage.vue'
 import CncStandalonePage from '@/pages/CncStandalonePage.vue'
 import WorkerAppPage from '@/pages/WorkerAppPage.vue'
+import RewardPage from '@/pages/RewardPage.vue'
 import { isAdminRole, isDesignDepartment, isRootAdmin } from '@/utils/adminAccess'
+import { canViewWorkerRewards } from '@/features/worker-management/rewardAccess'
 import { isPublicAttendanceRoute, redirectForSessionRole } from '@/router/roleAccess'
 
 
@@ -159,6 +161,12 @@ const routes = [
     name: 'attendance',
     component: AttendancePage,
     meta: { requiresAuth: true },
+  },
+  {
+    path: '/reward',
+    name: 'reward',
+    component: RewardPage,
+    meta: { requiresAuth: true, requiresRewardAccess: true },
   },
   {
     path: '/attendance/guest/:token(.*)',
@@ -352,6 +360,9 @@ router.beforeEach(async (to) => {
     return { name: 'main' }
   }
 
+  if (to.meta.requiresRewardAccess && !canViewWorkerRewards(profile?.role)) {
+    return { name: 'main' }
+  }
   if (to.meta.requiresRootAdmin && !isRootAdmin(profile?.role)) {
     return { name: 'main' }
   }

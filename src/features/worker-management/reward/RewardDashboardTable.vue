@@ -4,6 +4,7 @@ import { formatRewardWon } from '@/features/worker/reward/rewardAmount'
 defineProps({
   items: { type: Array, required: true },
   savingId: { type: String, default: '' },
+  canReview: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['review', 'open'])
@@ -39,7 +40,7 @@ const photoUrls = (item) => [...(item.problemPhotoUrls || []), ...(item.normalPh
             <th class="whitespace-nowrap border border-slate-200 px-3 py-3">사진</th>
             <th class="whitespace-nowrap border border-slate-200 px-3 py-3">금액</th>
             <th class="whitespace-nowrap border border-slate-200 px-3 py-3">상태</th>
-            <th class="whitespace-nowrap border border-slate-200 px-3 py-3">처리</th>
+            <th v-if="canReview" class="whitespace-nowrap border border-slate-200 px-3 py-3">처리</th>
           </tr>
         </thead>
         <tbody>
@@ -77,7 +78,7 @@ const photoUrls = (item) => [...(item.problemPhotoUrls || []), ...(item.normalPh
                 {{ item.status }}
               </span>
             </td>
-            <td class="whitespace-nowrap border border-slate-200 px-3 py-3 text-center">
+            <td v-if="canReview" class="whitespace-nowrap border border-slate-200 px-3 py-3 text-center">
               <div v-if="item.status === '대기'" class="flex justify-center gap-1.5">
                 <button
                   type="button"
@@ -116,7 +117,7 @@ const photoUrls = (item) => [...(item.problemPhotoUrls || []), ...(item.normalPh
         </div>
         <p class="mt-2 break-words text-sm font-bold text-slate-900">{{ item.found_note }}</p>
         <p class="mt-2 text-sm font-extrabold text-slate-900">{{ formatRewardWon(item.amount) }}</p>
-        <div v-if="item.status === '대기'" class="mt-3 flex gap-2">
+        <div v-if="canReview && item.status === '대기'" class="mt-3 flex gap-2">
           <button
             type="button"
             class="rounded-lg border border-slate-200 px-3 py-2 text-xs font-extrabold text-slate-600 disabled:opacity-40"

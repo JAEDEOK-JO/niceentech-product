@@ -13,7 +13,16 @@ export async function fetchPendingWorkers() {
   return data ?? []
 }
 
+async function ensureFreshSession() {
+  const { data } = await supabase.auth.getSession()
+  const expiresAt = data.session?.expires_at ?? 0
+  if (!data.session || expiresAt * 1000 - Date.now() < 60_000) {
+    await supabase.auth.refreshSession()
+  }
+}
+
 export async function approveWorker(id) {
+  await ensureFreshSession()
   const { data, error } = await supabase.functions.invoke('approve-worker', {
     body: { id },
   })

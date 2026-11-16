@@ -9,6 +9,7 @@ import { useElectronNotifications } from '@/composables/useElectronNotifications
 import { useAttendanceNotifications } from '@/features/attendance/composables/useAttendanceNotifications'
 import { isAdminRole, isDesignDepartment } from '@/utils/adminAccess'
 import { isDepartmentDeskAccount } from '@/utils/departmentDeskAccounts'
+import { canViewWorkerRewards } from '@/features/worker-management/rewardAccess'
 
 const route = useRoute()
 const router = useRouter()
@@ -69,12 +70,16 @@ const navItems = computed(() => {
       badgeCount: attendanceUnreadCount.value,
     })
   }
+  if (canViewWorkerRewards(profile.value?.role)) {
+    items.push({ key: 'reward', label: '포상', to: { name: 'reward' } })
+  }
   if (!isDepartmentDeskAccount(profile.value?.name)) return items
   const hidden = new Set(['chatbot', 'reports', 'company-list'])
   return items.filter((item) => !hidden.has(item.key))
 })
 
 const activeSection = computed(() => {
+  if (route.path.startsWith('/reward')) return 'reward'
   if (route.path.startsWith('/attendance')) return 'attendance'
   if (route.path.startsWith('/messenger')) return 'messenger'
   if (route.path.startsWith('/company')) return 'company-list'
@@ -97,11 +102,6 @@ const goTo = (target) => {
 const goMyPage = () => {
   mobileMenuOpen.value = false
   router.push({ name: 'mypage' })
-}
-
-const goSettings = () => {
-  mobileMenuOpen.value = false
-  router.push({ name: 'settings' })
 }
 
 watch(
@@ -163,13 +163,6 @@ watch(
       <div class="hidden shrink-0 items-center gap-2 xl:flex">
         <button
           type="button"
-          class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
-          @click="goSettings"
-        >
-          설정
-        </button>
-        <button
-          type="button"
           class="max-w-[260px] truncate rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-900 hover:bg-slate-50"
           @click="goMyPage"
         >
@@ -228,17 +221,10 @@ watch(
           <div class="border-t border-slate-100 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
             <button
               type="button"
-              class="mb-2 flex min-h-12 w-full items-center rounded-2xl border border-slate-200 bg-white px-4 text-left text-sm font-extrabold text-slate-800 active:bg-slate-50"
+              class="flex min-h-12 w-full items-center rounded-2xl border border-slate-200 bg-white px-4 text-left text-sm font-extrabold text-slate-800 active:bg-slate-50"
               @click="goMyPage"
             >
               <span class="truncate">{{ profileSummary }}</span>
-            </button>
-            <button
-              type="button"
-              class="flex min-h-12 w-full items-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-extrabold text-slate-800 active:bg-slate-50"
-              @click="goSettings"
-            >
-              설정
             </button>
           </div>
         </aside>

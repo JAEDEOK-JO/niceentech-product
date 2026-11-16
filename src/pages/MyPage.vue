@@ -12,6 +12,10 @@ const goHome = () => {
   router.push('/main')
 }
 
+const goSettings = () => {
+  router.push({ name: 'settings' })
+}
+
 const handleLogout = async () => {
   await logout()
   router.replace('/login')
@@ -19,5 +23,5 @@ const handleLogout = async () => {
 </script>
 
 <template>
-  <MyPageView :profile="profile" @go-home="goHome" @logout="handleLogout" />
+  <MyPageView :profile="profile" @go-home="goHome" @go-settings="goSettings" @logout="handleLogout" />
 </template>

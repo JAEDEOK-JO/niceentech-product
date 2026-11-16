@@ -61,9 +61,6 @@ import {
 } from '@/features/attendance/types/attendance'
 import { validateHomeLeaveForm } from '@/features/attendance/utils/homeLeavePolicy'
 import AttendanceView from '@/features/attendance/components/AttendanceView.vue'
-import WorkerManagementTabs from '@/features/worker-management/components/WorkerManagementTabs.vue'
-import RewardDashboard from '@/features/worker-management/reward/RewardDashboard.vue'
-import { canManageWorkerRewards } from '@/features/worker-management/rewardAccess'
 import { attendanceHeading } from '@/features/attendance/utils/attendanceHeading'
 import { printAttendanceLeaveApplication, printAllApprovedAttendanceLeaveApplications } from '@/features/attendance/utils/attendanceLeavePrint'
 import { isDeptHeadApproved, isDeptHeadPending, isFinalApprovalPending, isGyeongyuPending, getAttendanceStatusLabel } from '@/features/attendance/utils/attendanceApprover'
@@ -91,9 +88,7 @@ const currentUserName = computed(() => profile.value?.name ?? '')
 
 // 관리자 판별: profiles.role 컬럼 기준
 const isAdmin = computed(() => isAdminRole(profile.value?.role))
-const showRewardManagement = computed(() => isAdmin.value && canManageWorkerRewards(currentUserName.value))
 const pageReady = computed(() => authReady.value && !!session.value?.user?.id && profileReady.value)
-const managementSection = ref<'reward' | 'attendance'>('attendance')
 const scopedDepartments = computed(() =>
   getScopedAttendanceDepartments(profile.value?.role, currentUserName.value),
 )
@@ -915,15 +910,8 @@ async function handleDeleteEmployee(id: number) {
 <template>
   <div class="min-h-screen bg-white">
   <template v-if="pageReady">
-  <div v-if="showRewardManagement" class="sticky top-[56px] z-30 flex h-[70px] items-center border-b border-slate-200 bg-white px-[5px] print:static sm:px-5 md:top-[72px]">
-    <WorkerManagementTabs v-model="managementSection" />
-  </div>
-  <div v-if="showRewardManagement && managementSection === 'reward'" class="bg-white px-[5px] pb-8 sm:px-5">
-    <RewardDashboard />
-  </div>
   <AttendanceView
-    v-else
-    :management-tabs-visible="showRewardManagement"
+    :management-tabs-visible="false"
     :items="items"
     :pending-items="pendingItems"
     :filters="filters"

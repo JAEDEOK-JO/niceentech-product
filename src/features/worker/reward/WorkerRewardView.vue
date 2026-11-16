@@ -7,7 +7,6 @@ import RewardMyCard from './RewardMyCard.vue'
 import RewardPhotoViewer from './RewardPhotoViewer.vue'
 import RewardViewTabs from './RewardViewTabs.vue'
 import { reportInRewardMonth, rewardMonthLabel, rewardMonthShortLabel, shiftRewardMonth } from './rewardMonth'
-import { mergeRewardDummy } from './rewardDummy'
 import { rewardRanks } from './rewardRanks'
 import { rewardStats } from './rewardStats'
 import { fetchRewardFeed } from './reward.service'
@@ -49,7 +48,7 @@ async function load() {
   loading.value = true
   loadFailed.value = false
   try {
-    items.value = mergeRewardDummy(await fetchRewardFeed())
+    items.value = await fetchRewardFeed()
   } catch {
     items.value = []
     loadFailed.value = true

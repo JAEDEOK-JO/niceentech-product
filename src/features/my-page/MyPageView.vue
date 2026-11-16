@@ -8,7 +8,7 @@ defineProps({
   },
 })
 
-const emit = defineEmits(['go-home', 'logout'])
+const emit = defineEmits(['go-home', 'go-settings', 'logout'])
 </script>
 
 <template>
@@ -16,7 +16,10 @@ const emit = defineEmits(['go-home', 'logout'])
     <header class="sticky top-0 z-10 border-b border-slate-200 bg-white">
       <div class="flex items-center justify-between px-6 py-2.5">
         <h1 class="text-lg font-bold text-slate-900">내정보</h1>
-        <Button class="h-9 px-3 text-xs" variant="outline" @click="emit('go-home')">메인으로</Button>
+        <div class="flex items-center gap-2">
+          <Button class="h-9 px-3 text-xs" variant="outline" @click="emit('go-settings')">설정</Button>
+          <Button class="h-9 px-3 text-xs" variant="outline" @click="emit('go-home')">메인으로</Button>
+        </div>
       </div>
     </header>
 
