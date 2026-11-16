@@ -46,13 +46,17 @@ export function isFinalApprovalPending(item: AttendanceRequest): boolean {
   return item.status === ATTENDANCE_WORKFLOW_STATUS.FINAL_PENDING
 }
 
-export function isDeptHeadApproved(item: AttendanceRequest): boolean {
+export function isDeptHeadApprovedStatus(status: string): boolean {
   return (
-    item.status === ATTENDANCE_WORKFLOW_STATUS.GYEONGYU_PENDING ||
-    item.status === ATTENDANCE_WORKFLOW_STATUS.FINAL_PENDING ||
-    item.status === ATTENDANCE_WORKFLOW_STATUS.LEGACY_DEPT_APPROVED ||
-    item.status === ATTENDANCE_WORKFLOW_STATUS.APPROVED
+    status === ATTENDANCE_WORKFLOW_STATUS.GYEONGYU_PENDING ||
+    status === ATTENDANCE_WORKFLOW_STATUS.FINAL_PENDING ||
+    status === ATTENDANCE_WORKFLOW_STATUS.LEGACY_DEPT_APPROVED ||
+    status === ATTENDANCE_WORKFLOW_STATUS.APPROVED
   )
+}
+
+export function isDeptHeadApproved(item: AttendanceRequest): boolean {
+  return isDeptHeadApprovedStatus(item.status)
 }
 
 /** 승인 완료 건의 최종 승인자 표시명 (대표이사 우선, 없으면 부서장 표시명) */

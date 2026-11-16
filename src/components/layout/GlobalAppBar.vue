@@ -8,6 +8,7 @@ import { useElectronBridge } from '@/composables/useElectronBridge'
 import { useElectronNotifications } from '@/composables/useElectronNotifications'
 import { useAttendanceNotifications } from '@/features/attendance/composables/useAttendanceNotifications'
 import { isAdminRole, isDesignDepartment } from '@/utils/adminAccess'
+import { isDepartmentDeskAccount } from '@/utils/departmentDeskAccounts'
 
 const route = useRoute()
 const router = useRouter()
@@ -63,12 +64,14 @@ const navItems = computed(() => {
   if (isAdminRole(profile.value?.role)) {
     items.push({
       key: 'attendance',
-      label: '작업자 관리',
+      label: isDepartmentDeskAccount(profile.value?.name) ? '근태관리' : '작업자 관리',
       to: { name: 'attendance' },
       badgeCount: attendanceUnreadCount.value,
     })
   }
-  return items
+  if (!isDepartmentDeskAccount(profile.value?.name)) return items
+  const hidden = new Set(['chatbot', 'reports', 'company-list'])
+  return items.filter((item) => !hidden.has(item.key))
 })
 
 const activeSection = computed(() => {

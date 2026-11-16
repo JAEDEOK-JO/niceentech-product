@@ -67,14 +67,6 @@ const BTN = {
   printedOrange: 'rounded-lg border border-orange-200 bg-orange-100 px-3 py-1.5 text-xs font-bold text-orange-800 hover:bg-orange-200',
 }
 
-function changeableStatuses(item: AttendanceRequest): AttendanceStatusChangeValue[] {
-  const statuses: AttendanceStatusChangeValue[] = []
-  if (props.canDeptHeadApprove?.(item)) statuses.push('대기중')
-  if (props.canGyeongyu) statuses.push('경유대기')
-  if (props.canFinalApprove) statuses.push('최종대기')
-  return statuses
-}
-
 function actionsFor(item: AttendanceRequest): ActionDef[] {
   if (props.mode === 'approval') {
     if (!props.canDeptHeadApprove?.(item)) return []
@@ -91,12 +83,6 @@ function actionsFor(item: AttendanceRequest): ActionDef[] {
         { key: 'reject', label: '반려', buttonClass: BTN.red },
       )
     }
-    if (props.canManage) {
-      actions.push(
-        { key: 'adminEdit', label: '수정', buttonClass: BTN.outline },
-        { key: 'adminDelete', label: '삭제', buttonClass: BTN.outlineRed },
-      )
-    }
     return actions
   }
   if (props.mode === 'daepyo') {
@@ -107,36 +93,27 @@ function actionsFor(item: AttendanceRequest): ActionDef[] {
         { key: 'reject', label: '반려', buttonClass: BTN.red },
       )
     }
-    if (props.canManage) {
-      actions.push(
-        { key: 'adminEdit', label: '수정', buttonClass: BTN.outline },
-        { key: 'adminDelete', label: '삭제', buttonClass: BTN.outlineRed },
-      )
-    }
     return actions
   }
-  if (item.status !== '승인') {
-    const editLabel = item.status === '반려' && props.reapplyRejected ? '재신청' : '수정'
+  if (item.status === '반려') {
+    return [{ key: 'adminEdit', label: '재신청', buttonClass: BTN.outline }]
+  }
+  if (item.status === '대기중') {
     return [
-      { key: 'adminEdit', label: editLabel, buttonClass: BTN.outline },
+      { key: 'adminEdit', label: '수정', buttonClass: BTN.outline },
       { key: 'adminDelete', label: '삭제', buttonClass: BTN.outlineRed },
     ]
   }
-  const actions: ActionDef[] = [{
+  if (item.status !== '승인') return []
+  return [{
     key: 'print',
     label: item.printedAt ? '인쇄완료' : '인쇄',
     buttonClass: item.printedAt ? BTN.printedOrange : BTN.lightBlue,
   }]
-  if (props.isRootAdmin) actions.push({ key: 'adminDelete', label: '삭제', buttonClass: BTN.outlineRed })
-  return actions
 }
 
 function statusClass(item: AttendanceRequest) {
   return props.statusBadgeClass?.(item.status)
-}
-
-function onStatusChange(item: AttendanceRequest, status: AttendanceStatusChangeValue) {
-  emit('changeStatus', { item, status })
 }
 
 function runAction(key: ActionKey, item: AttendanceRequest) {
@@ -205,9 +182,6 @@ function runAction(key: ActionKey, item: AttendanceRequest) {
             <AttendanceRequestStatusSelect
               :item="item"
               :badge-class="statusClass(item)"
-              :editable="item.status === '반려' && changeableStatuses(item).length > 0"
-              :allowed-statuses="changeableStatuses(item)"
-              @change="onStatusChange(item, $event)"
             />
           </td>
           <td class="border border-slate-200 px-4 py-3">
@@ -257,9 +231,6 @@ function runAction(key: ActionKey, item: AttendanceRequest) {
             v-if="mode === 'requests'"
             :item="item"
             :badge-class="statusClass(item)"
-            :editable="item.status === '반려' && changeableStatuses(item).length > 0"
-            :allowed-statuses="changeableStatuses(item)"
-            @change="onStatusChange(item, $event)"
           />
         </div>
       </div>

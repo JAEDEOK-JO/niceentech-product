@@ -7,8 +7,11 @@ const SCOPED_ATTENDANCE_ADMIN_ROLE = '관리자'
 /** 관리자 이름별 근태 신청 조회·부서장 승인 범위 */
 const SCOPED_ATTENDANCE_DEPARTMENTS: Record<string, readonly string[]> = {
   용접반: ['용접부', 'CNC'],
+  용접부: ['용접부', 'CNC'],
   메인관: ['생산부'],
   가지관: ['생산부'],
+  생산부: ['생산부'],
+  나사부: ['나사부'],
 }
 
 /** 연차계 문서 부서장 표시명 (승인 권한과 별개) */

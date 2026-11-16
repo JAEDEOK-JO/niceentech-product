@@ -63,8 +63,9 @@ import { validateHomeLeaveForm } from '@/features/attendance/utils/homeLeavePoli
 import AttendanceView from '@/features/attendance/components/AttendanceView.vue'
 import WorkerManagementTabs from '@/features/worker-management/components/WorkerManagementTabs.vue'
 import RewardDashboard from '@/features/worker-management/reward/RewardDashboard.vue'
+import { canManageWorkerRewards } from '@/features/worker-management/rewardAccess'
 import { printAttendanceLeaveApplication, printAllApprovedAttendanceLeaveApplications } from '@/features/attendance/utils/attendanceLeavePrint'
-import { isDeptHeadPending, isFinalApprovalPending, isGyeongyuPending, getAttendanceStatusLabel } from '@/features/attendance/utils/attendanceApprover'
+import { isDeptHeadApproved, isDeptHeadPending, isFinalApprovalPending, isGyeongyuPending, getAttendanceStatusLabel } from '@/features/attendance/utils/attendanceApprover'
 import type { AttendanceStatusChangeValue } from '@/features/attendance/utils/attendanceRequestStatus'
 import {
   ATTENDANCE_APPROVAL_DENIED_MESSAGE,
@@ -81,15 +82,16 @@ import {
 } from '@/features/attendance/utils/attendanceApprovalAccess'
 
 // ─── Auth / Profile ────────────────────────────────────────────────────────────
-const { session } = useAuth()
-const { profile } = useProfile(session)
+const { session, ready: authReady } = useAuth()
+const { profile, ready: profileReady } = useProfile(session)
 
 const currentUserId = computed(() => session.value?.user?.id ?? '')
 const currentUserName = computed(() => profile.value?.name ?? '')
-const currentDept = computed(() => profile.value?.department ?? '')
 
 // 관리자 판별: profiles.role 컬럼 기준
 const isAdmin = computed(() => isAdminRole(profile.value?.role))
+const showRewardManagement = computed(() => isAdmin.value && canManageWorkerRewards(currentUserName.value))
+const pageReady = computed(() => authReady.value && !!session.value?.user?.id && profileReady.value)
 const managementSection = ref<'reward' | 'attendance'>('attendance')
 const scopedDepartments = computed(() =>
   getScopedAttendanceDepartments(profile.value?.role, currentUserName.value),
@@ -155,7 +157,7 @@ const loading = ref(false)
 const stats = computed<AttendanceDashboardStats>(() => {
   const ym = `${thisYear}-${String(thisMonth).padStart(2, '0')}`
   return {
-    employeeCount: employeeCount.value,
+    employeeCount: scopedDepartments.value ? employees.value.length : employeeCount.value,
     thisMonthTotal: items.value.filter((i) => i.startDate.startsWith(ym)).length,
     pendingCount: pendingItems.value.filter(isDeptHeadPending).length,
     approvedCount: items.value.filter((i) => i.status === '승인').length,
@@ -169,6 +171,7 @@ const daepyoPendingCount = computed(() => pendingItems.value.filter(isFinalAppro
 
 // ─── 직원 목록 상태 ────────────────────────────────────────────────────────────
 const employees = ref<Employee[]>([])
+const workHoursEmployees = ref<Employee[]>([])
 const employeesLoading = ref(false)
 
 // ─── 작업시간 상태 ───────────────────────────────────────────────────────────
@@ -237,13 +240,14 @@ async function loadDailyWorkHours({ silent = false } = {}) {
 async function loadDailyWorkRequests() {
   const target = new Date(`${dailyWorkDate.value}T00:00:00`)
   try {
-    dailyWorkRequests.value = await fetchAttendanceRequests({
+    const rows = await fetchAttendanceRequests({
       year: target.getFullYear(),
       month: target.getMonth() + 1,
       department: '',
       status: '',
       searchQuery: '',
     })
+    dailyWorkRequests.value = rows
   } catch {
     dailyWorkRequests.value = []
   }
@@ -422,8 +426,12 @@ async function loadMeta() {
 async function loadEmployees() {
   employeesLoading.value = true
   try {
-    employees.value = await fetchEmployees()
+    const rows = await fetchEmployees()
+    const scope = scopedDepartments.value
+    workHoursEmployees.value = rows
+    employees.value = scope ? rows.filter((employee) => scope.includes(employee.department)) : rows
   } catch {
+    workHoursEmployees.value = []
     employees.value = []
   } finally {
     employeesLoading.value = false
@@ -676,8 +684,8 @@ async function handleDelete(item: AttendanceRequest) {
 
 // ─── 관리자 수정 ───────────────────────────────────────────────────────────────
 function handleAdminEdit(item: AttendanceRequest) {
-  if (item.status === '승인') {
-    showToast('승인 완료 건은 수정할 수 없습니다.', 'error')
+  if (isDeptHeadApproved(item)) {
+    showToast('부서장 승인 이후에는 수정할 수 없습니다.', 'error')
     return
   }
   formData.value = {
@@ -691,7 +699,7 @@ function handleAdminEdit(item: AttendanceRequest) {
     evidenceUrls: [...(item.evidenceUrls ?? [])],
   }
   isEditForm.value = true
-  isReapplyForm.value = item.status === '반려' && userUsesReapply.value
+  isReapplyForm.value = item.status === '반려'
   editTargetId.value = item.id
   hideFormEmployeeSelector.value = false
   formVisible.value = true
@@ -699,8 +707,8 @@ function handleAdminEdit(item: AttendanceRequest) {
 
 // ─── 관리자 삭제 (상태 무관) ───────────────────────────────────────────────────
 async function handleAdminDelete(item: AttendanceRequest) {
-  if (item.status === '승인' && !isRootAdminUser.value) {
-    showToast('승인 완료 건은 삭제할 수 없습니다.', 'error')
+  if (item.status !== '대기중') {
+    showToast(item.status === '반려' ? '반려된 신청은 삭제할 수 없습니다.' : '부서장 승인 이후에는 삭제할 수 없습니다.', 'error')
     return
   }
   if (!await confirm(`'${item.userName}' 신청을 삭제하시겠습니까?`)) return
@@ -903,14 +911,16 @@ async function handleDeleteEmployee(id: number) {
 
 <template>
   <div class="min-h-screen bg-white">
-  <div v-if="isAdmin" class="sticky top-[56px] z-30 flex h-[70px] items-center border-b border-slate-200 bg-white px-[5px] print:static sm:px-5 md:top-[72px]">
+  <template v-if="pageReady">
+  <div v-if="showRewardManagement" class="sticky top-[56px] z-30 flex h-[70px] items-center border-b border-slate-200 bg-white px-[5px] print:static sm:px-5 md:top-[72px]">
     <WorkerManagementTabs v-model="managementSection" />
   </div>
-  <div v-if="isAdmin && managementSection === 'reward'" class="bg-white px-[5px] pb-8 sm:px-5">
+  <div v-if="showRewardManagement && managementSection === 'reward'" class="bg-white px-[5px] pb-8 sm:px-5">
     <RewardDashboard />
   </div>
   <AttendanceView
     v-else
+    :management-tabs-visible="showRewardManagement"
     :items="items"
     :pending-items="pendingItems"
     :filters="filters"
@@ -919,6 +929,7 @@ async function handleDeleteEmployee(id: number) {
     :quota="quota"
     :stats="stats"
     :employees="employees"
+    :work-hours-employees="workHoursEmployees"
     :employees-loading="employeesLoading"
     :summary-year="summaryYear"
     :summary-month="summaryMonth"
@@ -993,5 +1004,6 @@ async function handleDeleteEmployee(id: number) {
     @update-daily-work-hours="handleUpdateDailyWorkHours"
     @select-daily-work-date="setDailyWorkDate"
   />
+  </template>
   </div>
 </template>

@@ -18,6 +18,7 @@ import AttendanceDetailModal from './AttendanceDetailModal.vue'
 import AttendanceRequestSignatureDialog from './AttendanceRequestSignatureDialog.vue'
 import AttendanceRequestStatusDialog from './AttendanceRequestStatusDialog.vue'
 import WorkerAppDownloadPanel from '../guest/WorkerAppDownloadPanel.vue'
+import WorkerAppQrDialog from '../guest/WorkerAppQrDialog.vue'
 import DailyWorkHoursPanel from './DailyWorkHoursPanel.vue'
 import AttendanceEvidencePicker from './AttendanceEvidencePicker.vue'
 import AttendanceEvidenceGalleryDialog from './AttendanceEvidenceGalleryDialog.vue'
@@ -40,6 +41,7 @@ const props = defineProps<{
   quota: AttendanceAnnualQuota | null
   stats: AttendanceDashboardStats
   employees: Employee[]
+  workHoursEmployees?: Employee[]
   employeesLoading: boolean
   summaryYear: number
   summaryMonth: number
@@ -47,6 +49,7 @@ const props = defineProps<{
   summaryRequests: AttendanceRequest[]
   currentUserId: string
   isAdmin: boolean
+  managementTabsVisible?: boolean
   scopedDepartments?: readonly string[] | null
   isRootAdmin: boolean
   canManagePending: boolean
@@ -138,13 +141,19 @@ function closeEvidenceGallery() {
   evidenceGalleryVisible.value = false
 }
 const activeTab = ref<AdminTab>('requests')
+const adminTabBarClass = computed(() => [
+  'sticky z-20 -mx-[5px] mb-5 border-b border-slate-200 bg-white px-[5px] py-2 print:static sm:-mx-5 sm:px-5',
+  props.managementTabsVisible === false ? 'top-[56px] md:top-[72px]' : 'top-[126px] md:top-[142px]',
+])
 const userTab = ref<UserTab>('download')
+const workerAppQrVisible = ref(false)
 
 const userTabBtnClass = (tab: UserTab) =>
   userTab.value === tab
     ? 'bg-slate-900 text-white'
     : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'
 
+const workHoursEmployees = computed(() => props.workHoursEmployees ?? props.employees)
 const departmentLocked = computed(() => (props.scopedDepartments?.length ?? 0) === 1)
 
 const tabBtnClass = (tab: AdminTab) =>
@@ -224,7 +233,7 @@ watch(
     <div class="w-full px-[5px] pb-8 sm:px-5">
 
       <!-- 관리자 탭 -->
-      <div v-if="isAdmin" class="sticky top-[126px] z-20 -mx-[5px] mb-5 border-b border-slate-200 bg-white px-[5px] py-2 print:static sm:-mx-5 sm:px-5 md:top-[142px]">
+      <div v-if="isAdmin" :class="adminTabBarClass">
       <div class="flex w-fit flex-wrap gap-1 rounded-xl border border-slate-200 bg-white p-1">
         <button
           type="button"
@@ -329,7 +338,15 @@ watch(
           <h1 class="text-2xl font-extrabold text-slate-900">생산부 근태관리</h1>
           <p class="mt-1 text-sm text-slate-500">{{ periodLabel }} 휴가 신청 및 근태 현황</p>
         </div>
+        <button
+          type="button"
+          class="shrink-0 self-center rounded-xl bg-blue-600 px-5 py-3 text-base font-extrabold text-white shadow-sm hover:bg-blue-500 print:hidden"
+          @click="workerAppQrVisible = true"
+        >
+          작업자 어플
+        </button>
       </div>
+      <WorkerAppQrDialog v-if="workerAppQrVisible" @close="workerAppQrVisible = false" />
 
       <!-- 통계 카드 (관리자만) -->
       <div v-if="isAdmin" class="mb-4 grid grid-cols-4 gap-1.5">
@@ -362,7 +379,7 @@ watch(
       <!-- ═══ 작업시간 달력 (관리자) ═══ -->
       <DailyWorkHoursPanel
         v-if="isAdmin && activeTab === 'workhours'"
-        :employees="employees"
+        :employees="workHoursEmployees"
         :requests="dailyWorkRequests"
         :work-hours="dailyWorkHours"
         :work-date="todayWorkDate"
@@ -469,7 +486,7 @@ watch(
         <WorkerAppDownloadPanel v-if="userTab === 'download'" />
         <DailyWorkHoursPanel
           v-else
-          :employees="employees"
+          :employees="workHoursEmployees"
           :requests="dailyWorkRequests"
           :work-hours="dailyWorkHours"
           :work-date="todayWorkDate"
@@ -486,7 +503,7 @@ watch(
       <!-- 금일 작업시간 입력 다이얼로그 -->
       <DailyWorkHoursInputDialog
         v-if="workHoursDialogVisible"
-        :employees="employees"
+        :employees="workHoursEmployees"
         :requests="dailyWorkRequests"
         :today-hours="selectedDailyWorkHours"
         :work-date="todayWorkDate"
