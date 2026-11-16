@@ -146,7 +146,7 @@ function closeEvidenceGallery() {
 const activeTab = ref<AdminTab>('requests')
 const adminTabBarClass = computed(() => [
   'sticky z-20 -mx-[5px] mb-5 border-b border-slate-200 bg-white px-[5px] py-2 print:static sm:-mx-5 sm:px-5',
-  props.managementTabsVisible === false ? 'top-[56px] md:top-[72px]' : 'top-[126px] md:top-[142px]',
+  props.managementTabsVisible === false ? 'top-0 md:top-[72px]' : 'top-[70px] md:top-[142px]',
 ])
 const userTab = ref<UserTab>('download')
 const workerAppQrVisible = ref(false)
@@ -320,7 +320,7 @@ watch(
       </div>
 
       <template v-if="!isAdmin">
-        <div class="sticky top-[56px] z-20 -mx-[5px] mb-5 border-b border-slate-200 bg-white px-[5px] py-2 print:static sm:-mx-5 sm:px-5 md:top-[72px]">
+        <div class="sticky top-0 z-20 -mx-[5px] mb-5 border-b border-slate-200 bg-white px-[5px] py-2 print:static sm:-mx-5 sm:px-5 md:top-[72px]">
         <div class="flex w-fit flex-wrap gap-1 rounded-xl border border-slate-200 bg-white p-1">
           <button
             type="button"

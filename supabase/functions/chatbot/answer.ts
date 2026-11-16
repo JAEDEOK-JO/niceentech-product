@@ -8,6 +8,7 @@ import {
   saveValueNote,
   type ChatbotNote,
 } from './notes.ts'
+import { resolveConversation, saveConversation } from './conversation.ts'
 import { koreanReasoning } from './koreanReasoning.ts'
 import { completeJson, completeText } from './openai.ts'
 import { noteTables, pickTables } from './pickTables.ts'
@@ -54,11 +55,12 @@ function relayReasoning(onReasoning?: (delta: string) => void) {
   }
 }
 
-async function recentMessages(supabase: SupabaseClient, userId: string) {
+async function recentMessages(supabase: SupabaseClient, userId: string, conversationId: string) {
   const { data, error } = await supabase
     .from('chatbot_messages')
     .select('role, content')
     .eq('user_id', userId)
+    .eq('conversation_id', conversationId)
     .order('created_at', { ascending: false })
     .limit(8)
 
@@ -211,15 +213,18 @@ async function selectRows(
 async function saveMessages(
   supabase: SupabaseClient,
   userId: string,
+  conversationId: string,
   question: string,
   answer: string,
   reasoning: string,
   durationMs: number,
 ) {
+  await saveConversation(supabase, userId, conversationId, question)
   const { error } = await supabase.from('chatbot_messages').insert([
-    { user_id: userId, role: 'user', content: clip(question, 500) },
+    { user_id: userId, conversation_id: conversationId, role: 'user', content: clip(question, 500) },
     {
       user_id: userId,
+      conversation_id: conversationId,
       role: 'assistant',
       content: clip(answer, 3900),
       reasoning: reasoning || null,
@@ -233,11 +238,13 @@ export async function answerQuestion(
   supabase: SupabaseClient,
   userId: string,
   question: string,
+  requestedConversationId: string,
   onReasoning?: (delta: string) => void,
   signal?: AbortSignal,
 ) {
   const started = Date.now()
-  const history = await recentMessages(supabase, userId)
+  const conversationId = await resolveConversation(supabase, userId, requestedConversationId)
+  const history = await recentMessages(supabase, userId, conversationId)
   let text = FAILURE
   let reasoning = ''
 
@@ -252,5 +259,5 @@ export async function answerQuestion(
   }
 
   if (stopped(signal)) return
-  await saveMessages(supabase, userId, question, text, reasoning, Date.now() - started)
+  await saveMessages(supabase, userId, conversationId, question, text, reasoning, Date.now() - started)
 }

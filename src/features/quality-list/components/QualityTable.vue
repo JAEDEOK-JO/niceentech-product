@@ -777,15 +777,17 @@ const mobileCountRows: QualityCountColumn[][] = [
   .qt-mobile-cards {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    margin: 0 -16px;
+    border-top: 1px solid #e2e8f0;
   }
 
   .qt-card {
-    border: 1px solid #e2e8f0;
-    border-radius: 16px;
+    border: none;
+    border-bottom: 1px solid #e2e8f0;
+    border-radius: 0;
     background: #fff;
-    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
-    padding: 14px;
+    box-shadow: none;
+    padding: 12px 16px;
     cursor: pointer;
   }
 

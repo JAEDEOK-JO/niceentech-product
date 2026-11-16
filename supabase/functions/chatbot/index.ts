@@ -1,5 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js'
 import { answerQuestion } from './answer.ts'
+import { readConversationId } from './conversation.ts'
 import { watchChatbotRun } from './runStop.ts'
 import { userIdFromToken } from './userId.ts'
 
@@ -36,6 +37,7 @@ Deno.serve(async (req) => {
 
   const question = String(payload.question ?? '').trim()
   const runId = /^[0-9a-f-]{36}$/i.test(String(payload.runId ?? '')) ? String(payload.runId) : ''
+  const conversationId = readConversationId(payload.conversationId)
   if (!question || question.length > 500) return jsonResponse({ ok: false, message: '질문을 확인해 주세요' }, 400)
 
   const userId = readUserId(req)
@@ -57,7 +59,7 @@ Deno.serve(async (req) => {
 
   if (!stream) {
     try {
-      await answerQuestion(supabase, userId, question, undefined, stop.signal)
+      await answerQuestion(supabase, userId, question, conversationId, undefined, stop.signal)
       if (stop.signal.aborted) return new Response(null, { status: 499 })
       return jsonResponse({ ok: true })
     } catch (error) {
@@ -82,7 +84,14 @@ Deno.serve(async (req) => {
         }
       }
       try {
-        await answerQuestion(supabase, userId, question, (delta) => send({ type: 'reasoning', delta }), stop.signal)
+        await answerQuestion(
+          supabase,
+          userId,
+          question,
+          conversationId,
+          (delta) => send({ type: 'reasoning', delta }),
+          stop.signal,
+        )
         if (!stop.signal.aborted) send({ type: 'done' })
       } catch (error) {
         if (stop.signal.aborted) return

@@ -12,7 +12,7 @@ async function readFailureMessage(error, data) {
   return '답변 실패'
 }
 
-export async function askChatbot(question, onReasoning, signal, runId) {
+export async function askChatbot(question, onReasoning, signal, runId, conversationId) {
   const { data: sessionData } = await supabase.auth.getSession()
   const token = sessionData.session?.access_token
   if (!token) throw new Error('로그인이 필요합니다')
@@ -25,7 +25,7 @@ export async function askChatbot(question, onReasoning, signal, runId) {
       'Content-Type': 'application/json',
       Accept: 'text/event-stream',
     },
-    body: JSON.stringify({ question, runId }),
+    body: JSON.stringify({ question, runId, conversationId }),
     signal,
   })
 

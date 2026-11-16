@@ -1,14 +1,20 @@
 import { ref } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { askChatbot } from '@/features/chatbot/askChatbot'
-import { fetchChatbotMessages } from '@/features/chatbot/fetchChatbotMessages'
+import {
+  addLocalConversation,
+  addPendingMessage,
+  chatbotActiveId,
+  clearPendingMessages,
+  loadChatbotConversations,
+  reloadChatbotMessages,
+} from '@/features/chatbot/chatbotConversationState'
 
-export const chatbotMessages = ref([])
 export const chatbotSending = ref(false)
+export const chatbotSendingId = ref('')
 export const chatbotReasoning = ref('')
 export const chatbotStartedAt = ref(0)
 
-let loaded = false
 let run = 0
 let controller = null
 let activeRunId = ''
@@ -25,31 +31,21 @@ function markStopped(id) {
   supabase.from('chatbot_runs').update({ stopped: true }).eq('id', id).then(() => {})
 }
 
-function pendingMessages() {
-  return chatbotMessages.value.filter((message) => {
-    const id = String(message.id ?? '')
-    return id.startsWith('local-') || id.startsWith('error-')
-  })
-}
-
-export async function ensureChatbotMessages() {
-  if (loaded) return
-  const rows = await fetchChatbotMessages()
-  if (loaded) return
-  chatbotMessages.value = [...rows, ...pendingMessages()]
-  loaded = true
+function resetSending() {
+  chatbotSending.value = false
+  chatbotSendingId.value = ''
+  chatbotReasoning.value = ''
+  chatbotStartedAt.value = 0
+  controller = null
+  activeRunId = ''
 }
 
 export function stopChatbot() {
   if (!chatbotSending.value) return
   const id = activeRunId
-  activeRunId = ''
   run += 1
   controller?.abort()
-  controller = null
-  chatbotSending.value = false
-  chatbotReasoning.value = ''
-  chatbotStartedAt.value = 0
+  resetSending()
   markStopped(id)
 }
 
@@ -59,12 +55,20 @@ export async function sendChatbot(question) {
   const current = ++run
   const abort = new AbortController()
   const id = crypto.randomUUID()
+  let conversationId = chatbotActiveId.value
+  if (!conversationId) {
+    conversationId = crypto.randomUUID()
+    addLocalConversation(conversationId, text)
+    chatbotActiveId.value = conversationId
+  }
+
   controller = abort
   activeRunId = id
   chatbotSending.value = true
+  chatbotSendingId.value = conversationId
   chatbotReasoning.value = ''
   chatbotStartedAt.value = Date.now()
-  chatbotMessages.value.push({ id: `local-${Date.now()}`, role: 'user', content: text })
+  addPendingMessage(conversationId, { id: `local-${Date.now()}`, role: 'user', content: text })
 
   try {
     await markRun(id)
@@ -77,23 +81,19 @@ export async function sendChatbot(question) {
       },
       abort.signal,
       id,
+      conversationId,
     )
     if (current !== run) return
-    chatbotMessages.value = await fetchChatbotMessages()
-    loaded = true
+    clearPendingMessages(conversationId)
+    await Promise.all([loadChatbotConversations(), reloadChatbotMessages(conversationId)])
   } catch (error) {
     if (current !== run || abort.signal.aborted || error?.name === 'AbortError') return
-    chatbotMessages.value.push({
+    addPendingMessage(conversationId, {
       id: `error-${Date.now()}`,
       role: 'assistant',
       content: error?.message || '답변 실패',
     })
   } finally {
-    if (current !== run) return
-    chatbotSending.value = false
-    chatbotReasoning.value = ''
-    chatbotStartedAt.value = 0
-    controller = null
-    activeRunId = ''
+    if (current === run) resetSending()
   }
 }

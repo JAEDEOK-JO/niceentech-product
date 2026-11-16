@@ -10,6 +10,7 @@ import { useAttendanceNotifications } from '@/features/attendance/composables/us
 import { isAdminRole, isDesignDepartment } from '@/utils/adminAccess'
 import { isDepartmentDeskAccount } from '@/utils/departmentDeskAccounts'
 import { canViewWorkerRewards } from '@/features/worker-management/rewardAccess'
+import { productionPlanSearchActive, requestProductionPlanSearch } from '@/features/main/productionPlanSearchBridge'
 
 const route = useRoute()
 const router = useRouter()
@@ -160,6 +161,19 @@ watch(
         </nav>
       </div>
 
+      <button
+        v-if="activeSection === 'main'"
+        type="button"
+        class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border bg-white xl:hidden"
+        :class="productionPlanSearchActive ? 'border-blue-200 text-blue-700' : 'border-slate-200 text-slate-700'"
+        aria-label="검색"
+        @click="requestProductionPlanSearch"
+      >
+        <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="7" />
+          <path d="m20 20-3.5-3.5" stroke-linecap="round" />
+        </svg>
+      </button>
       <div class="hidden shrink-0 items-center gap-2 xl:flex">
         <button
           type="button"

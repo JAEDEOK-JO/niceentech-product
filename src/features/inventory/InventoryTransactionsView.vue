@@ -733,7 +733,7 @@ watch(
     <section class="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col gap-3">
       <div
         class="flex shrink-0 flex-wrap items-center justify-between gap-3"
-        :class="selectedCompany ? '' : 'sticky top-[56px] z-30 -mx-4 bg-slate-50 px-4 py-3 md:top-[72px] md:-mx-6 md:px-6'"
+        :class="selectedCompany ? '' : 'sticky -top-5 z-30 -mx-4 bg-slate-50 px-4 py-3 md:top-[72px] md:-mx-6 md:px-6'"
       >
         <div class="flex min-w-0 items-center gap-3">
           <button

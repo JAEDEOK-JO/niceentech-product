@@ -215,6 +215,16 @@ function openCalendar() {
 }
 
 @media (max-width: 767px) {
+  .quality-title {
+    gap: 6px;
+    font-size: 1.05rem;
+  }
+
+  .quality-title-total {
+    margin-left: 0;
+    font-size: 0.9rem;
+  }
+
   .quality-print-actions {
     display: none;
   }

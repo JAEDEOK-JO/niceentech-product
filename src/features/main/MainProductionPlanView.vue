@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onUnmounted, ref, watch } from 'vue'
-import { CalendarDays, ClipboardList, Printer, Search } from 'lucide-vue-next'
+import { CalendarDays, ClipboardList, Printer } from 'lucide-vue-next'
 import Button from '@/components/ui/button/Button.vue'
 import Input from '@/components/ui/input/Input.vue'
 import MainProductionPlanGroupTable from '@/features/main/MainProductionPlanGroupTable.vue'
@@ -11,7 +11,6 @@ import { isForemanWorkMan, isProductionAdmin } from '@/utils/adminAccess'
 import { WELDING_INSPECTORS, getWeldingInspectorClass } from '@/utils/productionStatus'
 import MakerDialog from '@/features/main/maker/MakerDialog.vue'
 import { serializeMaker } from '@/features/main/maker/makerOptions'
-import { PLAN_SORT_COLUMNS } from '@/features/main/productionPlanSort'
 import { WELDING_SCHEDULE_PERMISSION_ERROR } from '@/features/welding-schedule/utils/weldingSchedulePermission'
 import CncPlanRegisterDialog from '@/features/cnc/components/CncPlanRegisterDialog.vue'
 import ProductionCalculationDialog from '@/features/main/calculation/ProductionCalculationDialog.vue'
@@ -19,6 +18,7 @@ import ProductionPlanLegendDialog from '@/features/main/ProductionPlanLegendDial
 import { vVirtualKeyboard } from '@/features/virtual-keyboard/directives/vVirtualKeyboard'
 import { scheduleDrawingQualityCheck } from '@/features/main/drawing-quality/drawingQualityCheck'
 import { restoreDrawingQualityStatuses } from '@/features/main/drawing-quality/drawingQualityRestore'
+import { productionPlanSearchActive, productionPlanSearchSignal } from '@/features/main/productionPlanSearchBridge'
 import { drawingQualityStatuses } from '@/features/main/drawing-quality/drawingQualityStatus'
 import DrawingQuantityStatusList from '@/features/main/drawing-quality/DrawingQuantityStatusList.vue'
 import DrawingQuantityLogDialog from '@/features/main/drawing-quality/DrawingQuantityLogDialog.vue'
@@ -268,6 +268,15 @@ const isCalendarTuesday = computed(() => {
 })
 
 const hasActiveSearch = computed(() => String(props.searchText ?? '').trim().length > 0)
+
+watch(
+  () => hasActiveSearch.value || props.searchAllDates,
+  (active) => {
+    productionPlanSearchActive.value = Boolean(active)
+  },
+  { immediate: true },
+)
+
 const visibleGroups = computed(() => {
   if (!hasActiveSearch.value) return props.groupedRows
   return props.groupedRows.filter((group) => Array.isArray(group?.rows) && group.rows.length > 0)
@@ -354,6 +363,12 @@ const openSearchDialog = () => {
   localSearchAllDates.value = Boolean(props.searchAllDates)
   isSearchDialogOpen.value = true
 }
+
+watch(productionPlanSearchSignal, (signal) => {
+  if (signal) openSearchDialog()
+})
+
+window.addEventListener('production-plan-search', openSearchDialog)
 
 const closeSearchDialog = () => {
   localSearchText.value = String(props.searchText ?? '')
@@ -693,6 +708,8 @@ const showSnackbar = (message) => {
 
 onUnmounted(() => {
   if (snackbarTimer) clearTimeout(snackbarTimer)
+  productionPlanSearchActive.value = false
+  window.removeEventListener('production-plan-search', openSearchDialog)
 })
 
 const closeTestDateDialog = () => {
@@ -1000,15 +1017,19 @@ const selectDrawingFile = (file) => {
 <template>
   <section class="min-h-screen bg-white">
     <main class="w-full px-4 pb-5 md:px-6 md:pb-8">
-      <div class="print-title-bar sticky top-[56px] z-20 -mx-4 border-b border-slate-200 bg-white px-4 py-2 md:top-[72px] md:-mx-6 md:px-6">
+      <div class="print-title-bar sticky top-0 z-20 -mx-4 border-b border-slate-200 bg-white px-4 py-2 md:top-[72px] md:-mx-6 md:px-6">
       <div class="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between xl:gap-4">
           <div class="min-w-0">
             <div class="flex flex-col gap-2 xl:flex-row xl:items-center xl:gap-3">
-              <h1 class="shrink-0 text-lg font-extrabold text-slate-900 md:text-xl">{{ pageTitle }}</h1>
-              <Button class="print-hide h-8 px-3 text-xs md:text-sm" variant="outline" @click="isLegendDialogOpen = true">
-                색상정보
-              </Button>
-              <DrawingQuantityStatusList class="print-hide shrink-0" :items="drawingQualityStatuses" @open="quantityLogOpen = true" />
+              <div class="flex items-center justify-between gap-2 xl:justify-start xl:gap-3">
+                <h1 class="min-w-0 truncate text-lg font-extrabold text-slate-900 md:text-xl">{{ pageTitle }}</h1>
+                <Button class="print-hide h-8 shrink-0 px-3 text-xs md:text-sm" variant="outline" @click="isLegendDialogOpen = true">
+                  색상정보
+                </Button>
+              </div>
+              <div class="print-hide hidden shrink-0 md:block">
+                <DrawingQuantityStatusList :items="drawingQualityStatuses" @open="quantityLogOpen = true" />
+              </div>
             </div>
           </div>
           <div class="print-hide flex flex-col gap-2 xl:min-w-[520px] xl:flex-row xl:items-center xl:justify-end">
@@ -1030,7 +1051,7 @@ const selectDrawingFile = (file) => {
               </Button>
               <button
                 type="button"
-                class="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                class="hidden h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 md:flex"
                 aria-label="검수일자 선택"
                 @click="openCalendarDialog"
               >
@@ -1038,20 +1059,11 @@ const selectDrawingFile = (file) => {
               </button>
               <button
                 type="button"
-                class="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                class="hidden h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 md:flex"
                 aria-label="주간 작업일지"
                 @click="emit('go-stats')"
               >
                 <ClipboardList class="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                class="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 xl:hidden"
-                :class="hasActiveSearch || searchAllDates ? 'border-blue-200 bg-blue-50 text-blue-700' : ''"
-                aria-label="검색"
-                @click="openSearchDialog"
-              >
-                <Search class="h-4 w-4" />
               </button>
             </div>
             <div class="hidden items-center gap-2 xl:flex">
@@ -1195,18 +1207,6 @@ const selectDrawingFile = (file) => {
       <div v-else-if="planError" class="py-16 text-center text-sm text-red-600">{{ planError }}</div>
       <div v-else-if="hasActiveSearch && visibleGroups.length === 0" class="py-16 text-center text-sm text-slate-500">검색 결과가 없습니다.</div>
       <div v-else class="production-plan-groups-scroll mt-6 space-y-6">
-        <div class="flex flex-wrap gap-1 md:hidden">
-          <button
-            v-for="column in PLAN_SORT_COLUMNS"
-            :key="column.key"
-            type="button"
-            class="rounded-lg px-2.5 py-1.5 text-xs font-bold"
-            :class="sortKey === column.key ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'"
-            @click="emit('toggle-plan-sort', column.key)"
-          >
-            {{ column.label }}{{ sortKey === column.key ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '' }}
-          </button>
-        </div>
         <MainProductionPlanGroupTable
           v-for="(groupData, groupIndex) in visibleGroups"
           :key="groupData.group"

@@ -73,6 +73,7 @@ const onCellClick = (row, columnKey) => {
 }
 const displayCellText = (row, key) => getCellText(row, key, { includeYear: props.showFullDates })
 const displayWorkType = (row) => String(row?.work_type ?? '').trim() || '기타'
+const hasMaker = (row) => Boolean(String(row?.maker ?? '').trim())
 const tableWidthStyle = {
   '--production-plan-table-width': `${totalTableWidth}px`,
 }
@@ -84,18 +85,18 @@ const tableWidthStyle = {
       <h2 class="text-base font-extrabold text-slate-900">{{ groupData.group }}</h2>
     </div>
 
-    <div class="space-y-3 md:hidden">
+    <div class="-mx-4 divide-y divide-slate-200 border-y border-slate-200 md:hidden">
       <div
         v-if="groupData.rows.length === 0"
-        class="rounded-xl border border-slate-200 bg-white px-3 py-4 text-center text-[13px] font-medium text-slate-500 shadow-sm"
+        class="bg-white px-3 py-4 text-center text-[13px] font-medium text-slate-500"
       >
         데이터 없음
       </div>
       <article
         v-for="row in groupData.rows"
         :key="`main-mobile-${groupData.group}-${row.id}`"
-        class="rounded-xl border border-slate-200 bg-white p-3 shadow-sm"
-        :class="isRowEditing(row) ? 'ring-2 ring-slate-900' : ''"
+        class="px-3 py-3"
+        :class="isRowEditing(row) ? 'bg-slate-50 ring-2 ring-inset ring-slate-900' : 'bg-white'"
       >
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0">
@@ -162,19 +163,20 @@ const tableWidthStyle = {
             :class="{ 'pointer-events-none': !isRowEditing(row) }"
             @click="onMobileCellClick(row, 'inch')"
           >
-            메이커
-            <MakerBadges class="ml-1" :maker="row.maker" />
+            <span v-if="!hasMaker(row)">메이커</span>
+            <MakerBadges v-else class="!w-auto" :maker="row.maker" />
           </button>
           <p class="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 font-semibold text-emerald-700 whitespace-nowrap">
             중량 {{ displayCellText(row, 'weight') || '' }}
           </p>
           <button
+            v-if="displayCellText(row, 'memo') || isRowEditing(row)"
             type="button"
-            class="w-full bg-transparent px-0 py-0 text-left text-slate-600"
+            class="w-full whitespace-pre-wrap bg-transparent px-0 py-0 text-left font-semibold text-orange-700"
             :class="{ 'pointer-events-none': !isRowEditing(row) }"
             @click="onMobileRowMenu(row)"
           >
-            비고 {{ row.memo || '' }}
+            {{ displayCellText(row, 'memo') }}
           </button>
           <div class="flex w-full items-center justify-end">
             <span class="inline-flex items-center rounded-full px-2.5 py-1 font-bold whitespace-nowrap" :class="getWorkTypeBadgeClass(row?.work_type)">
