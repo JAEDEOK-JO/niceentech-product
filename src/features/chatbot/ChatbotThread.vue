@@ -6,6 +6,7 @@ defineProps({
   messages: { type: Array, default: () => [] },
   sending: { type: Boolean, default: false },
   liveReasoning: { type: String, default: '' },
+  startedAt: { type: Number, default: 0 },
 })
 
 function showsThinking(message) {
@@ -31,6 +32,6 @@ function showsThinking(message) {
         <ChatbotAnswer :content="message.content" />
       </div>
     </div>
-    <ChatbotThinking v-if="sending" live :reasoning="liveReasoning" />
+    <ChatbotThinking v-if="sending" live :started-at="startedAt" :reasoning="liveReasoning" />
   </div>
 </template>

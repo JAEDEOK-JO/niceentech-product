@@ -8,7 +8,9 @@ import {
   saveValueNote,
   type ChatbotNote,
 } from './notes.ts'
+import { koreanReasoning } from './koreanReasoning.ts'
 import { completeJson, completeText } from './openai.ts'
+import { noteTables, pickTables } from './pickTables.ts'
 import { phrasePrompt, planPrompt, seoulToday } from './schemaPrompt.ts'
 import { sampleLines, sampleSql } from './sampleColumnValues.ts'
 import { guardSql } from './sqlGuard.ts'
@@ -16,6 +18,14 @@ import { isWriteRequest } from './writeIntent.ts'
 
 const FAILURE = '조회에 실패했습니다.'
 const REFUSAL = '수행할 수 없습니다.'
+
+function stopped(signal?: AbortSignal) {
+  return Boolean(signal?.aborted)
+}
+
+function stopError() {
+  return new DOMException('stopped', 'AbortError')
+}
 
 function joinReasoning(parts: string[]) {
   return clip(parts.map((part) => part.trim()).filter(Boolean).join('\n\n'), 8000)
@@ -80,14 +90,16 @@ async function plan(
   history: { role: string; content: string }[],
   hint: string,
   notes: string,
+  tables: string[] | undefined,
   onReasoning?: (delta: string) => void,
+  signal?: AbortSignal,
 ) {
   const historyText = history
     .map((message) => `${message.role === 'user' ? '사용자' : '챗봇'}: ${clip(message.content, 300)}`)
     .join('\n')
 
   return completeJson(
-    `${planPrompt(seoulToday(), notes)}
+    `${planPrompt(seoulToday(), notes, tables)}
 
 이전 대화:
 ${historyText || '(없음)'}
@@ -95,6 +107,7 @@ ${historyText || '(없음)'}
 질문: ${question}
 ${hint}`,
     onReasoning,
+    signal,
   )
 }
 
@@ -103,24 +116,34 @@ async function selectRows(
   question: string,
   history: { role: string; content: string }[],
   onReasoning?: (delta: string) => void,
+  signal?: AbortSignal,
 ) {
   const notes: string[] = []
-  const relay = relayReasoning(onReasoning)
+  const korean = koreanReasoning(relayReasoning(onReasoning), signal)
   if (isWriteRequest(question)) return { text: REFUSAL, reasoning: '' }
 
-  const memo = notesText(await relatedNotes(supabase, question, history))
+  const related = await relatedNotes(supabase, question, history)
+  const memo = notesText(related)
+  const recent = history
+    .filter((message) => message.role === 'user')
+    .slice(-2)
+    .map((message) => clip(message.content, 200))
+  let tables =
+    (await pickTables(question, recent, noteTables(related.map((note) => note.topic)), signal)) ?? undefined
+  if (stopped(signal)) throw stopError()
   let hint = ''
   let reason = FAILURE
   let looked = false
   let rejected = false
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (stopped(signal)) throw stopError()
     let planned: { sql: string; reply: string; reasoning: string; look: string; learn: unknown }
     try {
-      if (attempt > 0) relay.gap()
-      planned = await plan(question, history, hint, memo, relay.delta)
-      if (planned.reasoning) notes.push(planned.reasoning)
-    } catch (error) {
+      planned = await plan(question, history, hint, memo, tables, korean.delta, signal)
+      notes.push(await korean.flush())    } catch (error) {
+      if (stopped(signal)) throw stopError()
+      notes.push(await korean.flush())
       console.error('chatbot plan failed', error)
       reason = FAILURE
       break
@@ -165,16 +188,20 @@ async function selectRows(
         )
       }
       const rows = JSON.stringify(data ?? []).slice(0, 12000)
-      relay.gap()
-      const phrased = await completeText(phrasePrompt(question, rows), relay.delta)
-      if (phrased.reasoning) notes.push(phrased.reasoning)
+      const phrased = await completeText(phrasePrompt(question, rows), korean.delta, signal)
+      if (stopped(signal)) throw stopError()
+      notes.push(await korean.flush())
       return { text: clip(phrased.text, 3900) || FAILURE, reasoning: joinReasoning(notes) }
     } catch (error) {
+      if (stopped(signal)) throw stopError()
       console.error('chatbot query failed', error)
       reason = FAILURE
       rejected = true
       console.error('chatbot rejected sql', planned.sql)
-      hint = '앞의 조회는 거절되었다. 안내된 화면 자료만 쓰는 SELECT 하나로 다시 작성한다. 비밀번호, 푸시, 챗봇 대화는 쓰지 않는다. reply는 비운다.'
+      tables = undefined
+      const cause = clip(String((error as { message?: unknown })?.message ?? ''), 200)
+      hint = `앞의 조회는 거절되었다. 이유: ${cause || '알 수 없음'}
+같은 SQL을 다시 내지 않는다. 이유를 고친 SELECT 하나로 다시 작성한다. 안내된 화면 자료만 쓴다. 비밀번호, 푸시, 챗봇 대화는 쓰지 않는다. reply는 비운다.`
     }
   }
 
@@ -207,6 +234,7 @@ export async function answerQuestion(
   userId: string,
   question: string,
   onReasoning?: (delta: string) => void,
+  signal?: AbortSignal,
 ) {
   const started = Date.now()
   const history = await recentMessages(supabase, userId)
@@ -214,12 +242,15 @@ export async function answerQuestion(
   let reasoning = ''
 
   try {
-    const result = await selectRows(supabase, question, history, onReasoning)
+    const result = await selectRows(supabase, question, history, onReasoning, signal)
+    if (stopped(signal)) return
     text = result.text || FAILURE
     reasoning = result.reasoning || ''
   } catch (error) {
+    if (stopped(signal)) return
     console.error('chatbot answer failed', error)
   }
 
+  if (stopped(signal)) return
   await saveMessages(supabase, userId, question, text, reasoning, Date.now() - started)
 }

@@ -43,6 +43,10 @@ function applyEvent(
   onReasoning?: (delta: string) => void,
 ) {
   const type = String(event.type ?? '')
+  if (type === 'response.reasoning_summary_part.added') {
+    if (state.live) emitReasoning(state, '\n\n', onReasoning)
+    return
+  }
   if (type === 'response.reasoning_summary_text.delta') {
     emitReasoning(state, String(event.delta ?? ''), onReasoning)
     return

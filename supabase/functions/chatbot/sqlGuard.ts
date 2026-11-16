@@ -16,8 +16,27 @@ const FUNCTIONS = new Set([
 const FORBIDDEN =
   /\b(insert|update|delete|drop|alter|grant|revoke|truncate|copy|create|comment|execute|call|do|set|reset|into|auth|storage|vault|information_schema|pg_catalog|realtime|pg_|dblink|current_setting|set_config|chatbot_)\b/i
 
+const FROM_ARGUMENT_FUNCTIONS = new Set(['extract', 'substring', 'trim'])
+
 function stripComments(sql: string) {
   return sql.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/--[^\n\r]*/g, ' ')
+}
+
+function enclosingFunction(sql: string, index: number) {
+  let depth = 0
+  for (let i = index - 1; i >= 0; i -= 1) {
+    if (sql[i] === ')') depth += 1
+    if (sql[i] !== '(') continue
+    if (depth === 0) return (sql.slice(0, i).match(/([a-z_][a-z0-9_]*)\s*$/i)?.[1] ?? '').toLowerCase()
+    depth -= 1
+  }
+  return ''
+}
+
+function readTables(sql: string) {
+  return [...sql.matchAll(/\b(from|join)\s+(?:public\.)?([a-z_][a-z0-9_]*)/gi)]
+    .filter((match) => match[1].toLowerCase() === 'join' || !FROM_ARGUMENT_FUNCTIONS.has(enclosingFunction(sql, match.index ?? 0)))
+    .map((match) => match[2].toLowerCase())
 }
 
 export function guardSql(raw: string) {
@@ -28,13 +47,13 @@ export function guardSql(raw: string) {
   if (!/^\s*select\s/i.test(sql)) throw new Error('select_only')
   if (FORBIDDEN.test(sql) || /\bpassword\b/i.test(sql)) throw new Error('unsafe_sql')
 
-  const tables = [...sql.matchAll(/\b(?:from|join)\s+(?:public\.)?([a-z_][a-z0-9_]*)/gi)].map((match) =>
-    match[1].toLowerCase(),
-  )
-  if (!tables.length || tables.some((table) => !isReadableTable(table))) throw new Error('unknown_table')
+  const tables = readTables(sql)
+  const unknown = tables.find((table) => !isReadableTable(table))
+  if (!tables.length || unknown) throw new Error(`unknown_table:${unknown ?? ''}`)
 
   const functions = [...sql.matchAll(/\b([a-z_][a-z0-9_]*)\s*\(/gi)].map((match) => match[1].toLowerCase())
-  if (functions.some((name) => !FUNCTIONS.has(name))) throw new Error('unsafe_sql')
+  const blocked = functions.find((name) => !FUNCTIONS.has(name))
+  if (blocked) throw new Error(`unknown_function:${blocked}`)
 
   return sql
 }

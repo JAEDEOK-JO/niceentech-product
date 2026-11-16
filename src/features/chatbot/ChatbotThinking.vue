@@ -4,6 +4,7 @@ import { formatThinkingDuration } from '@/features/chatbot/formatThinkingDuratio
 
 const props = defineProps({
   live: { type: Boolean, default: false },
+  startedAt: { type: Number, default: 0 },
   durationMs: { type: Number, default: 0 },
   reasoning: { type: String, default: '' },
 })
@@ -18,12 +19,13 @@ const label = computed(() => {
 })
 
 watch(
-  () => props.live,
-  (live) => {
+  () => [props.live, props.startedAt],
+  () => {
     window.clearInterval(timer)
     elapsedMs.value = 0
-    if (!live) return
-    const started = Date.now()
+    if (!props.live) return
+    const started = props.startedAt || Date.now()
+    elapsedMs.value = Date.now() - started
     timer = window.setInterval(() => {
       elapsedMs.value = Date.now() - started
     }, 200)

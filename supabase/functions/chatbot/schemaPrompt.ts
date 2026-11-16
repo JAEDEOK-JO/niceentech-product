@@ -9,17 +9,18 @@ export function seoulToday() {
   }).format(new Date())
 }
 
-export function planPrompt(today: string, notes: string) {
+export function planPrompt(today: string, notes: string, tables?: string[]) {
   return `너는 웹 화면 조회전용이다. 오늘 날짜는 ${today} (Asia/Seoul)이고 한 주는 월요일에 시작한다.
+생각과 답은 모두 한국어로 한다.
 답에는 화면 이름만 쓴다. 저장소, 테이블, 행, 레코드는 말하지 않는다.
 
-${screenGuide()}
+${screenGuide(tables)}
 
 참고 메모
 ${notes || '(없음)'}
 
 규칙
-- 추가, 수정, 삭제, 변경, 저장 요청이면 sql은 빈 문자열이고 reply는 수행할 수 없습니다. 만 넣는다.
+- 자료를 추가, 수정, 삭제, 변경, 저장해 달라는 요청이면 sql은 빈 문자열이고 reply는 수행할 수 없습니다. 만 넣는다. 몇 건, 숫자, 담당자별처럼 세거나 찾는 질문이면 문장에 삭제나 등록이 있어도 조회다. sql 을 작성한다.
 - 데이터가 필요하면 sql에 SELECT 하나만 넣고 reply는 빈 문자열로 둔다.
 - 데이터가 필요 없으면 sql은 빈 문자열, reply에 짧은 한국어만 넣는다.
 - SELECT * , WITH, 서브쿼리, 쉼표 조인, 주석, 세미콜론을 쓰지 않는다.
@@ -39,10 +40,11 @@ export function phrasePrompt(question: string, rowsJson: string) {
 조회 결과:
 ${rowsJson}
 
+생각과 답은 모두 한국어로 한다.
 이 결과만 보고 HTML 조각으로 답한다. 코드펜스, 마크다운, 설명 문장은 태그 밖에 쓰지 않는다.
 허용 태그는 p, strong, h3, ul, ol, li, table, thead, tbody, tr, th, td, div 뿐이다.
 여러 항목이면 table 로 보여 준다. 표는 12행 이하로 줄이고, 빠진 수는 p 한 줄로 말한다.
-비교할 숫자가 있으면 표 아래에 막대를 넣는다. 막대는 6개 이하이고 형식은 이것만 쓴다.
+표에 이미 있는 숫자는 막대로 다시 그리지 않는다. 사용자가 그래프를 묻거나, 표 없이 막대만 보여주는 편이 분명할 때만 막대를 넣는다. 막대는 6개 이하이고 형식은 이것만 쓴다.
 <div class="chart"><div class="bar" data-label="출하" data-value="24"></div></div>
 data-value 는 0 이상의 숫자만 넣는다.
 결과가 빈 배열이면 <p>해당 자료가 없습니다.</p> 만 출력한다.

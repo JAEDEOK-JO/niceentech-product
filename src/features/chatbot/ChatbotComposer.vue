@@ -4,10 +4,10 @@ import { vVirtualKeyboard } from '@/features/virtual-keyboard/directives/vVirtua
 
 const props = defineProps({
   modelValue: { type: String, default: '' },
-  disabled: { type: Boolean, default: false },
+  busy: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['update:modelValue', 'submit'])
+const emit = defineEmits(['update:modelValue', 'submit', 'stop'])
 const fieldEl = ref(null)
 
 function resize() {
@@ -44,15 +44,25 @@ watch(
       rows="1"
       placeholder="질문"
       class="max-h-40 min-h-11 flex-1 resize-none bg-transparent px-2 py-2.5 text-[15px] leading-6 text-slate-900 outline-none placeholder:text-slate-400"
-      :disabled="disabled"
+      :disabled="busy"
       @input="onInput"
       @keydown.enter.exact.prevent="emit('submit')"
     />
     <button
+      v-if="busy"
+      class="mb-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-900 text-white"
+      type="button"
+      aria-label="중지"
+      @click="emit('stop')"
+    >
+      <span class="h-3 w-3 rounded-[2px] bg-white" />
+    </button>
+    <button
+      v-else
       class="mb-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-900 text-white disabled:opacity-30"
       type="submit"
       aria-label="보내기"
-      :disabled="disabled || !modelValue.trim()"
+      :disabled="!modelValue.trim()"
     >
       <svg viewBox="0 0 20 20" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M10 15V5M6 9l4-4 4 4" stroke-linecap="round" stroke-linejoin="round" />
