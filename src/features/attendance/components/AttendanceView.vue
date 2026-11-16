@@ -19,6 +19,7 @@ import AttendanceRequestSignatureDialog from './AttendanceRequestSignatureDialog
 import AttendanceRequestStatusDialog from './AttendanceRequestStatusDialog.vue'
 import WorkerAppDownloadPanel from '../guest/WorkerAppDownloadPanel.vue'
 import WorkerAppQrDialog from '../guest/WorkerAppQrDialog.vue'
+import WorkerSignupList from '@/features/worker-management/signups/WorkerSignupList.vue'
 import DailyWorkHoursPanel from './DailyWorkHoursPanel.vue'
 import AttendanceEvidencePicker from './AttendanceEvidencePicker.vue'
 import AttendanceEvidenceGalleryDialog from './AttendanceEvidenceGalleryDialog.vue'
@@ -29,7 +30,7 @@ import { isDeptHeadPending, isFinalApprovalPending, isGyeongyuPending } from '..
 import type { AttendanceStatusChangeValue } from '../utils/attendanceRequestStatus'
 import { formatLeaveDaysCountLabel, isHalfDayLeaveType, LEAVE_TYPE_ABSENCE, LEAVE_TYPE_HOME, LEAVE_TYPE_OUTING } from '../utils/attendanceLeaveType'
 
-type AdminTab = 'requests' | 'employees' | 'summary' | 'analysis' | 'approval' | 'daepyo' | 'gyeongyu' | 'workhours'
+type AdminTab = 'requests' | 'employees' | 'summary' | 'analysis' | 'approval' | 'daepyo' | 'gyeongyu' | 'workhours' | 'signups'
 type UserTab = 'download' | 'workhours'
 
 const props = defineProps<{
@@ -38,6 +39,7 @@ const props = defineProps<{
   pendingItems: AttendanceRequest[]
   filters: AttendanceFilters
   departments: string[]
+  heading?: string
   quota: AttendanceAnnualQuota | null
   stats: AttendanceDashboardStats
   employees: Employee[]
@@ -52,6 +54,7 @@ const props = defineProps<{
   managementTabsVisible?: boolean
   scopedDepartments?: readonly string[] | null
   isRootAdmin: boolean
+  isSuperAdmin?: boolean
   canManagePending: boolean
   canDeptHeadApprove?: (item: AttendanceRequest) => boolean
   canGyeongyu?: boolean
@@ -306,6 +309,13 @@ watch(
           :class="tabBtnClass('workhours')"
           @click="activeTab = 'workhours'"
         >작업시간</button>
+        <button
+          v-if="isSuperAdmin"
+          type="button"
+          class="rounded-lg px-3.5 py-2 text-sm font-bold transition-colors"
+          :class="tabBtnClass('signups')"
+          @click="activeTab = 'signups'"
+        >뉴 직원목록</button>
       </div>
       </div>
 
@@ -335,7 +345,7 @@ watch(
       <!-- 페이지 헤더 -->
       <div class="mb-7 flex flex-wrap items-start justify-between gap-6">
         <div>
-          <h1 class="text-2xl font-extrabold text-slate-900">생산부 근태관리</h1>
+          <h1 class="text-2xl font-extrabold text-slate-900">{{ heading || '근태관리' }}</h1>
           <p class="mt-1 text-sm text-slate-500">{{ periodLabel }} 휴가 신청 및 근태 현황</p>
         </div>
         <button
@@ -391,6 +401,8 @@ watch(
         @save="emit('updateDailyWorkHours', $event)"
         @select-date="emit('selectDailyWorkDate', $event)"
       />
+
+      <WorkerSignupList v-if="isSuperAdmin && activeTab === 'signups'" />
 
       <!-- ═══ 직원 목록 탭 (관리자) ═══ -->
       <AttendanceEmployeeList

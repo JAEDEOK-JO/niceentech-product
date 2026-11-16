@@ -12,7 +12,7 @@ import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useDialog } from '@/composables/useDialog'
 import { useAuth } from '@/composables/useAuth'
 import { useProfile } from '@/composables/useProfile'
-import { isAdminRole, isRootAdmin } from '@/utils/adminAccess'
+import { isAdminRole, isRootAdmin, isSuperAdmin } from '@/utils/adminAccess'
 import {
   fetchAttendanceRequests,
   fetchPendingAttendanceRequests,
@@ -64,6 +64,7 @@ import AttendanceView from '@/features/attendance/components/AttendanceView.vue'
 import WorkerManagementTabs from '@/features/worker-management/components/WorkerManagementTabs.vue'
 import RewardDashboard from '@/features/worker-management/reward/RewardDashboard.vue'
 import { canManageWorkerRewards } from '@/features/worker-management/rewardAccess'
+import { attendanceHeading } from '@/features/attendance/utils/attendanceHeading'
 import { printAttendanceLeaveApplication, printAllApprovedAttendanceLeaveApplications } from '@/features/attendance/utils/attendanceLeavePrint'
 import { isDeptHeadApproved, isDeptHeadPending, isFinalApprovalPending, isGyeongyuPending, getAttendanceStatusLabel } from '@/features/attendance/utils/attendanceApprover'
 import type { AttendanceStatusChangeValue } from '@/features/attendance/utils/attendanceRequestStatus'
@@ -97,6 +98,7 @@ const scopedDepartments = computed(() =>
   getScopedAttendanceDepartments(profile.value?.role, currentUserName.value),
 )
 const visibleDepartments = computed(() => scopedDepartments.value ?? departments.value)
+const pageHeading = computed(() => attendanceHeading(currentUserName.value, scopedDepartments.value))
 
 function inAttendanceScope(department: string) {
   const scope = scopedDepartments.value
@@ -126,6 +128,7 @@ watch(
 )
 const { confirm, alert } = useDialog()
 const isRootAdminUser = computed(() => isRootAdmin(profile.value?.role))
+const isSuperAdminUser = computed(() => isSuperAdmin(profile.value?.role))
 const canManagePending = computed(() => canManageAttendancePending(currentUserName.value))
 const userCanGyeongyu = computed(() => canGyeongyuApprove(currentUserName.value))
 const userCanFinal = computed(() => canFinalApprove(currentUserName.value))
@@ -925,6 +928,7 @@ async function handleDeleteEmployee(id: number) {
     :pending-items="pendingItems"
     :filters="filters"
     :departments="visibleDepartments"
+    :heading="pageHeading"
     :scoped-departments="scopedDepartments"
     :quota="quota"
     :stats="stats"
@@ -938,6 +942,7 @@ async function handleDeleteEmployee(id: number) {
     :current-user-id="currentUserId"
     :is-admin="isAdmin"
     :is-root-admin="isRootAdminUser"
+    :is-super-admin="isSuperAdminUser"
     :can-manage-pending="canManagePending"
     :can-dept-head-approve="userCanDeptHeadApprove"
     :can-gyeongyu="userCanGyeongyu"
