@@ -6,9 +6,7 @@ const jsonHeaders = {
   'Content-Type': 'application/json',
 }
 
-const WORKER_ROLE = '작업자'
-const WORKER_DEPARTMENT = '생산부'
-const ASSIGNED_DEPARTMENT = 'assigned_department'
+const WORKER_DEPARTMENTS = ['용접부', '나사부', '생산부', 'CNC']
 
 const getRuntimeConfig = () => {
   const config = {
@@ -29,17 +27,7 @@ const normalizeId = (value: unknown) =>
     .replace(/@niceentech\.kr$/i, '')
     .replace(/[^a-z0-9._-]/g, '')
 
-const fetchAssignedDepartments = async (supabase: ReturnType<typeof createClient>) => {
-  const { data, error } = await supabase
-    .from('employee_option_settings')
-    .select('value')
-    .eq('category', ASSIGNED_DEPARTMENT)
-    .order('sort_order')
-    .order('value')
-
-  if (error) throw error
-  return (data ?? []).map((row) => String(row.value ?? '').trim()).filter(Boolean)
-}
+const WORKER_ROLE = '작업자'
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -58,16 +46,7 @@ Deno.serve(async (req) => {
   const supabase = createClient(config.SUPABASE_URL, config.SUPABASE_SERVICE_ROLE_KEY)
 
   if (req.method === 'GET') {
-    try {
-      const departments = await fetchAssignedDepartments(supabase)
-      return new Response(JSON.stringify({ departments }), { headers: jsonHeaders })
-    } catch (error) {
-      const message = error instanceof Error ? error.message : ''
-      return new Response(JSON.stringify({ error: 'department_fetch_failed', message }), {
-        status: 500,
-        headers: jsonHeaders,
-      })
-    }
+    return new Response(JSON.stringify({ departments: WORKER_DEPARTMENTS }), { headers: jsonHeaders })
   }
 
   let body: Record<string, unknown>
@@ -83,18 +62,7 @@ Deno.serve(async (req) => {
   const assignedDepartment = String(body.assignedDepartment ?? '').trim()
   const email = `${emailId}@niceentech.kr`
 
-  let assignedDepartments: string[]
-  try {
-    assignedDepartments = await fetchAssignedDepartments(supabase)
-  } catch (error) {
-    const message = error instanceof Error ? error.message : ''
-    return new Response(JSON.stringify({ error: 'department_fetch_failed', message }), {
-      status: 500,
-      headers: jsonHeaders,
-    })
-  }
-
-  if (!emailId || password.length < 6 || !name || !assignedDepartments.includes(assignedDepartment)) {
+  if (!emailId || password.length < 6 || !name || !WORKER_DEPARTMENTS.includes(assignedDepartment)) {
     return new Response(JSON.stringify({ error: 'invalid_input' }), { status: 400, headers: jsonHeaders })
   }
   const { data: created, error: createError } = await supabase.auth.admin.createUser({
@@ -114,7 +82,7 @@ Deno.serve(async (req) => {
   const { error: profileError } = await supabase.from('profiles').insert({
     id: userId,
     name,
-    department: WORKER_DEPARTMENT,
+    department: assignedDepartment,
     assigned_department: assignedDepartment,
     role: WORKER_ROLE,
     work_man: '없음',

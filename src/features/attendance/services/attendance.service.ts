@@ -234,18 +234,14 @@ export async function deleteAttendanceRequest(id: number): Promise<void> {
 
 // ─── 신청 삭제 (관리자, 상태 무관) ────────────────────────────────────────────
 export async function adminDeleteAttendanceRequest(id: number): Promise<void> {
-  const { data: row, error: statusError } = await supabase
-    .from('attendance_requests')
-    .select('status')
-    .eq('id', id)
-    .maybeSingle()
-  if (statusError) throw statusError
-  if (String(row?.status ?? '') !== ATTENDANCE_WORKFLOW_STATUS.PENDING) {
-    throw new Error('부서장 대기 건만 삭제할 수 있습니다.')
-  }
   const evidenceUrls = await fetchEvidenceUrlsById(id)
-  const { error } = await supabase.from('attendance_requests').delete().eq('id', id).eq('status', ATTENDANCE_WORKFLOW_STATUS.PENDING)
+  const { data, error } = await supabase
+    .from('attendance_requests')
+    .delete()
+    .eq('id', id)
+    .select('id')
   if (error) throw error
+  if (!data?.length) throw new Error('삭제에 실패했습니다.')
   await cleanupEvidenceStorage(evidenceUrls)
 }
 
@@ -287,17 +283,20 @@ export async function resubmitAttendanceRequest(
 export async function adminUpdateAttendanceRequest(
   id: number,
   form: AttendanceFormState,
+  options?: { anyStatus?: boolean },
 ): Promise<void> {
-  const { data: row, error: statusError } = await supabase
-    .from('attendance_requests')
-    .select('status')
-    .eq('id', id)
-    .maybeSingle()
-  if (statusError) throw statusError
-  if (isDeptHeadApprovedStatus(String(row?.status ?? ''))) {
-    throw new Error('부서장 승인 이후에는 수정할 수 없습니다.')
+  if (!options?.anyStatus) {
+    const { data: row, error: statusError } = await supabase
+      .from('attendance_requests')
+      .select('status')
+      .eq('id', id)
+      .maybeSingle()
+    if (statusError) throw statusError
+    if (isDeptHeadApprovedStatus(String(row?.status ?? ''))) {
+      throw new Error('부서장 승인 이후에는 수정할 수 없습니다.')
+    }
   }
-  const { error } = await supabase
+  let query = supabase
     .from('attendance_requests')
     .update({
       leave_type: form.leaveType,
@@ -310,7 +309,8 @@ export async function adminUpdateAttendanceRequest(
       department: form.selectedDepartment,
     })
     .eq('id', id)
-    .eq('status', ATTENDANCE_WORKFLOW_STATUS.PENDING)
+  if (!options?.anyStatus) query = query.eq('status', ATTENDANCE_WORKFLOW_STATUS.PENDING)
+  const { error } = await query
 
   if (error) throw error
 }

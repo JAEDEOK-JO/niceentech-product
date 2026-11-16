@@ -1,13 +1,13 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { useDialog } from '@/composables/useDialog'
-import { fetchEmployeeOptionGroups } from '@/features/attendance/services/employeeOptions.service'
+import { WORKER_DEPARTMENTS } from '@/features/worker/workerDepartmentOptions'
 import WorkerSignupRow from './WorkerSignupRow.vue'
 import { approveWorkerSignup, deleteWorkerSignup, fetchWorkerSignups, updateWorkerSignup } from './workerSignup.service'
 
 const { confirm } = useDialog()
 const items = ref([])
-const departments = ref([])
+const departments = WORKER_DEPARTMENTS
 const loading = ref(false)
 const savingId = ref('')
 const message = ref('')
@@ -20,12 +20,7 @@ async function load() {
   loading.value = true
   message.value = ''
   try {
-    const [rows, options] = await Promise.all([
-      fetchWorkerSignups(),
-      fetchEmployeeOptionGroups().catch(() => ({ assignedDepartments: [] })),
-    ])
-    items.value = rows
-    departments.value = options.assignedDepartments
+    items.value = await fetchWorkerSignups()
   } catch {
     items.value = []
     message.value = '불러오지 못했습니다.'

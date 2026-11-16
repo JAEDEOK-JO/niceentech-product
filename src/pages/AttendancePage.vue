@@ -621,7 +621,9 @@ async function submitForm() {
       if (isReapplyForm.value) {
         await resubmitAttendanceRequest(editTargetId.value, formData.value)
       } else if (isAdmin.value) {
-        await adminUpdateAttendanceRequest(editTargetId.value, formData.value)
+        await adminUpdateAttendanceRequest(editTargetId.value, formData.value, {
+          anyStatus: isSuperAdminUser.value,
+        })
       } else {
         await updateAttendanceRequest(editTargetId.value, formData.value)
       }
@@ -681,8 +683,8 @@ async function handleDelete(item: AttendanceRequest) {
 }
 
 // ─── 관리자 수정 ───────────────────────────────────────────────────────────────
-function handleAdminEdit(item: AttendanceRequest) {
-  if (isDeptHeadApproved(item)) {
+function handleAdminEdit(item: AttendanceRequest, reapply = false) {
+  if (isDeptHeadApproved(item) && !isSuperAdminUser.value) {
     showToast('부서장 승인 이후에는 수정할 수 없습니다.', 'error')
     return
   }
@@ -697,7 +699,7 @@ function handleAdminEdit(item: AttendanceRequest) {
     evidenceUrls: [...(item.evidenceUrls ?? [])],
   }
   isEditForm.value = true
-  isReapplyForm.value = item.status === '반려'
+  isReapplyForm.value = reapply || (!isSuperAdminUser.value && item.status === '반려')
   editTargetId.value = item.id
   hideFormEmployeeSelector.value = false
   formVisible.value = true
@@ -705,10 +707,7 @@ function handleAdminEdit(item: AttendanceRequest) {
 
 // ─── 관리자 삭제 (상태 무관) ───────────────────────────────────────────────────
 async function handleAdminDelete(item: AttendanceRequest) {
-  if (item.status !== '대기중') {
-    showToast(item.status === '반려' ? '반려된 신청은 삭제할 수 없습니다.' : '부서장 승인 이후에는 삭제할 수 없습니다.', 'error')
-    return
-  }
+  if (!isSuperAdminUser.value) return
   if (!await confirm(`'${item.userName}' 신청을 삭제하시겠습니까?`)) return
   try {
     await adminDeleteAttendanceRequest(item.id)

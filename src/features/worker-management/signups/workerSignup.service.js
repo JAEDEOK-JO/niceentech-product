@@ -47,6 +47,7 @@ export async function updateWorkerSignup(id, { name, assignedDepartment }) {
     .update({
       name,
       assigned_department: assignedDepartment || null,
+      department: assignedDepartment || null,
     })
     .eq('id', id)
     .eq('role', PROFILE_ROLES.worker)

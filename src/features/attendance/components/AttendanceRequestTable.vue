@@ -9,6 +9,7 @@ const props = defineProps<{
   items: AttendanceRequest[]
   mode: 'requests' | 'approval' | 'gyeongyu' | 'daepyo'
   isRootAdmin?: boolean
+  isSuperAdmin?: boolean
   canManage?: boolean
   canDeptHeadApprove?: (item: AttendanceRequest) => boolean
   canGyeongyu?: boolean
@@ -25,7 +26,7 @@ const emit = defineEmits<{
   (e: 'reject', item: AttendanceRequest): void
   (e: 'gyeongyu', item: AttendanceRequest): void
   (e: 'daepyoApprove', item: AttendanceRequest): void
-  (e: 'adminEdit', item: AttendanceRequest): void
+  (e: 'adminEdit', item: AttendanceRequest, reapply: boolean): void
   (e: 'adminDelete', item: AttendanceRequest): void
   (e: 'print', item: AttendanceRequest): void
   (e: 'changeStatus', payload: { item: AttendanceRequest; status: AttendanceStatusChangeValue }): void
@@ -67,13 +68,25 @@ const BTN = {
   printedOrange: 'rounded-lg border border-orange-200 bg-orange-100 px-3 py-1.5 text-xs font-bold text-orange-800 hover:bg-orange-200',
 }
 
+function withSuperAdminTools(actions: ActionDef[]) {
+  if (!props.isSuperAdmin) return actions
+  const next = [...actions]
+  if (!next.some((action) => action.label === '수정')) {
+    next.push({ key: 'adminEdit', label: '수정', buttonClass: BTN.outline })
+  }
+  if (!next.some((action) => action.key === 'adminDelete')) {
+    next.push({ key: 'adminDelete', label: '삭제', buttonClass: BTN.outlineRed })
+  }
+  return next
+}
+
 function actionsFor(item: AttendanceRequest): ActionDef[] {
   if (props.mode === 'approval') {
-    if (!props.canDeptHeadApprove?.(item)) return []
-    return [
+    if (!props.canDeptHeadApprove?.(item)) return withSuperAdminTools([])
+    return withSuperAdminTools([
       { key: 'approve', label: '승인', buttonClass: BTN.emerald },
       { key: 'reject', label: '반려', buttonClass: BTN.red },
-    ]
+    ])
   }
   if (props.mode === 'gyeongyu') {
     const actions: ActionDef[] = []
@@ -83,7 +96,7 @@ function actionsFor(item: AttendanceRequest): ActionDef[] {
         { key: 'reject', label: '반려', buttonClass: BTN.red },
       )
     }
-    return actions
+    return withSuperAdminTools(actions)
   }
   if (props.mode === 'daepyo') {
     const actions: ActionDef[] = []
@@ -93,35 +106,34 @@ function actionsFor(item: AttendanceRequest): ActionDef[] {
         { key: 'reject', label: '반려', buttonClass: BTN.red },
       )
     }
-    return actions
+    return withSuperAdminTools(actions)
   }
   if (item.status === '반려') {
-    return [{ key: 'adminEdit', label: '재신청', buttonClass: BTN.outline }]
+    return withSuperAdminTools([{ key: 'adminEdit', label: '재신청', buttonClass: BTN.outline }])
   }
   if (item.status === '대기중') {
-    return [
+    return withSuperAdminTools([
       { key: 'adminEdit', label: '수정', buttonClass: BTN.outline },
-      { key: 'adminDelete', label: '삭제', buttonClass: BTN.outlineRed },
-    ]
+    ])
   }
-  if (item.status !== '승인') return []
-  return [{
+  if (item.status !== '승인') return withSuperAdminTools([])
+  return withSuperAdminTools([{
     key: 'print',
     label: item.printedAt ? '인쇄완료' : '인쇄',
     buttonClass: item.printedAt ? BTN.printedOrange : BTN.lightBlue,
-  }]
+  }])
 }
 
 function statusClass(item: AttendanceRequest) {
   return props.statusBadgeClass?.(item.status)
 }
 
-function runAction(key: ActionKey, item: AttendanceRequest) {
+function runAction(key: ActionKey, item: AttendanceRequest, reapply = false) {
   if (key === 'approve') emit('approve', item)
   else if (key === 'reject') emit('reject', item)
   else if (key === 'gyeongyu') emit('gyeongyu', item)
   else if (key === 'daepyoApprove') emit('daepyoApprove', item)
-  else if (key === 'adminEdit') emit('adminEdit', item)
+  else if (key === 'adminEdit') emit('adminEdit', item, reapply)
   else if (key === 'adminDelete') emit('adminDelete', item)
   else if (key === 'print') emit('print', item)
 }
@@ -201,7 +213,7 @@ function runAction(key: ActionKey, item: AttendanceRequest) {
                 :key="action.key"
                 type="button"
                 :class="action.buttonClass"
-                @click="runAction(action.key, item)"
+                @click="runAction(action.key, item, action.label === '재신청')"
               >{{ action.label }}</button>
             </div>
           </td>
@@ -262,7 +274,7 @@ function runAction(key: ActionKey, item: AttendanceRequest) {
             :key="action.key"
             type="button"
             :class="action.buttonClass"
-            @click="runAction(action.key, item)"
+            @click="runAction(action.key, item, action.label === '재신청')"
           >{{ action.label }}</button>
         </div>
       </div>

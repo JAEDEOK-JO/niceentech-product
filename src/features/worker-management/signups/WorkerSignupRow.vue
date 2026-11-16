@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
+import { normalizeWorkerDepartment } from '@/features/worker/workerDepartmentOptions'
 
 const props = defineProps({
   item: { type: Object, required: true },
@@ -16,7 +17,7 @@ watch(
   () => props.item,
   (item) => {
     name.value = item?.name || ''
-    department.value = item?.assigned_department || ''
+    department.value = normalizeWorkerDepartment(item?.assigned_department) || item?.assigned_department || ''
   },
   { immediate: true },
 )

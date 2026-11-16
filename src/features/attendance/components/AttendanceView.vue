@@ -101,7 +101,7 @@ const emit = defineEmits<{
   (e: 'delete', item: AttendanceRequest): void
   (e: 'approve', item: AttendanceRequest): void
   (e: 'openReject', item: AttendanceRequest): void
-  (e: 'adminEdit', item: AttendanceRequest): void
+  (e: 'adminEdit', item: AttendanceRequest, reapply?: boolean): void
   (e: 'adminDelete', item: AttendanceRequest): void
   (e: 'print', item: AttendanceRequest): void
   (e: 'changeStatus', payload: { item: AttendanceRequest; status: AttendanceStatusChangeValue }): void
@@ -441,12 +441,15 @@ watch(
           v-else
           :items="deptHeadPendingItems"
           mode="approval"
+          :is-super-admin="isSuperAdmin"
           :can-dept-head-approve="canDeptHeadApprove"
           :leave-badge-class="leaveTypeBadge"
           @open-detail="emit('openDetail', $event)"
           @open-evidence="openEvidenceGallery($event.urls, $event.index)"
           @approve="emit('approve', $event)"
           @reject="emit('openReject', $event)"
+          @admin-edit="(item, reapply) => emit('adminEdit', item, reapply)"
+          @admin-delete="emit('adminDelete', $event)"
         />
       </template>
 
@@ -460,6 +463,7 @@ watch(
           v-else
           :items="gyeongyuPendingItems"
           mode="gyeongyu"
+          :is-super-admin="isSuperAdmin"
           :can-manage="canManagePending"
           :can-gyeongyu="canGyeongyu"
           :leave-badge-class="leaveTypeBadge"
@@ -467,7 +471,7 @@ watch(
           @open-detail="emit('openDetail', $event)"
           @open-evidence="openEvidenceGallery($event.urls, $event.index)"
           @gyeongyu="emit('gyeongyu', $event)"
-          @admin-edit="emit('adminEdit', $event)"
+          @admin-edit="(item, reapply) => emit('adminEdit', item, reapply)"
           @admin-delete="emit('adminDelete', $event)"
         />
       </template>
@@ -482,6 +486,7 @@ watch(
           v-else
           :items="finalApprovalPendingItems"
           mode="daepyo"
+          :is-super-admin="isSuperAdmin"
           :can-manage="canManagePending"
           :can-final-approve="canFinalApprove"
           :leave-badge-class="leaveTypeBadge"
@@ -489,7 +494,7 @@ watch(
           @open-evidence="openEvidenceGallery($event.urls, $event.index)"
           @daepyo-approve="emit('daepyoApprove', $event)"
           @reject="emit('openReject', $event)"
-          @admin-edit="emit('adminEdit', $event)"
+          @admin-edit="(item, reapply) => emit('adminEdit', item, reapply)"
           @admin-delete="emit('adminDelete', $event)"
         />
       </template>
@@ -557,6 +562,7 @@ watch(
                 <AttendanceRequestTable
                   :items="pagedRequestItems"
                   mode="requests"
+                  :is-super-admin="isSuperAdmin"
                   :is-root-admin="isRootAdmin"
                   :can-dept-head-approve="canDeptHeadApprove"
                   :can-gyeongyu="canGyeongyu"
@@ -566,7 +572,7 @@ watch(
                   :status-badge-class="statusBadge"
                   @open-detail="emit('openDetail', $event)"
                   @open-evidence="openEvidenceGallery($event.urls, $event.index)"
-                  @admin-edit="emit('adminEdit', $event)"
+                  @admin-edit="(item, reapply) => emit('adminEdit', item, reapply)"
                   @admin-delete="emit('adminDelete', $event)"
                   @print="emit('print', $event)"
                   @change-status="emit('changeStatus', $event)"
