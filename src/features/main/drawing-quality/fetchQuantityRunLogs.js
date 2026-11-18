@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase'
 
-const VISIBLE_STATES = ['done', 'review', 'failed', 'pending', 'surveying', 'reading', 'zooming']
+const VISIBLE_STATES = ['done', 'review', 'failed', 'held', 'pending', 'surveying', 'reading', 'zooming']
 
 export function productionTestDate(iso) {
   const matched = String(iso ?? '').trim().match(/^(\d{4})-(\d{2})-(\d{2})$/)
@@ -9,6 +9,7 @@ export function productionTestDate(iso) {
 }
 
 export function quantityLogStatus(state) {
+  if (state === 'held') return '대기'
   if (state === 'failed') return '실패'
   if (state === 'done' || state === 'review') return '완료'
   return '파악중'

@@ -1,6 +1,8 @@
 <script setup>
 import { computed, ref } from 'vue'
 import RewardPhotoPicker from './RewardPhotoPicker.vue'
+import { existingRewardPhotos, newRewardPhotoFiles, problemPathsOf } from './rewardOwner'
+import { updateOwnRewardReport } from './rewardOwner.service'
 import { submitRewardReport } from './reward.service'
 
 const props = defineProps({
@@ -8,16 +10,21 @@ const props = defineProps({
     type: String,
     required: true,
   },
+  report: {
+    type: Object,
+    default: null,
+  },
 })
 
 const emit = defineEmits(['cancel', 'submitted'])
 
 const submitting = ref(false)
 const message = ref('')
-const note = ref('')
-const normalPhotos = ref([])
-const problemPhotos = ref([])
+const note = ref(props.report?.found_note || '')
+const normalPhotos = ref(existingRewardPhotos(props.report?.normalPhotoUrls, props.report?.normal_photo_paths))
+const problemPhotos = ref(existingRewardPhotos(props.report?.problemPhotoUrls, problemPathsOf(props.report)))
 
+const editing = computed(() => Boolean(props.report?.id))
 const canSubmit = computed(() => note.value.trim() && !submitting.value)
 
 async function submit() {
@@ -25,15 +32,23 @@ async function submit() {
   submitting.value = true
   message.value = ''
   try {
-    await submitRewardReport(props.userId, {
-      normalFiles: normalPhotos.value.map((photo) => photo.file),
-      problemFiles: problemPhotos.value.map((photo) => photo.file),
-      originalNote: '',
-      foundNote: note.value,
-    })
+    if (editing.value) {
+      await updateOwnRewardReport(props.userId, props.report, {
+        normalPhotos: normalPhotos.value,
+        problemPhotos: problemPhotos.value,
+        foundNote: note.value,
+      })
+    } else {
+      await submitRewardReport(props.userId, {
+        normalFiles: newRewardPhotoFiles(normalPhotos.value),
+        problemFiles: newRewardPhotoFiles(problemPhotos.value),
+        originalNote: '',
+        foundNote: note.value,
+      })
+    }
     emit('submitted')
   } catch {
-    message.value = '제출에 실패했습니다.'
+    message.value = editing.value ? '수정에 실패했습니다.' : '제출에 실패했습니다.'
   } finally {
     submitting.value = false
   }
@@ -46,7 +61,7 @@ async function submit() {
       <button type="button" class="text-sm font-bold text-slate-500" :disabled="submitting" @click="emit('cancel')">
         뒤로
       </button>
-      <h2 class="text-lg font-extrabold text-slate-900">등록</h2>
+      <h2 class="text-lg font-extrabold text-slate-900">{{ editing ? '수정' : '불량 등록 접수' }}</h2>
     </div>
 
     <label class="text-sm font-extrabold text-slate-900">내용</label>
@@ -74,7 +89,7 @@ async function submit() {
       :disabled="!canSubmit"
       @click="submit"
     >
-      {{ submitting ? '제출 중' : '제출' }}
+      {{ submitting ? (editing ? '저장 중' : '제출 중') : editing ? '저장' : '제출' }}
     </button>
     <p v-if="message" class="mt-3 text-center text-sm font-bold text-red-500">{{ message }}</p>
   </div>

@@ -1,7 +1,8 @@
 <script setup>
 import RewardFeedCard from './RewardFeedCard.vue'
+import { canOwnerChangeReward } from './rewardOwner'
 
-defineProps({
+const props = defineProps({
   title: {
     type: String,
     default: '',
@@ -10,9 +11,17 @@ defineProps({
     type: Array,
     default: () => [],
   },
+  userId: {
+    type: String,
+    default: '',
+  },
+  busyId: {
+    type: String,
+    default: '',
+  },
 })
 
-const emit = defineEmits(['open'])
+const emit = defineEmits(['open', 'edit', 'remove'])
 </script>
 
 <template>
@@ -28,7 +37,16 @@ const emit = defineEmits(['open'])
       내역 없음
     </p>
     <div v-else class="space-y-3">
-      <RewardFeedCard v-for="item in items" :key="item.id" :item="item" @open="emit('open', $event)" />
+      <RewardFeedCard
+        v-for="item in items"
+        :key="item.id"
+        :item="item"
+        :can-manage="canOwnerChangeReward(item, props.userId)"
+        :busy="props.busyId === item.id"
+        @open="emit('open', $event)"
+        @edit="emit('edit', item)"
+        @remove="emit('remove', item)"
+      />
     </div>
   </section>
 </template>

@@ -5,10 +5,13 @@ import { useProfile } from '@/composables/useProfile'
 import { fetchEmployees } from '@/features/attendance/services/attendance.service'
 import AttendanceEmployeeMappingPanel from '@/features/attendance/components/AttendanceEmployeeMappingPanel.vue'
 import ChatbotNotesPanel from '@/features/settings/components/ChatbotNotesPanel.vue'
+import UserCapabilitySettingsPanel from '@/features/settings/components/UserCapabilitySettingsPanel.vue'
 import EmployeeAccountRegisterPanel from '@/features/settings/components/EmployeeAccountRegisterPanel.vue'
 import EmployeeOptionSettingsPanel from '@/features/settings/components/EmployeeOptionSettingsPanel.vue'
 import InventoryMaterialSettingsPanel from '@/features/settings/components/InventoryMaterialSettingsPanel.vue'
 import PushRecipientSettingsPanel from '@/features/settings/components/PushRecipientSettingsPanel.vue'
+import AdminNoticePanel from '@/features/notices/AdminNoticePanel.vue'
+import { canPostNotice } from '@/features/notices/noticeAccess'
 import WorkerApprovalPanel from '@/features/settings/components/WorkerApprovalPanel.vue'
 import { clearCacheAndReload } from '@/features/settings/services/cacheRefresh.service'
 import { useVirtualKeyboardSetting } from '@/features/virtual-keyboard/composables/useVirtualKeyboardSetting'
@@ -30,6 +33,7 @@ const showVirtualKeyboardSetting = isWebHost()
 const isRootAdmin = computed(() => isRootAdminRole(profile.value?.role))
 const isSuperAdmin = computed(() => isSuperAdminRole(profile.value?.role))
 const isAdmin = computed(() => isAdminRole(profile.value?.role))
+const canWriteNotice = computed(() => canPostNotice(profile.value?.role))
 const activePanel = ref('app-info')
 
 const employees = ref([])
@@ -54,7 +58,9 @@ watch(
 watch(
   isSuperAdmin,
   (v) => {
-    if (!v && activePanel.value === 'chatbot-notes') activePanel.value = 'app-info'
+    if (!v && (activePanel.value === 'chatbot-notes' || activePanel.value === 'user-capabilities')) {
+      activePanel.value = 'app-info'
+    }
   },
   { immediate: true },
 )
@@ -63,6 +69,7 @@ watch(
   (v) => {
     if (!v && activePanel.value === 'push-recipients') activePanel.value = 'app-info'
     if (!v && activePanel.value === 'worker-approval') activePanel.value = 'app-info'
+    if (!v && activePanel.value === 'notices') activePanel.value = 'app-info'
   },
   { immediate: true },
 )
@@ -147,10 +154,28 @@ const handleVirtualKeyboardToggle = async (event) => {
             v-if="isSuperAdmin"
             type="button"
             class="rounded-xl px-4 py-3 text-left text-sm font-extrabold transition-colors"
+            :class="activePanel === 'user-capabilities' ? 'bg-slate-900 text-white' : 'bg-slate-50 text-slate-700 hover:bg-slate-100'"
+            @click="activePanel = 'user-capabilities'"
+          >
+            권한
+          </button>
+          <button
+            v-if="isSuperAdmin"
+            type="button"
+            class="rounded-xl px-4 py-3 text-left text-sm font-extrabold transition-colors"
             :class="activePanel === 'chatbot-notes' ? 'bg-slate-900 text-white' : 'bg-slate-50 text-slate-700 hover:bg-slate-100'"
             @click="activePanel = 'chatbot-notes'"
           >
             챗봇 메모
+          </button>
+          <button
+            v-if="canWriteNotice"
+            type="button"
+            class="rounded-xl px-4 py-3 text-left text-sm font-extrabold transition-colors"
+            :class="activePanel === 'notices' ? 'bg-slate-900 text-white' : 'bg-slate-50 text-slate-700 hover:bg-slate-100'"
+            @click="activePanel = 'notices'"
+          >
+            공지사항
           </button>
           <button
             v-if="isAdmin"
@@ -253,9 +278,15 @@ const handleVirtualKeyboardToggle = async (event) => {
           v-else-if="isRootAdmin && activePanel === 'inventory-materials'"
         />
 
+        <UserCapabilitySettingsPanel
+          v-else-if="isSuperAdmin && activePanel === 'user-capabilities'"
+        />
+
         <ChatbotNotesPanel
           v-else-if="isSuperAdmin && activePanel === 'chatbot-notes'"
         />
+
+        <AdminNoticePanel v-else-if="canWriteNotice && activePanel === 'notices'" />
 
         <WorkerApprovalPanel
           v-else-if="isAdmin && activePanel === 'worker-approval'"

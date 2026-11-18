@@ -2,7 +2,7 @@
 import WorkerAppBar from './WorkerAppBar.vue'
 import WorkerAttendanceView from './WorkerAttendanceView.vue'
 import WorkerBottomNav from './WorkerBottomNav.vue'
-import WorkerLabelView from './WorkerLabelView.vue'
+import WorkerNoticeView from '@/features/notices/WorkerNoticeView.vue'
 import WorkerProfileView from './WorkerProfileView.vue'
 import WorkerRewardView from '../reward/WorkerRewardView.vue'
 import type { WorkerTab } from '../workerTab'
@@ -24,7 +24,7 @@ const emit = defineEmits<{
   <div class="mx-auto flex h-dvh w-full max-w-[480px] flex-col bg-slate-50">
     <WorkerAppBar :name="name" :department="department" />
     <main class="min-h-0 flex-1 overflow-y-auto">
-      <WorkerLabelView v-if="tab === 'notice'" label="알림" />
+      <WorkerNoticeView v-if="tab === 'notice'" :user-id="userId" />
       <WorkerAttendanceView
         v-else-if="tab === 'attendance'"
         :user-id="userId"

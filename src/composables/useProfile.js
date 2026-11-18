@@ -1,4 +1,5 @@
 import { ref, watch } from 'vue'
+import { loadOwnCapabilities } from '@/features/access/userCapabilityStore'
 import { supabase } from '@/lib/supabase'
 
 export function useProfile(session) {
@@ -8,6 +9,7 @@ export function useProfile(session) {
   const fetchProfile = async () => {
     if (!session.value?.user?.id) {
       profile.value = null
+      await loadOwnCapabilities('')
       ready.value = true
       return
     }
@@ -25,6 +27,7 @@ export function useProfile(session) {
       return
     }
 
+    await loadOwnCapabilities(session.value.user.id)
     profile.value = {
       ...data,
       role: data?.role || '일반',

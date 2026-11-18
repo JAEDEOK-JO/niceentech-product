@@ -56,7 +56,7 @@ export async function fetchRewardFeed() {
   })
 }
 
-async function uploadPhotos(userId, files) {
+export async function uploadRewardPhotos(userId, files) {
   const paths = []
   for (const file of [...files].slice(0, REWARD_PHOTO_LIMIT)) {
     const photo = await compressRewardPhoto(file)
@@ -76,9 +76,9 @@ export async function submitRewardReport(userId, { normalFiles, problemFiles, or
   if (!found) throw new Error('문제가 없습니다.')
   const paths = []
   try {
-    const normalPaths = await uploadPhotos(userId, normalFiles ?? [])
+    const normalPaths = await uploadRewardPhotos(userId, normalFiles ?? [])
     paths.push(...normalPaths)
-    const problemPaths = await uploadPhotos(userId, problemFiles ?? [])
+    const problemPaths = await uploadRewardPhotos(userId, problemFiles ?? [])
     paths.push(...problemPaths)
 
     const { error } = await supabase.from('worker_reward_reports').insert({

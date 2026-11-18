@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
+import { swipeStep } from './rewardPhotoSwipe.js'
 
 const props = defineProps({
   urls: {
@@ -22,12 +23,14 @@ const rootRef = ref(null)
 const index = ref(Math.min(Math.max(0, props.start), Math.max(0, props.urls.length - 1)))
 const scale = ref(1)
 const pan = ref({ x: 0, y: 0 })
+const swipeX = ref(0)
 const points = new Map()
 let pinchDistance = 0
 let drag = null
+let swipe = null
 
 const imageStyle = computed(() => ({
-  transform: `translate(calc(-50% + ${pan.value.x}px), calc(-50% + ${pan.value.y}px)) scale(${scale.value})`,
+  transform: `translate(calc(-50% + ${pan.value.x + swipeX.value}px), calc(-50% + ${pan.value.y}px)) scale(${scale.value})`,
 }))
 
 const MAX_SCALE = 8
@@ -39,7 +42,9 @@ function clampScale(value) {
 function resetView() {
   scale.value = 1
   pan.value = { x: 0, y: 0 }
+  swipeX.value = 0
   drag = null
+  swipe = null
   pinchDistance = 0
 }
 
@@ -67,11 +72,15 @@ function onPointerDown(event) {
     const [first, second] = [...points.values()]
     pinchDistance = Math.hypot(first.x - second.x, first.y - second.y)
     drag = null
+    swipe = null
+    swipeX.value = 0
     return
   }
   if (scale.value > 1) {
     drag = { x: event.clientX, y: event.clientY, tx: pan.value.x, ty: pan.value.y }
+    return
   }
+  swipe = { x: event.clientX, y: event.clientY }
 }
 
 function onPointerMove(event) {
@@ -85,6 +94,10 @@ function onPointerMove(event) {
     if (scale.value === 1) pan.value = { x: 0, y: 0 }
     return
   }
+  if (swipe && scale.value === 1) {
+    swipeX.value = event.clientX - swipe.x
+    return
+  }
   if (!drag || scale.value === 1) return
   pan.value = {
     x: drag.tx + event.clientX - drag.x,
@@ -92,10 +105,17 @@ function onPointerMove(event) {
   }
 }
 
-function onPointerUp(event) {
+function finishPointer(event, commit) {
+  const start = swipe
   points.delete(event.pointerId)
   if (points.size < 2) pinchDistance = 0
-  if (points.size === 0) drag = null
+  if (points.size !== 0) return
+  drag = null
+  swipe = null
+  swipeX.value = 0
+  if (!commit || !start || scale.value !== 1) return
+  const delta = swipeStep(start, { x: event.clientX, y: event.clientY })
+  if (delta) step(delta)
 }
 
 function onWheel(event) {
@@ -134,8 +154,8 @@ onMounted(() => {
         style="touch-action: none"
         @pointerdown="onPointerDown"
         @pointermove="onPointerMove"
-        @pointerup="onPointerUp"
-        @pointercancel="onPointerUp"
+        @pointerup="finishPointer($event, true)"
+        @pointercancel="finishPointer($event, false)"
         @wheel.prevent="onWheel"
       >
         <img

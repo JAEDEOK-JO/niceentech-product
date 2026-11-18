@@ -19,6 +19,7 @@ import AttendanceRequestSignatureDialog from './AttendanceRequestSignatureDialog
 import AttendanceRequestStatusDialog from './AttendanceRequestStatusDialog.vue'
 import WorkerAppDownloadPanel from '../guest/WorkerAppDownloadPanel.vue'
 import WorkerAppQrDialog from '../guest/WorkerAppQrDialog.vue'
+import AdminNoticePanel from '@/features/notices/AdminNoticePanel.vue'
 import WorkerSignupList from '@/features/worker-management/signups/WorkerSignupList.vue'
 import DailyWorkHoursPanel from './DailyWorkHoursPanel.vue'
 import AttendanceEvidencePicker from './AttendanceEvidencePicker.vue'
@@ -30,7 +31,7 @@ import { isDeptHeadPending, isFinalApprovalPending, isGyeongyuPending } from '..
 import type { AttendanceStatusChangeValue } from '../utils/attendanceRequestStatus'
 import { formatLeaveDaysCountLabel, isHalfDayLeaveType, LEAVE_TYPE_ABSENCE, LEAVE_TYPE_HOME, LEAVE_TYPE_OUTING } from '../utils/attendanceLeaveType'
 
-type AdminTab = 'requests' | 'employees' | 'summary' | 'analysis' | 'approval' | 'daepyo' | 'gyeongyu' | 'workhours' | 'signups'
+type AdminTab = 'requests' | 'employees' | 'summary' | 'analysis' | 'approval' | 'daepyo' | 'gyeongyu' | 'workhours' | 'signups' | 'notices'
 type UserTab = 'download' | 'workhours'
 
 const props = defineProps<{
@@ -163,6 +164,25 @@ const tabBtnClass = (tab: AdminTab) =>
   activeTab.value === tab
     ? 'bg-slate-900 text-white'
     : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'
+
+const adminTabTitle: Record<AdminTab, string> = {
+  requests: '신청 현황',
+  approval: '부서장 대기',
+  gyeongyu: '경유 대기',
+  daepyo: '최종승인 대기',
+  summary: '근태요약',
+  employees: '직원 목록',
+  analysis: '근태 분석',
+  workhours: '작업시간',
+  signups: '뉴 직원목록',
+  notices: '공지사항',
+}
+
+const pageTitle = computed(() => (props.isAdmin ? adminTabTitle[activeTab.value] : props.heading || '근태관리'))
+const showPeriodCaption = computed(() => !props.isAdmin || activeTab.value !== 'notices')
+const showRequestStats = computed(() =>
+  props.isAdmin && ['requests', 'approval', 'gyeongyu', 'daepyo'].includes(activeTab.value),
+)
 
 // 금일 작업시간 입력 다이얼로그
 const workHoursDialogVisible = ref(false)
@@ -310,6 +330,12 @@ watch(
           @click="activeTab = 'workhours'"
         >작업시간</button>
         <button
+          type="button"
+          class="rounded-lg px-3.5 py-2 text-sm font-bold transition-colors"
+          :class="tabBtnClass('notices')"
+          @click="activeTab = 'notices'"
+        >공지사항</button>
+        <button
           v-if="isSuperAdmin"
           type="button"
           class="rounded-lg px-3.5 py-2 text-sm font-bold transition-colors"
@@ -345,21 +371,25 @@ watch(
       <!-- 페이지 헤더 -->
       <div class="mb-7 flex flex-wrap items-start justify-between gap-6">
         <div>
-          <h1 class="text-2xl font-extrabold text-slate-900">{{ heading || '근태관리' }}</h1>
-          <p class="mt-1 text-sm text-slate-500">{{ periodLabel }} 휴가 신청 및 근태 현황</p>
+          <h1 class="text-2xl font-extrabold text-slate-900">{{ pageTitle }}</h1>
+          <p v-if="showPeriodCaption" class="mt-1 text-sm text-slate-500">{{ periodLabel }} 휴가 신청 및 근태 현황</p>
         </div>
-        <button
-          type="button"
-          class="shrink-0 self-center rounded-xl bg-blue-600 px-5 py-3 text-base font-extrabold text-white shadow-sm hover:bg-blue-500 print:hidden"
-          @click="workerAppQrVisible = true"
-        >
-          작업자 어플
-        </button>
+        <div class="flex shrink-0 items-center gap-2 self-center">
+          <div id="attendance-notice-register" class="md:hidden"></div>
+          <button
+            type="button"
+            class="shrink-0 rounded-xl bg-blue-600 px-5 py-3 text-base font-extrabold text-white shadow-sm hover:bg-blue-500 print:hidden"
+            :class="isAdmin && activeTab === 'notices' ? 'max-md:hidden' : ''"
+            @click="workerAppQrVisible = true"
+          >
+            작업자 어플
+          </button>
+        </div>
       </div>
       <WorkerAppQrDialog v-if="workerAppQrVisible" @close="workerAppQrVisible = false" />
 
       <!-- 통계 카드 (관리자만) -->
-      <div v-if="isAdmin" class="mb-4 grid grid-cols-4 gap-1.5">
+      <div v-if="showRequestStats" class="mb-4 grid grid-cols-4 gap-1.5">
         <div class="rounded-lg border border-slate-200 bg-white px-2 py-2 shadow-sm">
           <p class="truncate text-[10px] font-bold text-slate-400">총 직원</p>
           <p class="mt-0.5 text-base font-extrabold text-slate-900">
@@ -403,6 +433,10 @@ watch(
       />
 
       <WorkerSignupList v-if="isSuperAdmin && activeTab === 'signups'" />
+
+      <div v-if="isAdmin && activeTab === 'notices'" class="mx-auto max-w-3xl">
+        <AdminNoticePanel :show-heading="false" header-register />
+      </div>
 
       <!-- ═══ 직원 목록 탭 (관리자) ═══ -->
       <AttendanceEmployeeList

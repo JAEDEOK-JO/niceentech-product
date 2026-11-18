@@ -3,6 +3,7 @@ import { getToken, getMessaging, isSupported, onMessage, type Messaging } from '
 import { getFirebaseApp, getFirebaseVapidKey, isFirebaseConfigured } from '@/lib/firebase'
 import { deleteFcmToken, upsertFcmToken } from '../services/fcmToken.service'
 import { buildPushNotificationOptions } from '../utils/pushNotificationOptions'
+import { replaceMismatchedPushSubscription } from '../utils/replaceMismatchedPushSubscription'
 import { isElectronApp } from '@/utils/device'
 
 type SessionRef = Ref<{ user?: { id?: string } } | null>
@@ -47,6 +48,7 @@ export function useFcmPush(session: SessionRef) {
     if (!messagingInstance) return false
 
     const registration = await navigator.serviceWorker.ready
+    await replaceMismatchedPushSubscription(registration, getFirebaseVapidKey())
     const token = await getToken(messagingInstance, {
       vapidKey: getFirebaseVapidKey(),
       serviceWorkerRegistration: registration,

@@ -28,6 +28,7 @@ async function registerDrawingQuality({ productListId, drawingFileId }) {
   })
 
   if (data?.skipped) return { ok: true, skipped: true }
+  if (data?.held) return { ok: true, held: true }
   if (data?.accepted) return { ok: true, accepted: true }
   if (error || !data?.ok) {
     return { ok: false, message: await readFailureMessage(error, data) }
@@ -38,8 +39,9 @@ async function registerDrawingQuality({ productListId, drawingFileId }) {
 
 async function resolveQuantityState(drawingFileId, result) {
   if (result?.skipped) return 'skipped'
+  if (result?.held) return 'held'
   const watched = await watchDrawingQuantityState(drawingFileId)
-  if (['done', 'review', 'running'].includes(watched)) return watched
+  if (['done', 'review', 'running', 'held'].includes(watched)) return watched
   return 'failed'
 }
 
@@ -62,7 +64,7 @@ export function scheduleDrawingQualityCheck({ productListId, drawingNo, group, f
       .then((result) => resolveQuantityState(file.id, result))
       .catch(() => watchDrawingQuantityState(file.id))
       .then((state) => {
-        if (state === 'skipped') removeDrawingQualityStatus(statusId)
+        if (state === 'skipped' || state === 'held') removeDrawingQualityStatus(statusId)
         else if (state === 'done' || state === 'review') finishDrawingQualityStatus(statusId, state)
         else if (state === 'running') return
         else finishDrawingQualityStatus(statusId, 'failed')

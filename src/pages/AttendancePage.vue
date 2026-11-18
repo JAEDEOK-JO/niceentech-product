@@ -75,8 +75,6 @@ import {
   canSetAttendanceStatus,
   usesAttendanceReapply,
   getScopedAttendanceDepartments,
-  TEMP_FINAL_APPROVER_NAME,
-  TEMP_GYEONGYU_APPROVER_NAME,
 } from '@/features/attendance/utils/attendanceApprovalAccess'
 
 // ─── Auth / Profile ────────────────────────────────────────────────────────────
@@ -768,7 +766,7 @@ async function handleDaepyoApprove(item: AttendanceRequest) {
   }
   if (!await confirm(`${item.userName}의 신청을 최종 승인하시겠습니까?`)) return
   try {
-    await daepyoApproveAttendanceRequest(item.id, TEMP_FINAL_APPROVER_NAME)
+    await daepyoApproveAttendanceRequest(item.id, currentUserName.value)
     markLocalAttendanceMutation()
     showToast('최종 승인 처리되었습니다.')
     await refreshAttendanceAfterMutation()
@@ -786,7 +784,7 @@ async function handleGyeongyu(item: AttendanceRequest) {
   }
   if (!await confirm(`${item.userName}의 신청을 경유 처리하시겠습니까?`)) return
   try {
-    await gyeongyuAttendanceRequest(item.id, TEMP_GYEONGYU_APPROVER_NAME)
+    await gyeongyuAttendanceRequest(item.id, currentUserName.value)
     markLocalAttendanceMutation()
     showToast('경유 처리되었습니다.')
     await refreshAttendanceAfterMutation()

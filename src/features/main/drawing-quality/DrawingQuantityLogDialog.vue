@@ -25,6 +25,7 @@ watch(
 )
 
 function statusClass(state) {
+  if (state === 'held') return 'text-amber-700'
   if (state === 'failed') return 'text-red-600'
   if (state === 'done' || state === 'review') return 'text-emerald-700'
   return 'text-sky-700'

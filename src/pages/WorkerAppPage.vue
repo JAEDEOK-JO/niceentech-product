@@ -1,17 +1,22 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import WorkerLoginView from '@/features/worker/components/WorkerLoginView.vue'
 import WorkerShell from '@/features/worker/components/WorkerShell.vue'
 import { useAuth } from '@/composables/useAuth'
 import { useProfile } from '@/composables/useProfile'
 import { isWorkerRole } from '@/utils/adminAccess'
-import type { WorkerTab } from '@/features/worker/workerTab'
+import { workerTabFromQuery, type WorkerTab } from '@/features/worker/workerTab'
 
+const route = useRoute()
 const router = useRouter()
 const { session, ready, loading, message, login, logout } = useAuth()
 const { profile, ready: profileReady } = useProfile(session)
-const tab = ref<WorkerTab>('notice')
+const tab = ref<WorkerTab>(workerTabFromQuery(route.query.tab))
+
+watch(() => route.query.tab, (value) => {
+  tab.value = workerTabFromQuery(value)
+})
 const isWorker = computed(() => isWorkerRole(profile.value?.role))
 const isApprovedWorker = computed(() => isWorker.value && profile.value?.activate !== false)
 

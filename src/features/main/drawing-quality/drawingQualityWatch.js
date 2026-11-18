@@ -2,7 +2,7 @@ import { supabase } from '@/lib/supabase'
 
 const POLL_MS = 2_000
 const WAIT_MS = 30 * 60 * 1000
-const FINAL_STATES = ['done', 'review', 'failed']
+const FINAL_STATES = ['done', 'review', 'failed', 'held']
 
 export function watchDrawingQuantityState(drawingFileId) {
   const started = Date.now()

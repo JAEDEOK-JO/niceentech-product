@@ -9,6 +9,7 @@ import RewardViewTabs from './RewardViewTabs.vue'
 import { reportInRewardMonth, rewardMonthLabel, rewardMonthShortLabel, shiftRewardMonth } from './rewardMonth'
 import { rewardRanks } from './rewardRanks'
 import { rewardStats } from './rewardStats'
+import { deleteOwnRewardReport } from './rewardOwner.service'
 import { fetchRewardFeed } from './reward.service'
 import WorkerRewardRegisterView from './WorkerRewardRegisterView.vue'
 
@@ -31,6 +32,9 @@ const items = ref([])
 const loading = ref(false)
 const loadFailed = ref(false)
 const registering = ref(false)
+const editing = ref(null)
+const busyId = ref('')
+const actionMessage = ref('')
 const view = ref('all')
 const monthOffset = ref(0)
 const viewer = ref(null)
@@ -57,10 +61,29 @@ async function load() {
   }
 }
 
-async function onSubmitted() {
+function closeForm() {
   registering.value = false
+  editing.value = null
+}
+
+async function onSubmitted() {
+  closeForm()
   monthOffset.value = 0
   await load()
+}
+
+async function onRemove(item) {
+  if (!window.confirm('삭제할까요?')) return
+  busyId.value = item.id
+  actionMessage.value = ''
+  try {
+    await deleteOwnRewardReport(props.userId, item)
+    await load()
+  } catch {
+    actionMessage.value = '삭제에 실패했습니다.'
+  } finally {
+    busyId.value = ''
+  }
 }
 
 onMounted(load)
@@ -68,9 +91,10 @@ onMounted(load)
 
 <template>
   <WorkerRewardRegisterView
-    v-if="registering"
+    v-if="registering || editing"
     :user-id="userId"
-    @cancel="registering = false"
+    :report="editing"
+    @cancel="closeForm"
     @submitted="onSubmitted"
   />
 
@@ -78,9 +102,9 @@ onMounted(load)
     <button
       type="button"
       class="w-full rounded-xl bg-slate-900 py-3 text-sm font-extrabold text-white"
-      @click="registering = true"
+      @click="editing = null; registering = true"
     >
-      포상 등록
+      불량 등록 접수
     </button>
 
     <RewardViewTabs v-model="view" />
@@ -96,13 +120,30 @@ onMounted(load)
       <div class="inline-block h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-slate-700" />
     </div>
     <p v-else-if="loadFailed" class="py-10 text-center text-sm font-bold text-red-500">불러오지 못했습니다.</p>
+    <p v-if="actionMessage" class="text-center text-sm font-bold text-red-500">{{ actionMessage }}</p>
     <template v-else-if="view === 'all'">
       <RewardMonthRanks :ranks="ranks" />
-      <RewardFeedList title="등록 내역" :items="visibleItems" @open="viewer = $event" />
+      <RewardFeedList
+        title="등록 내역"
+        :items="visibleItems"
+        :user-id="userId"
+        :busy-id="busyId"
+        @open="viewer = $event"
+        @edit="editing = $event"
+        @remove="onRemove"
+      />
     </template>
     <template v-else>
       <RewardMyCard :name="name" :department="department" :month="monthShort" :stats="myStats" />
-      <RewardFeedList title="내 등록 내역" :items="myItems" @open="viewer = $event" />
+      <RewardFeedList
+        title="내 등록 내역"
+        :items="myItems"
+        :user-id="userId"
+        :busy-id="busyId"
+        @open="viewer = $event"
+        @edit="editing = $event"
+        @remove="onRemove"
+      />
     </template>
   </div>
 

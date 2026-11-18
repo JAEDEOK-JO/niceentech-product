@@ -1,41 +1,41 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import RewardPhotoViewer from '@/features/worker/reward/RewardPhotoViewer.vue'
 import { fetchRewardReports, reviewReward } from '@/features/settings/services/workerRewardReview.service'
+import { deleteRewardReport } from './rewardAdminEdit.service'
 import RewardDashboardFilters from './RewardDashboardFilters.vue'
 import RewardDashboardTable from './RewardDashboardTable.vue'
+import RewardReportEditDialog from './RewardReportEditDialog.vue'
 import RewardSummaryCards from './RewardSummaryCards.vue'
+import { closeRewardSearch, rewardSearchQuery } from './rewardSearchBridge'
+import { currentRewardDashboardMonth, shiftRewardDashboardMonth } from './rewardDashboardMonth'
 
-const now = new Date()
-const year = ref(now.getFullYear())
-const month = ref(now.getMonth() + 1)
+const now = currentRewardDashboardMonth()
+const year = ref(now.year)
+const month = ref(now.month)
 const status = ref('전체')
-const query = ref('')
 const items = ref([])
 const loading = ref(false)
 const message = ref('')
 const savingId = ref('')
-const viewerUrls = ref([])
+const viewer = ref(null)
+const editing = ref(null)
 
 defineProps({
   canReview: { type: Boolean, default: false },
 })
 
-const summary = computed(() => {
-  const approved = items.value.filter((item) => item.status === '승인')
-  return {
-    pending: items.value.filter((item) => item.status === '대기').length,
-    approved: approved.length,
-    rejected: items.value.filter((item) => item.status === '반려').length,
-    amount: approved.reduce((sum, item) => sum + Number(item.amount || 0), 0),
-  }
-})
+const summary = computed(() => ({
+  pending: items.value.filter((item) => item.status === '대기').length,
+  approved: items.value.filter((item) => item.status === '승인').length,
+  rejected: items.value.filter((item) => item.status === '반려').length,
+  amount: items.value.reduce((sum, item) => sum + (item.status === '승인' ? Number(item.amount || 0) : 0), 0),
+}))
 
 const visibleItems = computed(() => {
-  const keyword = query.value.trim()
-  const selected = status.value === '포상금' ? '승인' : status.value
+  const keyword = rewardSearchQuery.value.trim()
   return items.value.filter((item) => {
-    if (selected !== '전체' && item.status !== selected) return false
+    if (status.value !== '전체' && item.status !== status.value) return false
     if (!keyword) return true
     return [item.name, item.department, item.found_note, item.original_note].some((value) =>
       String(value || '').includes(keyword),
@@ -60,6 +60,37 @@ function selectStatus(next) {
   status.value = status.value === next ? '전체' : next
 }
 
+function shiftMonth(delta) {
+  const next = shiftRewardDashboardMonth(year.value, month.value, delta)
+  year.value = next.year
+  month.value = next.month
+}
+
+function showCurrentMonth() {
+  const current = currentRewardDashboardMonth()
+  year.value = current.year
+  month.value = current.month
+}
+
+async function remove(item) {
+  if (savingId.value || !window.confirm('삭제할까요?')) return
+  savingId.value = item.id
+  message.value = ''
+  try {
+    await deleteRewardReport(item)
+    items.value = items.value.filter((row) => row.id !== item.id)
+  } catch {
+    message.value = '삭제에 실패했습니다.'
+  } finally {
+    savingId.value = ''
+  }
+}
+
+async function onEdited() {
+  editing.value = null
+  await load()
+}
+
 async function review(id, nextStatus) {
   if (savingId.value) return
   savingId.value = id
@@ -75,6 +106,7 @@ async function review(id, nextStatus) {
 
 watch([year, month], load)
 onMounted(load)
+onUnmounted(closeRewardSearch)
 </script>
 
 <template>
@@ -84,11 +116,9 @@ onMounted(load)
       :year="year"
       :month="month"
       :status="status"
-      :query="query"
-      @update:year="year = $event"
-      @update:month="month = $event"
+      @shift-month="shiftMonth"
+      @current-month="showCurrentMonth"
       @update:status="status = $event"
-      @update:query="query = $event"
     />
     <p v-if="message" class="text-sm font-bold text-red-500">{{ message }}</p>
     <p v-if="loading" class="rounded-xl border border-slate-200 bg-white py-16 text-center text-sm font-bold text-slate-400">
@@ -100,8 +130,22 @@ onMounted(load)
       :saving-id="savingId"
       :can-review="canReview"
       @review="review"
-      @open="viewerUrls = $event"
+      @open="viewer = $event"
+      @edit="editing = $event"
+      @remove="remove"
     />
-    <RewardPhotoViewer v-if="viewerUrls.length" :urls="viewerUrls" @close="viewerUrls = []" />
+    <RewardReportEditDialog
+      v-if="editing"
+      :report="editing"
+      @close="editing = null"
+      @saved="onEdited"
+    />
+    <RewardPhotoViewer
+      v-if="viewer?.urls?.length"
+      :urls="viewer.urls"
+      :labels="viewer.labels"
+      :start="viewer.start"
+      @close="viewer = null"
+    />
   </div>
 </template>

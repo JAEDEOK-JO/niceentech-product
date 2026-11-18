@@ -1,5 +1,5 @@
 <script setup>
-import { formatRewardWon } from '@/features/worker/reward/rewardAmount'
+import RewardPhotoGrid from '@/features/worker/reward/RewardPhotoGrid.vue'
 
 defineProps({
   items: { type: Array, required: true },
@@ -7,7 +7,7 @@ defineProps({
   canReview: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['review', 'open'])
+const emit = defineEmits(['review', 'open', 'edit', 'remove'])
 
 const formatWhen = (value) =>
   new Intl.DateTimeFormat('ko-KR', {
@@ -23,7 +23,7 @@ const statusClass = (status) => {
   return 'bg-amber-100 text-amber-700'
 }
 
-const photoUrls = (item) => [...(item.problemPhotoUrls || []), ...(item.normalPhotoUrls || [])]
+const hasPhotos = (item) => item.normalPhotoUrls?.length || item.problemPhotoUrls?.length
 </script>
 
 <template>
@@ -38,7 +38,6 @@ const photoUrls = (item) => [...(item.problemPhotoUrls || []), ...(item.normalPh
             <th class="whitespace-nowrap border border-slate-200 px-3 py-3">신청자</th>
             <th class="border border-slate-200 px-3 py-3">내용</th>
             <th class="whitespace-nowrap border border-slate-200 px-3 py-3">사진</th>
-            <th class="whitespace-nowrap border border-slate-200 px-3 py-3">금액</th>
             <th class="whitespace-nowrap border border-slate-200 px-3 py-3">상태</th>
             <th v-if="canReview" class="whitespace-nowrap border border-slate-200 px-3 py-3">처리</th>
           </tr>
@@ -56,22 +55,15 @@ const photoUrls = (item) => [...(item.problemPhotoUrls || []), ...(item.normalPh
               <p class="break-words font-bold text-slate-900">{{ item.found_note }}</p>
               <p v-if="item.original_note" class="mt-1 break-words text-xs text-slate-500">{{ item.original_note }}</p>
             </td>
-            <td class="border border-slate-200 px-3 py-3 text-center">
-              <button
-                v-if="photoUrls(item).length"
-                type="button"
-                class="relative inline-block h-14 w-16 overflow-hidden rounded-lg bg-slate-100"
-                @click="emit('open', photoUrls(item))"
-              >
-                <img :src="photoUrls(item)[0]" alt="" class="h-full w-full object-cover" />
-                <span class="absolute right-1 top-1 rounded bg-black/70 px-1 text-[10px] font-bold text-white">
-                  {{ photoUrls(item).length }}장
-                </span>
-              </button>
-              <span v-else class="text-xs text-slate-300">-</span>
-            </td>
-            <td class="whitespace-nowrap border border-slate-200 px-3 py-3 text-center font-extrabold text-slate-900">
-              {{ formatRewardWon(item.amount) }}
+            <td class="border border-slate-200 px-3 py-3">
+              <RewardPhotoGrid
+                v-if="hasPhotos(item)"
+                class="justify-center"
+                :normal-urls="item.normalPhotoUrls"
+                :problem-urls="item.problemPhotoUrls"
+                @open="emit('open', $event)"
+              />
+              <span v-else class="block text-center text-xs text-slate-300">-</span>
             </td>
             <td class="whitespace-nowrap border border-slate-200 px-3 py-3 text-center">
               <span class="rounded-full px-2.5 py-1 text-[11px] font-bold" :class="statusClass(item.status)">
@@ -79,8 +71,25 @@ const photoUrls = (item) => [...(item.problemPhotoUrls || []), ...(item.normalPh
               </span>
             </td>
             <td v-if="canReview" class="whitespace-nowrap border border-slate-200 px-3 py-3 text-center">
-              <div v-if="item.status === '대기'" class="flex justify-center gap-1.5">
+              <div v-if="item.status !== '승인'" class="flex flex-wrap justify-center gap-1.5">
                 <button
+                  type="button"
+                  class="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-extrabold text-slate-600 disabled:opacity-40"
+                  :disabled="savingId === item.id"
+                  @click="emit('edit', item)"
+                >
+                  수정
+                </button>
+                <button
+                  type="button"
+                  class="rounded-lg border border-rose-200 px-2.5 py-1.5 text-xs font-extrabold text-rose-600 disabled:opacity-40"
+                  :disabled="savingId === item.id"
+                  @click="emit('remove', item)"
+                >
+                  삭제
+                </button>
+                <button
+                  v-if="item.status === '대기'"
                   type="button"
                   class="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-extrabold text-slate-600 disabled:opacity-40"
                   :disabled="savingId === item.id"
@@ -89,6 +98,7 @@ const photoUrls = (item) => [...(item.problemPhotoUrls || []), ...(item.normalPh
                   반려
                 </button>
                 <button
+                  v-if="item.status === '대기'"
                   type="button"
                   class="rounded-lg bg-slate-900 px-2.5 py-1.5 text-xs font-extrabold text-white disabled:opacity-40"
                   :disabled="savingId === item.id"
@@ -116,9 +126,31 @@ const photoUrls = (item) => [...(item.problemPhotoUrls || []), ...(item.normalPh
           </span>
         </div>
         <p class="mt-2 break-words text-sm font-bold text-slate-900">{{ item.found_note }}</p>
-        <p class="mt-2 text-sm font-extrabold text-slate-900">{{ formatRewardWon(item.amount) }}</p>
-        <div v-if="canReview && item.status === '대기'" class="mt-3 flex gap-2">
+        <RewardPhotoGrid
+          class="mt-3"
+          :normal-urls="item.normalPhotoUrls"
+          :problem-urls="item.problemPhotoUrls"
+          @open="emit('open', $event)"
+        />
+        <div v-if="canReview && item.status !== '승인'" class="mt-3 flex flex-wrap gap-2">
           <button
+            type="button"
+            class="rounded-lg border border-slate-200 px-3 py-2 text-xs font-extrabold text-slate-600 disabled:opacity-40"
+            :disabled="savingId === item.id"
+            @click="emit('edit', item)"
+          >
+            수정
+          </button>
+          <button
+            type="button"
+            class="rounded-lg border border-rose-200 px-3 py-2 text-xs font-extrabold text-rose-600 disabled:opacity-40"
+            :disabled="savingId === item.id"
+            @click="emit('remove', item)"
+          >
+            삭제
+          </button>
+          <button
+            v-if="item.status === '대기'"
             type="button"
             class="rounded-lg border border-slate-200 px-3 py-2 text-xs font-extrabold text-slate-600 disabled:opacity-40"
             :disabled="savingId === item.id"
@@ -127,6 +159,7 @@ const photoUrls = (item) => [...(item.problemPhotoUrls || []), ...(item.normalPh
             반려
           </button>
           <button
+            v-if="item.status === '대기'"
             type="button"
             class="rounded-lg bg-slate-900 px-3 py-2 text-xs font-extrabold text-white disabled:opacity-40"
             :disabled="savingId === item.id"

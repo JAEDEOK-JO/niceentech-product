@@ -70,6 +70,7 @@ Deno.serve(async (req) => {
     const started = await startDrawingRun(supabase, productListId, drawingFileId)
     if (started.status === 'missing') return jsonResponse({ ok: false, message: '검수리스트 등록 실패' }, 404)
     if (started.status === 'skipped') return jsonResponse({ ok: true, skipped: true })
+    if (started.status === 'held') return jsonResponse({ ok: true, held: true })
     if (started.status === 'started') {
       EdgeRuntime.waitUntil(delay(CHECK_DELAY_MS + 500).then(() => advanceRun(supabase, started.runId)))
     }

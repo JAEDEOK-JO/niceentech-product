@@ -72,6 +72,9 @@ export async function createRun(
     company?: string | null
     place?: string | null
     area?: string | null
+    state?: string
+    resultMessage?: string
+    finishedAt?: Date
   },
 ) {
   const { data, error } = await supabase
@@ -83,6 +86,9 @@ export async function createRun(
       file_name: values.fileName,
       insert_quality: values.insertQuality,
       start_after: values.startAfter.toISOString(),
+      ...(values.state ? { state: values.state } : {}),
+      ...(values.resultMessage ? { result_message: values.resultMessage } : {}),
+      ...(values.finishedAt ? { finished_at: values.finishedAt.toISOString() } : {}),
       model: values.model,
       reasoning_effort: values.effort,
       test_date: values.testDate ?? null,

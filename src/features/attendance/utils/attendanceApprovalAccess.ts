@@ -1,7 +1,9 @@
-// 임시 승인 권한 (profiles.name 기준). 추후 역할/부서 기반으로 교체 예정.
-export const TEMP_DEPT_HEAD_APPROVER_NAME = '조재덕'
-export const TEMP_GYEONGYU_APPROVER_NAME = '이지형'
-export const TEMP_FINAL_APPROVER_NAME = '이용필'
+import { CAPABILITY } from '@/features/access/capabilityCatalog'
+import { capabilitiesReady, hasOwnCapability, ownAttendanceScopes } from '@/features/access/userCapabilityStore'
+
+const DEPT_HEAD_NAME = '조재덕'
+const GYEONGYU_NAME = '이지형'
+const FINAL_NAME = '이용필'
 const SCOPED_ATTENDANCE_ADMIN_ROLE = '관리자'
 
 /** 관리자 이름별 근태 신청 조회·부서장 승인 범위 */
@@ -26,7 +28,7 @@ export const ATTENDANCE_APPROVAL_DENIED_MESSAGE = '승인 권한이 없습니다
 const normalizeName = (value: string) => String(value ?? '').trim()
 
 export function getDeptHeadDisplayName(department: string): string {
-  return DEPT_HEAD_DISPLAY_BY_DEPARTMENT[normalizeName(department)] ?? TEMP_DEPT_HEAD_APPROVER_NAME
+  return DEPT_HEAD_DISPLAY_BY_DEPARTMENT[normalizeName(department)] ?? DEPT_HEAD_NAME
 }
 
 /** 부서장 승인 표시명 (처리상태 등). DB approved_by와 무관하게 부서별 표시명 사용 */
@@ -42,11 +44,16 @@ export function getScopedAttendanceDepartments(
   userName: string,
 ): readonly string[] | null {
   if (normalizeName(role ?? '') !== SCOPED_ATTENDANCE_ADMIN_ROLE) return null
+  if (capabilitiesReady.value) {
+    const scopes = ownAttendanceScopes()
+    return scopes.length ? scopes : null
+  }
   return SCOPED_ATTENDANCE_DEPARTMENTS[normalizeName(userName)] ?? null
 }
 
 export function canDeptHeadApprove(userName: string): boolean {
-  return normalizeName(userName) === TEMP_DEPT_HEAD_APPROVER_NAME
+  if (capabilitiesReady.value) return hasOwnCapability(CAPABILITY.attendanceDeptHead)
+  return normalizeName(userName) === DEPT_HEAD_NAME
 }
 
 export function canDeptHeadApproveItem(
@@ -54,36 +61,36 @@ export function canDeptHeadApproveItem(
   role: string | null | undefined,
   department: string,
 ): boolean {
-  const name = normalizeName(userName)
-  if (name === TEMP_DEPT_HEAD_APPROVER_NAME) return true
+  if (canDeptHeadApprove(userName)) return true
   const scope = getScopedAttendanceDepartments(role, userName)
   if (!scope) return false
   return scope.includes(normalizeName(department))
 }
 
-/** 경유 권한: 이지형 + 조재덕(전체 권한) */
 export function canGyeongyuApprove(userName: string): boolean {
+  if (capabilitiesReady.value) return hasOwnCapability(CAPABILITY.attendanceGyeongyu)
   const name = normalizeName(userName)
-  return name === TEMP_GYEONGYU_APPROVER_NAME || name === TEMP_DEPT_HEAD_APPROVER_NAME
+  return name === GYEONGYU_NAME || name === DEPT_HEAD_NAME
 }
 
-/** 최종승인 권한: 이용필 + 조재덕(전체 권한) */
 export function canFinalApprove(userName: string): boolean {
+  if (capabilitiesReady.value) return hasOwnCapability(CAPABILITY.attendanceFinal)
   const name = normalizeName(userName)
-  return name === TEMP_FINAL_APPROVER_NAME || name === TEMP_DEPT_HEAD_APPROVER_NAME
+  return name === FINAL_NAME || name === DEPT_HEAD_NAME
 }
 
-/** 이지형·조재덕·이용필이 아니면 반려 건은 수정 대신 재신청 */
 export function usesAttendanceReapply(userName: string): boolean {
+  if (capabilitiesReady.value) {
+    return !hasOwnCapability(CAPABILITY.attendanceDeptHead)
+      && !hasOwnCapability(CAPABILITY.attendanceGyeongyu)
+      && !hasOwnCapability(CAPABILITY.attendanceFinal)
+  }
   const name = normalizeName(userName)
-  return name !== TEMP_GYEONGYU_APPROVER_NAME
-    && name !== TEMP_DEPT_HEAD_APPROVER_NAME
-    && name !== TEMP_FINAL_APPROVER_NAME
+  return name !== GYEONGYU_NAME && name !== DEPT_HEAD_NAME && name !== FINAL_NAME
 }
 
-/** 경유/최종승인 대기 건 수정·삭제 권한 (조재덕) */
 export function canManageAttendancePending(userName: string): boolean {
-  return normalizeName(userName) === TEMP_DEPT_HEAD_APPROVER_NAME
+  return canDeptHeadApprove(userName)
 }
 
 /** 해당 상태로 바꿀 수 있는지. 반려 복구 드롭다운과 같은 기준 */

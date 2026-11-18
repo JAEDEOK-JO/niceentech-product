@@ -1,16 +1,24 @@
 <script setup>
 import { computed } from 'vue'
+import RewardOwnerActions from './RewardOwnerActions.vue'
 import RewardPhotoGrid from './RewardPhotoGrid.vue'
-import { formatRewardWon } from './rewardAmount'
 
 const props = defineProps({
   item: {
     type: Object,
     required: true,
   },
+  canManage: {
+    type: Boolean,
+    default: false,
+  },
+  busy: {
+    type: Boolean,
+    default: false,
+  },
 })
 
-const emit = defineEmits(['open'])
+const emit = defineEmits(['open', 'edit', 'remove'])
 
 const initial = computed(() => String(props.item.name || '').trim().charAt(0))
 
@@ -44,12 +52,7 @@ const when = computed(() =>
         </p>
         <p class="mt-0.5 text-xs font-bold text-slate-400">{{ when }}</p>
       </div>
-      <div class="flex shrink-0 flex-col items-end gap-1">
-        <span class="rounded-full px-2 py-0.5 text-[11px] font-bold ring-1" :class="statusClass">{{ item.status }}</span>
-        <p v-if="item.status === '승인'" class="text-xs font-extrabold text-amber-700">
-          {{ formatRewardWon(item.amount) }}
-        </p>
-      </div>
+      <span class="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ring-1" :class="statusClass">{{ item.status }}</span>
     </header>
     <p v-if="item.found_note" class="mt-3 break-words text-sm font-bold leading-6 text-slate-800">
       {{ item.found_note }}
@@ -59,6 +62,12 @@ const when = computed(() =>
       :normal-urls="item.normalPhotoUrls"
       :problem-urls="item.problemPhotoUrls"
       @open="emit('open', $event)"
+    />
+    <RewardOwnerActions
+      v-if="canManage"
+      :disabled="busy"
+      @edit="emit('edit')"
+      @remove="emit('remove')"
     />
   </article>
 </template>

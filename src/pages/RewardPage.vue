@@ -7,7 +7,7 @@ import { canReviewWorkerRewards } from '@/features/worker-management/rewardAcces
 
 const { session } = useAuth()
 const { profile } = useProfile(session)
-const canReview = computed(() => canReviewWorkerRewards(profile.value?.role))
+const canReview = computed(() => canReviewWorkerRewards(profile.value?.role, profile.value?.name))
 </script>
 
 <template>

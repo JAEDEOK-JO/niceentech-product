@@ -1,6 +1,9 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js'
 import { QUANTITY_MODEL, QUANTITY_REASONING_EFFORT } from './openaiResponses.ts'
+import { hasQualityList } from './qualityListMatch.ts'
 import { createRun } from './runStore.ts'
+
+const HELD_MESSAGE = '검수리스트에 있음'
 
 export const CHECK_DELAY_MS = 10_000
 
@@ -30,6 +33,20 @@ export async function startDrawingRun(supabase: SupabaseClient, productListId: n
     return { status: 'skipped' as const }
   }
 
+  if (await hasQualityList(supabase, plan.data ?? {})) {
+    return await holdExistingQuality(supabase, {
+      drawingFileId,
+      productListId,
+      sourcePath,
+      fileName,
+      testDate: String(plan.data?.test_date ?? '').trim(),
+      drawingNo: String(plan.data?.initial ?? '').trim(),
+      company: String(plan.data?.company ?? '').trim(),
+      place: String(plan.data?.place ?? '').trim(),
+      area: String(plan.data?.area ?? '').trim(),
+    })
+  }
+
   const claimed = await supabase
     .from('drawing_pdf')
     .update({ quantity_state: 'running', quantity_message: null })
@@ -55,6 +72,56 @@ export async function startDrawingRun(supabase: SupabaseClient, productListId: n
     area: String(plan.data?.area ?? '').trim(),
   })
   return { status: 'started' as const, runId }
+}
+
+async function holdExistingQuality(
+  supabase: SupabaseClient,
+  values: {
+    drawingFileId: number
+    productListId: number
+    sourcePath: string
+    fileName: string
+    testDate: string
+    drawingNo: string
+    company: string
+    place: string
+    area: string
+  },
+) {
+  const now = new Date()
+  try {
+    await createRun(supabase, {
+      drawingPdfId: values.drawingFileId,
+      productListId: values.productListId,
+      sourcePath: values.sourcePath,
+      fileName: values.fileName,
+      insertQuality: false,
+      startAfter: now,
+      model: QUANTITY_MODEL,
+      effort: QUANTITY_REASONING_EFFORT,
+      testDate: values.testDate,
+      drawingNo: values.drawingNo,
+      company: values.company,
+      place: values.place,
+      area: values.area,
+      state: 'held',
+      resultMessage: HELD_MESSAGE,
+      finishedAt: now,
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : ''
+    if (!message.includes('duplicate') && !message.includes('23505')) throw error
+  }
+
+  const marked = await supabase
+    .from('drawing_pdf')
+    .update({ quantity_state: 'held', quantity_message: HELD_MESSAGE })
+    .eq('id', values.drawingFileId)
+    .or('quantity_state.is.null,quantity_state.eq.held')
+    .select('id')
+  if (marked.error) throw new Error(marked.error.message)
+  if (!marked.data?.length) return { status: 'already' as const }
+  return { status: 'held' as const }
 }
 
 export async function startEvaluationRun(supabase: SupabaseClient, sourcePath: string, fileName: string) {

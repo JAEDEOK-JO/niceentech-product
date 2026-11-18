@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
 import { useMessengerUnread } from '@/composables/useMessengerUnread'
@@ -11,6 +11,7 @@ import { isAdminRole, isDesignDepartment } from '@/utils/adminAccess'
 import { isDepartmentDeskAccount } from '@/utils/departmentDeskAccounts'
 import { canViewWorkerRewards } from '@/features/worker-management/rewardAccess'
 import { productionPlanSearchActive, requestProductionPlanSearch } from '@/features/main/productionPlanSearchBridge'
+import { closeRewardSearch, openRewardSearch, rewardSearchOpen, rewardSearchQuery } from '@/features/worker-management/reward/rewardSearchBridge'
 
 const route = useRoute()
 const router = useRouter()
@@ -19,6 +20,7 @@ const { totalUnreadCount, startUnreadTracking, stopUnreadTracking } = useMesseng
 const { profile } = useProfile(session)
 const { unreadCount: attendanceUnreadCount } = useAttendanceNotifications(session, profile)
 const mobileMenuOpen = ref(false)
+const rewardSearchInput = ref(null)
 
 // Electron: 트레이 아이콘/배지 업데이트
 useElectronBridge(totalUnreadCount)
@@ -109,8 +111,15 @@ watch(
   () => route.fullPath,
   () => {
     mobileMenuOpen.value = false
+    if (!route.path.startsWith('/reward')) closeRewardSearch()
   },
 )
+
+watch(rewardSearchOpen, async (open) => {
+  if (!open) return
+  await nextTick()
+  rewardSearchInput.value?.focus()
+})
 </script>
 
 <template>
@@ -161,6 +170,30 @@ watch(
         </nav>
       </div>
 
+      <div v-if="activeSection === 'reward'" class="flex shrink-0 items-center gap-2">
+        <input
+          v-if="rewardSearchOpen"
+          ref="rewardSearchInput"
+          v-model="rewardSearchQuery"
+          type="search"
+          placeholder="이름 검색"
+          class="h-10 w-36 rounded-xl border border-slate-200 px-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-300 sm:w-52"
+        />
+        <button
+          type="button"
+          class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700"
+          :aria-label="rewardSearchOpen ? '닫기' : '검색'"
+          @click="rewardSearchOpen ? closeRewardSearch() : openRewardSearch()"
+        >
+          <svg v-if="!rewardSearchOpen" viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="7" />
+            <path d="m20 20-3.5-3.5" stroke-linecap="round" />
+          </svg>
+          <svg v-else viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M6 6l12 12M18 6 6 18" stroke-linecap="round" />
+          </svg>
+        </button>
+      </div>
       <button
         v-if="activeSection === 'main'"
         type="button"

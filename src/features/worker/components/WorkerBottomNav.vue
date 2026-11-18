@@ -4,7 +4,7 @@ import type { WorkerTab } from '../workerTab'
 const tab = defineModel<WorkerTab>({ required: true })
 
 const items: { id: WorkerTab; label: string }[] = [
-  { id: 'notice', label: '알림' },
+  { id: 'notice', label: '공지사항' },
   { id: 'attendance', label: '근태' },
   { id: 'reward', label: '포상' },
   { id: 'profile', label: '내정보' },
