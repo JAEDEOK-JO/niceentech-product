@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import WorkerLoginView from '@/features/worker/components/WorkerLoginView.vue'
 import WorkerShell from '@/features/worker/components/WorkerShell.vue'
@@ -7,6 +7,7 @@ import { useAuth } from '@/composables/useAuth'
 import { useProfile } from '@/composables/useProfile'
 import { isWorkerRole } from '@/utils/adminAccess'
 import { workerTabFromQuery, type WorkerTab } from '@/features/worker/workerTab'
+import { startWorkerBackGuard, stopWorkerBackGuard, WORKER_BACK_EXIT_MS } from '@/features/worker/pwa/workerBackStack'
 
 const route = useRoute()
 const router = useRouter()
@@ -39,6 +40,24 @@ const handleLogout = async () => {
   tab.value = 'notice'
   await logout()
 }
+
+const exitHint = ref(false)
+let exitHintTimer = 0
+
+onMounted(() => {
+  startWorkerBackGuard(() => {
+    exitHint.value = true
+    window.clearTimeout(exitHintTimer)
+    exitHintTimer = window.setTimeout(() => {
+      exitHint.value = false
+    }, WORKER_BACK_EXIT_MS)
+  })
+})
+
+onUnmounted(() => {
+  window.clearTimeout(exitHintTimer)
+  stopWorkerBackGuard()
+})
 </script>
 
 <template>
@@ -57,4 +76,10 @@ const handleLogout = async () => {
     :message="message"
     @login="handleLogin"
   />
+  <p
+    v-if="exitHint"
+    class="fixed bottom-24 left-1/2 z-[90] -translate-x-1/2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-bold text-white shadow-lg"
+  >
+    한 번 더 누르면 종료됩니다
+  </p>
 </template>

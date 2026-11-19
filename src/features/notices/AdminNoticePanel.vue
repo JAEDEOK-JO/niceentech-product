@@ -3,8 +3,11 @@ import { onMounted, ref } from 'vue'
 import NoticeCheckGrid from './NoticeCheckGrid.vue'
 import NoticeImage from './NoticeImage.vue'
 import NoticeRegisterDialog from './NoticeRegisterDialog.vue'
+import NoticeTranslationPicker from './NoticeTranslationPicker.vue'
+import { noticeBody, noticeTextDir, noticeTitle } from './noticeLanguages'
 import { deleteNotice, fetchNoticeWorkers, fetchNotices } from './notice.service'
 import { noticeWhen } from './noticeFormat'
+import { noticeRequiresCheck } from './noticeCheck'
 import { noticeCheckCount } from './noticeOrder'
 
 defineProps({
@@ -25,6 +28,7 @@ const saving = ref(false)
 const message = ref('')
 const selectedId = ref('')
 const registerOpen = ref(false)
+const languageById = ref({})
 
 const selected = () => notices.value.find((notice) => notice.id === selectedId.value) ?? null
 
@@ -99,12 +103,10 @@ onMounted(load)
         :key="notice.id"
         class="rounded-2xl border border-slate-200 p-4"
       >
-        <button type="button" class="w-full text-left" @click="selectedId = notice.id">
+        <button type="button" class="w-full text-left" @click="selectedId = selected()?.id === notice.id ? '' : notice.id">
           <p class="text-xs font-bold text-slate-400">{{ noticeWhen(notice.created_at) }}</p>
-          <p class="mt-2 break-words text-sm font-bold leading-6 text-slate-900">{{ notice.body }}</p>
-          <NoticeImage v-if="notice.imageUrls?.length" class="mt-3" :urls="notice.imageUrls" />
-          <p class="mt-3 text-xs font-extrabold text-slate-500">
-            확인한사람 {{ noticeCheckCount(workers, notice.checkedUserIds) }}
+          <p class="mt-2 break-words text-sm font-extrabold leading-6 text-slate-900">
+            {{ noticeTitle(notice) }}
           </p>
         </button>
         <button
@@ -115,8 +117,20 @@ onMounted(load)
         >
           삭제
         </button>
-        <div v-if="selected()?.id === notice.id" class="mt-4">
-          <NoticeCheckGrid :workers="workers" :checked-ids="notice.checkedUserIds" />
+        <div v-if="selected()?.id === notice.id" class="mt-4 grid gap-3">
+          <p class="break-words text-sm font-bold leading-6 text-slate-900" :dir="noticeTextDir(languageById[notice.id])">
+            {{ noticeBody(notice, languageById[notice.id]) }}
+          </p>
+          <NoticeTranslationPicker
+            :translations="notice.translations"
+            :model-value="languageById[notice.id] || ''"
+            @update:model-value="languageById[notice.id] = $event"
+          />
+          <NoticeImage v-if="notice.imageUrls?.length" :urls="notice.imageUrls" />
+          <p v-if="noticeRequiresCheck(notice)" class="text-xs font-extrabold text-slate-500">
+            확인한사람 {{ noticeCheckCount(workers, notice.checkedUserIds) }}
+          </p>
+          <NoticeCheckGrid v-if="noticeRequiresCheck(notice)" :workers="workers" :checked-ids="notice.checkedUserIds" />
         </div>
       </article>
     </div>

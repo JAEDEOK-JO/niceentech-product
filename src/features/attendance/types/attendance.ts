@@ -205,7 +205,7 @@ export type WorkEndTime = (typeof WORK_END_TIME_OPTIONS)[number]['value']
 export interface DailyWorkHour {
   id: number
   workDate: string
-  employeeId: number
+  employeeId: string
   endTime: WorkEndTime | string
   createdAt: string
   updatedAt: string
@@ -215,7 +215,7 @@ export function mapDailyWorkHour(raw: Record<string, unknown>): DailyWorkHour {
   return {
     id: toNum(raw.id),
     workDate: toStr(raw.work_date).slice(0, 10),
-    employeeId: toNum(raw.employee_id),
+    employeeId: toStr(raw.profile_id),
     endTime: toStr(raw.end_time),
     createdAt: toStr(raw.created_at),
     updatedAt: toStr(raw.updated_at),

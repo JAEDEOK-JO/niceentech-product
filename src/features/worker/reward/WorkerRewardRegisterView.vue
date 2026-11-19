@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue'
+import { useWorkerBackClose } from '@/features/worker/pwa/useWorkerBackClose'
 import RewardPhotoPicker from './RewardPhotoPicker.vue'
 import { existingRewardPhotos, newRewardPhotoFiles, problemPathsOf } from './rewardOwner'
 import { updateOwnRewardReport } from './rewardOwner.service'
@@ -17,6 +18,8 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['cancel', 'submitted'])
+
+useWorkerBackClose(() => emit('cancel'))
 
 const submitting = ref(false)
 const message = ref('')

@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { WORK_END_TIME_OPTIONS, type AttendanceRequest, type Employee, type DailyWorkHour, type WorkEndTime } from '../types/attendance'
+import { WORK_END_TIME_OPTIONS, type AttendanceRequest, type DailyWorkHour, type WorkEndTime } from '../types/attendance'
+import type { AttendancePerson } from '@/features/worker-management/people/attendancePerson'
+import { WORKER_DEPARTMENTS } from '@/features/worker/workerDepartmentOptions'
 import {
   DAILY_WORK_DEPARTMENT_ORDER,
   getDailyWorkDepartmentRank,
@@ -9,7 +11,7 @@ import {
 import { getDailyWorkAbsence } from '../utils/dailyWorkAbsence'
 
 const props = defineProps<{
-  employees: Employee[]
+  employees: AttendancePerson[]
   requests: AttendanceRequest[]
   todayHours: DailyWorkHour[]
   workDate: string
@@ -18,18 +20,25 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'close'): void
-  (e: 'save', records: { employeeId: number; endTime: string }[]): void
+  (e: 'save', records: { employeeId: string; endTime: string }[]): void
 }>()
 
-const PRODUCTION_DEPARTMENTS = new Set(['메인관', '가지관', '나사'])
+const PRODUCTION_DEPARTMENTS = new Set(['메인관', '가지관', '나사', '생산부', '나사부'])
 
 const assignedDepartments = computed(() => {
-  const set = new Set(props.employees.map((e) => normalizeDailyWorkDepartment(e.assignedDepartment)))
-  return DAILY_WORK_DEPARTMENT_ORDER.filter((d) => set.has(d))
+  const set = new Set(
+    props.employees
+      .map((employee) => normalizeDailyWorkDepartment(employee.assignedDepartment || employee.department))
+      .filter((department) => department && department !== '미지정'),
+  )
+  const preferred = [...WORKER_DEPARTMENTS, ...DAILY_WORK_DEPARTMENT_ORDER]
+  const ordered = preferred.filter((department, index) => set.has(department) && preferred.indexOf(department) === index)
+  const extra = [...set].filter((department) => !ordered.includes(department)).sort((left, right) => left.localeCompare(right, 'ko'))
+  return [...ordered, ...extra]
 })
 
 const selectedDept = ref<string>('')
-const selections = ref<Map<number, string>>(new Map())
+const selections = ref<Map<string, string>>(new Map())
 const productionPresetTime = ref<string>('')
 const bulkTime = ref<WorkEndTime>('17:00')
 
@@ -53,7 +62,7 @@ const visibleEmployees = computed(() => {
 })
 
 watch(selectedDept, () => {
-  const next = new Map<number, string>()
+  const next = new Map<string, string>()
   for (const emp of visibleEmployees.value) {
     if (getDailyWorkAbsence(emp, props.workDate, props.requests)) continue
     const existing = props.todayHours.find((h) => h.employeeId === emp.id)
@@ -75,7 +84,7 @@ watch(() => props.workDate, () => {
 function applyProductionPreset(time: string) {
   productionPresetTime.value = time
   selectedDept.value = '__PRODUCTION__'
-  const next = new Map<number, string>()
+  const next = new Map<string, string>()
   for (const emp of productionEmployees.value) {
     if (getDailyWorkAbsence(emp, props.workDate, props.requests)) continue
     next.set(emp.id, time)
@@ -83,7 +92,7 @@ function applyProductionPreset(time: string) {
   selections.value = next
 }
 
-function pickTime(empId: number, time: string) {
+function pickTime(empId: string, time: string) {
   const next = new Map(selections.value)
   if (next.get(empId) === time) {
     next.delete(empId)
@@ -124,7 +133,7 @@ const visibleFullTimeCount = computed(() => visibleEmployees.value.filter((emp) 
 const visibleContractCount = computed(() => Math.max(0, visibleEmployees.value.length - visibleFullTimeCount.value))
 
 function handleSave() {
-  const records: { employeeId: number; endTime: string }[] = []
+  const records: { employeeId: string; endTime: string }[] = []
   for (const emp of visibleEmployees.value) {
     if (getDailyWorkAbsence(emp, props.workDate, props.requests)) continue
     const time = selections.value.get(emp.id)
@@ -138,7 +147,7 @@ const selectedDeptLabel = computed(() => {
   if (selectedDept.value === '__PRODUCTION__') return '생산'
   return selectedDept.value
 })
-const absenceOf = (employee: Employee) => getDailyWorkAbsence(employee, props.workDate, props.requests)
+const absenceOf = (employee: AttendancePerson) => getDailyWorkAbsence(employee, props.workDate, props.requests)
 </script>
 
 <template>

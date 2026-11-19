@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { WORK_END_TIME_OPTIONS, type AttendanceRequest, type Employee } from '../types/attendance'
+import { WORK_END_TIME_OPTIONS, type AttendanceRequest } from '../types/attendance'
+import type { AttendancePerson } from '@/features/worker-management/people/attendancePerson'
 import { normalizeDailyWorkDepartment } from '../utils/dailyWorkDepartment'
 import { getDailyWorkAbsence, type DailyWorkAbsence } from '../utils/dailyWorkAbsence'
 
 export interface DailyWorkHourDetailRow {
-  employeeId: number
+  employeeId: string
   name: string
   assignedDepartment: string
   endTime: string
@@ -17,26 +18,26 @@ const props = defineProps<{
   department: string
   timeLabel: string
   rows: DailyWorkHourDetailRow[]
-  employees: Employee[]
+  employees: AttendancePerson[]
   requests: AttendanceRequest[]
 }>()
 
 const emit = defineEmits<{
   (e: 'close'): void
-  (e: 'save', records: { workDate: string; employeeId: number; endTime: string }[]): void
-  (e: 'delete', payload: { workDate: string; employeeId: number }): void
-  (e: 'deleteAll', payload: { workDate: string; employeeIds: number[] }): void
+  (e: 'save', records: { workDate: string; employeeId: string; endTime: string }[]): void
+  (e: 'delete', payload: { workDate: string; employeeId: string }): void
+  (e: 'deleteAll', payload: { workDate: string; employeeIds: string[] }): void
 }>()
 
 interface AbsenceRow {
-  employeeId: number
+  employeeId: string
   name: string
   label: string
   absence: DailyWorkAbsence
 }
 
 const editMode = ref(false)
-const localTimes = ref<Map<number, string>>(new Map())
+const localTimes = ref<Map<string, string>>(new Map())
 const employeeById = computed(() => new Map(props.employees.map((employee) => [employee.id, employee] as const)))
 
 const endTimeLabelMap = computed(() => new Map(WORK_END_TIME_OPTIONS.map((option) => [option.value, option.label] as const)))
@@ -98,21 +99,21 @@ function getEndTimeLabel(endTime: string) {
   return endTimeLabelMap.value.get(endTime) ?? endTime
 }
 
-function getEmployeeTypeLabel(employeeId: number) {
+function getEmployeeTypeLabel(employeeId: string) {
   return employeeById.value.get(employeeId)?.isFullTime ? '정직원' : '계약직'
 }
 
-function getEmployeeTypeClass(employeeId: number) {
+function getEmployeeTypeClass(employeeId: string) {
   return employeeById.value.get(employeeId)?.isFullTime
     ? 'bg-orange-600 text-white'
     : 'bg-slate-200 text-slate-700'
 }
 
-function currentTime(employeeId: number, fallback: string) {
+function currentTime(employeeId: string, fallback: string) {
   return localTimes.value.get(employeeId) ?? fallback
 }
 
-function updateTime(employeeId: number, endTime: string) {
+function updateTime(employeeId: string, endTime: string) {
   const next = new Map(localTimes.value)
   next.set(employeeId, endTime)
   localTimes.value = next
@@ -131,7 +132,7 @@ function changedRecords() {
       if (endTime === row.endTime) return null
       return { workDate: props.workDate, employeeId: row.employeeId, endTime }
     })
-    .filter((record): record is { workDate: string; employeeId: number; endTime: string } => record !== null)
+    .filter((record): record is { workDate: string; employeeId: string; endTime: string } => record !== null)
 }
 
 function finishEdit() {

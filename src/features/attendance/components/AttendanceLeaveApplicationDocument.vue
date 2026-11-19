@@ -3,7 +3,8 @@ import { computed } from 'vue'
 import approvalStampUrl from '../approval-stamp.svg?url'
 import gyeongyuStampUrl from '../gyeongyu-stamp.svg?url'
 import niceentechLogoUrl from '../assets/niceentech-logo.png?url'
-import type { AttendanceRequest, Employee } from '../types/attendance'
+import type { AttendanceRequest } from '../types/attendance'
+import type { AttendancePerson } from '@/features/worker-management/people/attendancePerson'
 import { formatAttendanceReasonText } from '../utils/attendanceReason'
 import {
   ATTENDANCE_WORKFLOW_STATUS,
@@ -35,7 +36,7 @@ const PRODUCTION_MANAGER_BY_ASSIGNED_DEPARTMENT: Record<string, string> = {
 
 const props = withDefaults(defineProps<{
   item: AttendanceRequest
-  employees: Employee[]
+  employees: AttendancePerson[]
   printMode?: boolean
 }>(), {
   printMode: false,

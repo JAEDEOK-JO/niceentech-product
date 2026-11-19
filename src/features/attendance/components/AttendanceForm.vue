@@ -7,8 +7,8 @@ import {
   type AttendanceFormState,
   type AttendanceRequest,
   type LeaveType,
-  type Employee,
 } from '../types/attendance'
+import type { AttendancePerson } from '@/features/worker-management/people/attendancePerson'
 import { fetchEmployeeHomeLeaveRequests } from '../services/attendance.service'
 import AttendanceEvidencePicker from './AttendanceEvidencePicker.vue'
 import AttendanceReasonField from './AttendanceReasonField.vue'
@@ -39,7 +39,7 @@ const props = defineProps<{
   loading: boolean
   isEdit: boolean
   reapply?: boolean
-  employees: Employee[]
+  employees: AttendancePerson[]
   allowedDepartments?: readonly string[]
   hideEmployeeSelector?: boolean
   excludeRequestId?: number | null
@@ -65,10 +65,12 @@ const DEPT_ORDER = ['생산부', '용접부', '나사부', 'CNC', '지게차']
 const departments = computed(() => {
   const set = new Set(props.employees.map((e) => e.department).filter(Boolean))
   const ordered = DEPT_ORDER.filter((d) => set.has(d))
+  const extra = [...set].filter((department) => !ordered.includes(department)).sort((left, right) => left.localeCompare(right, 'ko'))
+  const departmentsInUse = [...ordered, ...extra]
   const allowed = props.allowedDepartments
-  if (!allowed?.length) return ordered
+  if (!allowed?.length) return departmentsInUse
   const allowedSet = new Set(allowed)
-  return ordered.filter((d) => allowedSet.has(d))
+  return departmentsInUse.filter((department) => allowedSet.has(department))
 })
 
 // 선택된 부서의 직원 이름 목록

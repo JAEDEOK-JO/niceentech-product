@@ -1,4 +1,5 @@
-import type { AttendanceRequest, Employee } from '../types/attendance'
+import type { AttendanceRequest } from '../types/attendance'
+import type { AttendancePerson } from '@/features/worker-management/people/attendancePerson'
 import { formatHomeLeaveLabel, isEmployeeOnHomeLeave } from './homeLeave'
 import { isDeptHeadApproved } from './attendanceApprover'
 import { LEAVE_TYPE_ABSENCE, LEAVE_TYPE_OUTING, LEAVE_TYPE_UNPAID } from './attendanceLeaveType'
@@ -38,7 +39,7 @@ const resolveAbsenceType = (leaveType: string): DailyWorkAbsence['type'] | null 
 }
 
 export function getDailyWorkAbsence(
-  employee: Employee,
+  employee: AttendancePerson,
   workDate: string,
   requests: AttendanceRequest[],
 ): DailyWorkAbsence | null {

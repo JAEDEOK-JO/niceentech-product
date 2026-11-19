@@ -1,5 +1,6 @@
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useWorkerBackClose } from '@/features/worker/pwa/useWorkerBackClose'
 import { clampNoticeZoom, noticeSwipeStep } from './noticeImageZoom'
 
 const props = defineProps({
@@ -14,6 +15,8 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['close'])
+
+useWorkerBackClose(() => emit('close'))
 
 const rootRef = ref(null)
 const stageRef = ref(null)

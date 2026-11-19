@@ -1,7 +1,7 @@
 <script setup>
-import NoticeImage from './NoticeImage.vue'
 import { noticeWhen } from './noticeFormat'
-import { noticeCheckCount } from './noticeOrder'
+import { noticeRequiresCheck } from './noticeCheck'
+import { noticeTitle } from './noticeLanguages'
 
 defineProps({
   notices: {
@@ -21,7 +21,7 @@ defineProps({
 const emit = defineEmits(['open'])
 
 function needsCheck(notice, userId) {
-  return Boolean(userId) && !notice.checkedUserIds.includes(userId)
+  return noticeRequiresCheck(notice) && Boolean(userId) && !notice.checkedUserIds.includes(userId)
 }
 </script>
 
@@ -44,10 +44,8 @@ function needsCheck(notice, userId) {
         <p class="text-xs font-bold text-slate-400">{{ noticeWhen(notice.created_at) }}</p>
         <p v-if="needsCheck(notice, userId)" class="text-xs font-extrabold text-red-500">확인하세요</p>
       </div>
-      <p class="mt-2 break-words text-sm font-bold leading-6 text-slate-900">{{ notice.body }}</p>
-      <NoticeImage v-if="notice.imageUrls?.length" class="mt-3" :urls="notice.imageUrls" />
-      <p class="mt-3 text-xs font-extrabold text-slate-500">
-        확인한사람 {{ noticeCheckCount(workers, notice.checkedUserIds) }}
+      <p class="mt-2 break-words text-sm font-extrabold leading-6 text-slate-900">
+        {{ noticeTitle(notice) }}
       </p>
     </article>
   </section>

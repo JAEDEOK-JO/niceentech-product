@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import type { AttendanceRequest, Employee } from '../types/attendance'
+import type { AttendanceRequest } from '../types/attendance'
+import type { AttendancePerson } from '@/features/worker-management/people/attendancePerson'
 import type { SignatureInfo } from '../services/attendance.service'
 import AttendanceLeaveApplicationDocument from './AttendanceLeaveApplicationDocument.vue'
 import AttendanceEvidenceThumb from './AttendanceEvidenceThumb.vue'
@@ -8,7 +9,7 @@ import AttendanceEvidenceGalleryDialog from './AttendanceEvidenceGalleryDialog.v
 
 defineProps<{
   item: AttendanceRequest
-  employees: Employee[]
+  employees: AttendancePerson[]
   signatures: SignatureInfo[]
 }>()
 

@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
+import { useWorkerBackClose } from '@/features/worker/pwa/useWorkerBackClose'
 import { swipeStep } from './rewardPhotoSwipe.js'
 
 const props = defineProps({
@@ -18,6 +19,8 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['close'])
+
+useWorkerBackClose(() => emit('close'))
 
 const rootRef = ref(null)
 const index = ref(Math.min(Math.max(0, props.start), Math.max(0, props.urls.length - 1)))

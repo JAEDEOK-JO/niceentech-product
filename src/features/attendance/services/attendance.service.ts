@@ -144,7 +144,9 @@ export async function createAttendanceRequest(
   if (signatureBlob) {
     try {
       const timestamp = Date.now()
-      const path = `requests/${userId}/${timestamp}.png`
+      const { data: sessionData } = await supabase.auth.getSession()
+      const storageOwnerId = sessionData.session?.user?.id || userId
+      const path = `requests/${storageOwnerId}/${timestamp}.png`
       const { error: uploadError } = await supabase.storage
         .from('signatures')
         .upload(path, signatureBlob, { upsert: false, contentType: 'image/png' })
@@ -729,7 +731,9 @@ export async function fetchDailyWorkHours(workDate: string): Promise<DailyWorkHo
     .eq('work_date', workDate)
 
   if (error) throw error
-  return (data ?? []).map((r) => mapDailyWorkHour(r as Record<string, unknown>))
+  return (data ?? [])
+    .map((r) => mapDailyWorkHour(r as Record<string, unknown>))
+    .filter((row) => row.employeeId)
 }
 
 export async function fetchDailyWorkHoursRange(startDate: string, endDate: string): Promise<DailyWorkHour[]> {
@@ -739,34 +743,36 @@ export async function fetchDailyWorkHoursRange(startDate: string, endDate: strin
     .gte('work_date', startDate)
     .lte('work_date', endDate)
     .order('work_date', { ascending: true })
-    .order('employee_id', { ascending: true })
+    .order('profile_id', { ascending: true })
     .limit(10000)
 
   if (error) throw error
-  return (data ?? []).map((r) => mapDailyWorkHour(r as Record<string, unknown>))
+  return (data ?? [])
+    .map((r) => mapDailyWorkHour(r as Record<string, unknown>))
+    .filter((row) => row.employeeId)
 }
 
 export async function upsertDailyWorkHoursBulk(
-  records: { workDate: string; employeeId: number; endTime: string }[],
+  records: { workDate: string; employeeId: string; endTime: string }[],
 ): Promise<void> {
   if (records.length === 0) return
   const rows = records.map((r) => ({
     work_date: r.workDate,
-    employee_id: r.employeeId,
+    profile_id: r.employeeId,
     end_time: r.endTime,
   }))
   const { error } = await supabase
     .from('daily_work_hours')
-    .upsert(rows, { onConflict: 'work_date,employee_id' })
+    .upsert(rows, { onConflict: 'work_date,profile_id' })
   if (error) throw error
 }
 
-export async function deleteDailyWorkHour(workDate: string, employeeId: number): Promise<void> {
+export async function deleteDailyWorkHour(workDate: string, employeeId: string): Promise<void> {
   const { error } = await supabase
     .from('daily_work_hours')
     .delete()
     .eq('work_date', workDate)
-    .eq('employee_id', employeeId)
+    .eq('profile_id', employeeId)
   if (error) throw error
 }
 

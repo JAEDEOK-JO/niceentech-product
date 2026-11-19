@@ -8,6 +8,7 @@ import type {
   AttendanceDashboardStats,
   Employee,
 } from '../types/attendance'
+import type { AttendancePerson } from '@/features/worker-management/people/attendancePerson'
 import type { EmployeeFormData } from '../services/attendance.service'
 import AttendanceFiltersComp from './AttendanceFilters.vue'
 import AttendanceForm from './AttendanceForm.vue'
@@ -44,7 +45,8 @@ const props = defineProps<{
   quota: AttendanceAnnualQuota | null
   stats: AttendanceDashboardStats
   employees: Employee[]
-  workHoursEmployees?: Employee[]
+  attendancePeople?: AttendancePerson[]
+  workHoursEmployees?: AttendancePerson[]
   employeesLoading: boolean
   summaryYear: number
   summaryMonth: number
@@ -118,12 +120,12 @@ const emit = defineEmits<{
   (e: 'updateEmployee', payload: { id: number; data: EmployeeFormData }): void
   (e: 'deleteEmployee', id: number): void
   (e: 'openFormForEmployee', employee: Employee): void
-  (e: 'saveDailyWorkHours', records: { employeeId: number; endTime: string }[]): void
+  (e: 'saveDailyWorkHours', records: { employeeId: string; endTime: string }[]): void
   (e: 'refreshDailyWorkHours'): void
-  (e: 'deleteDailyWorkHour', payload: { workDate: string; employeeId: number }): void
-  (e: 'deleteDailyWorkHoursBulk', payload: { workDate: string; employeeIds: number[] }): void
+  (e: 'deleteDailyWorkHour', payload: { workDate: string; employeeId: string }): void
+  (e: 'deleteDailyWorkHoursBulk', payload: { workDate: string; employeeIds: string[] }): void
   (e: 'selectDailyWorkDate', workDate: string): void
-  (e: 'updateDailyWorkHours', records: { workDate: string; employeeId: number; endTime: string }[]): void
+  (e: 'updateDailyWorkHours', records: { workDate: string; employeeId: string; endTime: string }[]): void
 }>()
 
 const requestStatusVisible = ref(false)
@@ -157,7 +159,8 @@ const userTabBtnClass = (tab: UserTab) =>
     ? 'bg-slate-900 text-white'
     : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'
 
-const workHoursEmployees = computed(() => props.workHoursEmployees ?? props.employees)
+const workHoursEmployees = computed(() => props.workHoursEmployees ?? [])
+const formPeople = computed(() => props.attendancePeople ?? [])
 const departmentLocked = computed(() => (props.scopedDepartments?.length ?? 0) === 1)
 
 const tabBtnClass = (tab: AdminTab) =>
@@ -192,7 +195,7 @@ function openWorkHoursDialog() {
 function closeWorkHoursDialog() {
   workHoursDialogVisible.value = false
 }
-function onSaveDailyWorkHours(records: { employeeId: number; endTime: string }[]) {
+function onSaveDailyWorkHours(records: { employeeId: string; endTime: string }[]) {
   emit('saveDailyWorkHours', records)
   workHoursDialogVisible.value = false
 }
@@ -664,7 +667,7 @@ watch(
             :loading="formLoading"
             :is-edit="isEditForm"
             :reapply="isReapply"
-            :employees="employees"
+            :employees="formPeople"
             :allowed-departments="scopedDepartments ?? undefined"
             :hide-employee-selector="hideFormEmployeeSelector"
             :exclude-request-id="editRequestId"
@@ -723,7 +726,7 @@ watch(
       <AttendanceDetailModal
         v-if="detailItem"
         :item="detailItem"
-        :employees="employees"
+        :employees="formPeople"
         :signatures="detailSignatures"
         @close="emit('closeDetail')"
       />

@@ -32,8 +32,8 @@ import {
   markAttendanceRequestsPrinted,
   fetchAnnualQuota,
   fetchDepartments,
-  fetchEmployeeCount,
   fetchEmployees,
+  fetchAllAnnualQuotas,
   fetchApprovedAttendanceRequestsByMonth,
   createEmployee,
   updateEmployee,
@@ -59,6 +59,8 @@ import {
   type Employee,
   type DailyWorkHour,
 } from '@/features/attendance/types/attendance'
+import type { AttendancePerson } from '@/features/worker-management/people/attendancePerson'
+import { fetchApprovedWorkerPeople } from '@/features/worker-management/people/approvedWorkerPeople'
 import { validateHomeLeaveForm } from '@/features/attendance/utils/homeLeavePolicy'
 import AttendanceView from '@/features/attendance/components/AttendanceView.vue'
 import { attendanceHeading } from '@/features/attendance/utils/attendanceHeading'
@@ -147,13 +149,12 @@ const items = ref<AttendanceRequest[]>([])
 const pendingItems = ref<AttendanceRequest[]>([])
 const departments = ref<string[]>([])
 const quota = ref<AttendanceAnnualQuota | null>(null)
-const employeeCount = ref(0)
 const loading = ref(false)
 
 const stats = computed<AttendanceDashboardStats>(() => {
   const ym = `${thisYear}-${String(thisMonth).padStart(2, '0')}`
   return {
-    employeeCount: scopedDepartments.value ? employees.value.length : employeeCount.value,
+    employeeCount: scopedAttendancePeople.value.length,
     thisMonthTotal: items.value.filter((i) => i.startDate.startsWith(ym)).length,
     pendingCount: pendingItems.value.filter(isDeptHeadPending).length,
     approvedCount: items.value.filter((i) => i.status === '승인').length,
@@ -167,7 +168,13 @@ const daepyoPendingCount = computed(() => pendingItems.value.filter(isFinalAppro
 
 // ─── 직원 목록 상태 ────────────────────────────────────────────────────────────
 const employees = ref<Employee[]>([])
-const workHoursEmployees = ref<Employee[]>([])
+const attendancePeople = ref<AttendancePerson[]>([])
+const workHoursEmployees = ref<AttendancePerson[]>([])
+const scopedAttendancePeople = computed(() => {
+  const scope = scopedDepartments.value
+  if (!scope) return attendancePeople.value
+  return attendancePeople.value.filter((person) => scope.includes(person.department))
+})
 const employeesLoading = ref(false)
 
 // ─── 작업시간 상태 ───────────────────────────────────────────────────────────
@@ -193,7 +200,7 @@ const dailyWorkHours = ref<DailyWorkHour[]>([])
 const dailyWorkRequests = ref<AttendanceRequest[]>([])
 const dailyWorkHoursLoading = ref(false)
 
-function upsertLocalDailyWorkHours(records: { workDate: string; employeeId: number; endTime: string }[]) {
+function upsertLocalDailyWorkHours(records: { workDate: string; employeeId: string; endTime: string }[]) {
   const updatedAt = new Date().toISOString()
   const next = [...dailyWorkHours.value]
 
@@ -249,7 +256,7 @@ async function loadDailyWorkRequests() {
   }
 }
 
-async function handleSaveDailyWorkHours(records: { employeeId: number; endTime: string }[]) {
+async function handleSaveDailyWorkHours(records: { employeeId: string; endTime: string }[]) {
   if (records.length === 0) return
   try {
     const payload = records.map((r) => ({ workDate: dailyWorkDate.value, employeeId: r.employeeId, endTime: r.endTime }))
@@ -262,7 +269,7 @@ async function handleSaveDailyWorkHours(records: { employeeId: number; endTime: 
   }
 }
 
-async function handleDeleteDailyWorkHour(payload: { workDate: string; employeeId: number }) {
+async function handleDeleteDailyWorkHour(payload: { workDate: string; employeeId: string }) {
   try {
     await deleteDailyWorkHour(payload.workDate, payload.employeeId)
     dailyWorkHours.value = dailyWorkHours.value.filter(
@@ -273,7 +280,7 @@ async function handleDeleteDailyWorkHour(payload: { workDate: string; employeeId
   }
 }
 
-async function handleDeleteDailyWorkHoursBulk(payload: { workDate: string; employeeIds: number[] }) {
+async function handleDeleteDailyWorkHoursBulk(payload: { workDate: string; employeeIds: string[] }) {
   if (payload.employeeIds.length === 0) return
   try {
     await Promise.all(payload.employeeIds.map((employeeId) => deleteDailyWorkHour(payload.workDate, employeeId)))
@@ -287,7 +294,7 @@ async function handleDeleteDailyWorkHoursBulk(payload: { workDate: string; emplo
   }
 }
 
-async function handleUpdateDailyWorkHours(records: { workDate: string; employeeId: number; endTime: string }[]) {
+async function handleUpdateDailyWorkHours(records: { workDate: string; employeeId: string; endTime: string }[]) {
   if (records.length === 0) return
   try {
     await upsertDailyWorkHoursBulk(records)
@@ -413,9 +420,7 @@ async function loadQuota() {
 
 async function loadMeta() {
   try {
-    const [depts, count] = await Promise.all([fetchDepartments(), fetchEmployeeCount()])
-    departments.value = depts
-    employeeCount.value = count
+    departments.value = await fetchDepartments()
   } catch { /* non-critical */ }
 }
 
@@ -424,11 +429,26 @@ async function loadEmployees() {
   try {
     const rows = await fetchEmployees()
     const scope = scopedDepartments.value
-    workHoursEmployees.value = rows
     employees.value = scope ? rows.filter((employee) => scope.includes(employee.department)) : rows
   } catch {
-    workHoursEmployees.value = []
     employees.value = []
+  }
+  try {
+    const year = new Date().getFullYear()
+    const [people, quotas] = await Promise.all([
+      fetchApprovedWorkerPeople(),
+      fetchAllAnnualQuotas(year).catch(() => []),
+    ])
+    const remainingByUser = new Map(quotas.map((quota) => [quota.userId, quota.remainingDays]))
+    const withLeave = people.map((person) => ({
+      ...person,
+      remainingAnnualLeaveCount: remainingByUser.get(person.id) ?? 0,
+    }))
+    attendancePeople.value = withLeave
+    workHoursEmployees.value = withLeave
+  } catch {
+    attendancePeople.value = []
+    workHoursEmployees.value = []
   } finally {
     employeesLoading.value = false
   }
@@ -583,7 +603,7 @@ async function submitForm() {
 
   if (formData.value.leaveType === '귀국휴가') {
     const employee =
-      employees.value.find(
+      attendancePeople.value.find(
         (e) =>
           e.name === formData.value.selectedEmployeeName &&
           e.department === formData.value.selectedDepartment,
@@ -645,9 +665,14 @@ async function handleSignatureConfirm(blob: Blob) {
   signatureRequestVisible.value = false
   formLoading.value = true
   try {
+    const person = attendancePeople.value.find(
+      (item) =>
+        item.name === formData.value.selectedEmployeeName &&
+        item.department === formData.value.selectedDepartment,
+    )
     await createAttendanceRequest(
       formData.value,
-      currentUserId.value,
+      person?.id || currentUserId.value,
       formData.value.selectedEmployeeName,
       formData.value.selectedDepartment,
       blob,
@@ -720,7 +745,7 @@ async function handleAdminDelete(item: AttendanceRequest) {
 async function handlePrint(item: AttendanceRequest) {
   if (item.status !== '승인') return
   try {
-    const printed = await printAttendanceLeaveApplication(item, employees.value)
+    const printed = await printAttendanceLeaveApplication(item, attendancePeople.value)
     if (!printed) return
     const printedAt = await markAttendanceRequestPrinted(item.id)
     items.value = items.value.map((row) =>
@@ -738,7 +763,7 @@ async function handlePrintAllApproved() {
       ...filters,
       status: '승인',
     }))).filter((item) => inAttendanceScope(item.department))
-    const printed = await printAllApprovedAttendanceLeaveApplications(approvedItems, employees.value)
+    const printed = await printAllApprovedAttendanceLeaveApplications(approvedItems, attendancePeople.value)
     if (!printed) return
     const ids = approvedItems.map((item) => item.id)
     const printedAt = await markAttendanceRequestsPrinted(ids)
@@ -918,6 +943,7 @@ async function handleDeleteEmployee(id: number) {
     :quota="quota"
     :stats="stats"
     :employees="employees"
+    :attendance-people="scopedAttendancePeople"
     :work-hours-employees="workHoursEmployees"
     :employees-loading="employeesLoading"
     :summary-year="summaryYear"

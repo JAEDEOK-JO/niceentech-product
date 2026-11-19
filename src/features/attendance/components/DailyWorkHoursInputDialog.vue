@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import type { AttendanceRequest, Employee, DailyWorkHour } from '../types/attendance'
+import type { AttendanceRequest, DailyWorkHour } from '../types/attendance'
+import type { AttendancePerson } from '@/features/worker-management/people/attendancePerson'
 import DailyWorkHoursInputForm from './DailyWorkHoursInputForm.vue'
 
 defineProps<{
-  employees: Employee[]
+  employees: AttendancePerson[]
   requests: AttendanceRequest[]
   todayHours: DailyWorkHour[]
   workDate: string
@@ -11,7 +12,7 @@ defineProps<{
 
 const emit = defineEmits<{
   (e: 'close'): void
-  (e: 'save', records: { employeeId: number; endTime: string }[]): void
+  (e: 'save', records: { employeeId: string; endTime: string }[]): void
 }>()
 </script>
 

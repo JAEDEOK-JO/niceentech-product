@@ -1,7 +1,8 @@
 import { createApp, h, nextTick } from 'vue'
 import AttendanceLeaveApplicationDocument from '../components/AttendanceLeaveApplicationDocument.vue'
 import documentCss from '../components/attendanceLeaveDocument.css?raw'
-import type { AttendanceRequest, Employee } from '../types/attendance'
+import type { AttendanceRequest } from '../types/attendance'
+import type { AttendancePerson } from '@/features/worker-management/people/attendancePerson'
 import { getLeaveApplicationDocumentTitle } from './attendanceLeaveType'
 import {
   buildAttendanceEvidencePageHtml,
@@ -138,7 +139,7 @@ function isCanceledPrint(result: PrintResult | null | undefined) {
 
 async function renderLeaveApplicationContent(
   item: AttendanceRequest,
-  employees: Employee[],
+  employees: AttendancePerson[],
 ): Promise<string> {
   const mountNode = document.createElement('div')
   mountNode.style.position = 'fixed'
@@ -176,7 +177,7 @@ async function renderEvidencePages(item: AttendanceRequest): Promise<string[]> {
 
 async function renderLeavePrintPages(
   item: AttendanceRequest,
-  employees: Employee[],
+  employees: AttendancePerson[],
 ): Promise<string[]> {
   const formPage = await renderLeaveApplicationContent(item, employees)
   const evidencePages = await renderEvidencePages(item)
@@ -217,7 +218,7 @@ async function invokeElectronPrint(html: string) {
 
 export async function printAttendanceLeaveApplication(
   item: AttendanceRequest,
-  employees: Employee[],
+  employees: AttendancePerson[],
 ): Promise<boolean> {
   if (typeof window === 'undefined') return false
 
@@ -229,7 +230,7 @@ export async function printAttendanceLeaveApplication(
 
 export async function printAllApprovedAttendanceLeaveApplications(
   items: AttendanceRequest[],
-  employees: Employee[],
+  employees: AttendancePerson[],
 ): Promise<boolean> {
   if (typeof window === 'undefined') return false
 

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useWorkerBackClose } from '@/features/worker/pwa/useWorkerBackClose'
 
 const emit = defineEmits<{
   (e: 'confirm', blob: Blob): void
@@ -12,6 +13,8 @@ let isDrawing = false
 let lastX = 0
 let lastY = 0
 const hasDrawn = ref(false)
+
+useWorkerBackClose(() => emit('cancel'))
 
 const CANVAS_W = 480
 const CANVAS_H = 220

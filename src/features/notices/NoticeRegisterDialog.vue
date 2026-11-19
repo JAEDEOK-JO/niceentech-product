@@ -1,12 +1,16 @@
 <script setup>
 import { onUnmounted, ref } from 'vue'
 import NoticeImage from './NoticeImage.vue'
+import NoticeTranslationFields from './NoticeTranslationFields.vue'
 import { noticeImageFiles } from './noticeImage'
 import { createNotice } from './notice.service'
 
 const emit = defineEmits(['close', 'saved'])
 
+const title = ref('')
 const body = ref('')
+const translations = ref({})
+const requiresCheck = ref(true)
 const imageFiles = ref([])
 const imagePreviews = ref([])
 const saving = ref(false)
@@ -27,13 +31,16 @@ function pickImages(event) {
 }
 
 async function submit() {
-  if (saving.value || !body.value.trim()) return
+  if (saving.value || !title.value.trim() || !body.value.trim()) return
   saving.value = true
   message.value = ''
   try {
-    await createNotice(body.value, imageFiles.value)
+    await createNotice(title.value, body.value, imageFiles.value, requiresCheck.value, translations.value)
     clearImages()
+    title.value = ''
     body.value = ''
+    translations.value = {}
+    requiresCheck.value = true
     emit('saved')
   } catch {
     message.value = '등록에 실패했습니다.'
@@ -66,9 +73,16 @@ onUnmounted(clearImages)
           </button>
         </header>
         <div class="grid gap-4 overflow-y-auto px-5 py-5">
+          <input
+            v-model="title"
+            placeholder="제목"
+            class="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm font-bold text-slate-900 outline-none focus:border-slate-400"
+            :disabled="saving"
+          />
           <textarea
             v-model="body"
             rows="6"
+            placeholder="내용"
             class="w-full resize-none rounded-xl border border-slate-200 px-3 py-3 text-sm leading-6 text-slate-900 outline-none focus:border-slate-400"
             :disabled="saving"
           />
@@ -95,13 +109,18 @@ onUnmounted(clearImages)
             </button>
           </div>
           <NoticeImage v-if="imagePreviews.length" :urls="imagePreviews" />
+          <NoticeTranslationFields v-model="translations" :disabled="saving" />
+          <label class="flex items-center gap-2 text-sm font-extrabold text-slate-800">
+            <input v-model="requiresCheck" type="checkbox" class="h-4 w-4 accent-slate-900" :disabled="saving" />
+            확인 받기
+          </label>
           <p v-if="message" class="text-sm font-bold text-red-500">{{ message }}</p>
         </div>
         <footer class="border-t border-slate-200 px-5 py-4">
           <button
             type="button"
             class="w-full rounded-xl bg-slate-900 py-3 text-sm font-extrabold text-white disabled:opacity-40"
-            :disabled="saving || !body.trim()"
+            :disabled="saving || !title.trim() || !body.trim()"
             @click="submit"
           >
             {{ saving ? '등록 중' : '등록' }}

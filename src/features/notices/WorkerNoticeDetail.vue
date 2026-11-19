@@ -1,7 +1,12 @@
 <script setup>
+import { ref } from 'vue'
 import NoticeCheckGrid from './NoticeCheckGrid.vue'
 import NoticeImage from './NoticeImage.vue'
+import NoticeTranslationPicker from './NoticeTranslationPicker.vue'
+import { noticeRequiresCheck } from './noticeCheck'
+import { noticeBody, noticeTextDir, noticeTitle } from './noticeLanguages'
 import { noticeWhen } from './noticeFormat'
+import { useWorkerBackClose } from '@/features/worker/pwa/useWorkerBackClose'
 
 defineProps({
   notice: {
@@ -27,6 +32,9 @@ defineProps({
 })
 
 const emit = defineEmits(['back', 'confirm'])
+const language = ref('')
+
+useWorkerBackClose(() => emit('back'))
 </script>
 
 <template>
@@ -37,11 +45,22 @@ const emit = defineEmits(['back', 'confirm'])
     </div>
     <article class="rounded-2xl border border-slate-200 bg-white p-4">
       <p class="text-xs font-bold text-slate-400">{{ noticeWhen(notice.created_at) }}</p>
-      <p class="mt-2 break-words text-sm font-bold leading-6 text-slate-900">{{ notice.body }}</p>
+      <h3 class="mt-2 break-words text-base font-extrabold leading-6 text-slate-900">
+        {{ noticeTitle(notice) }}
+      </h3>
+      <p class="mt-2 break-words text-sm font-bold leading-6 text-slate-900" :dir="noticeTextDir(language)">
+        {{ noticeBody(notice, language) }}
+      </p>
+      <NoticeTranslationPicker
+        class="mt-3"
+        :translations="notice.translations"
+        :model-value="language"
+        @update:model-value="language = $event"
+      />
       <NoticeImage v-if="notice.imageUrls?.length" class="mt-3" :urls="notice.imageUrls" large />
     </article>
-    <NoticeCheckGrid :workers="workers" :checked-ids="notice.checkedUserIds" />
-    <div v-if="userId" class="mt-auto pt-2">
+    <NoticeCheckGrid v-if="noticeRequiresCheck(notice)" :workers="workers" :checked-ids="notice.checkedUserIds" />
+    <div v-if="userId && noticeRequiresCheck(notice)" class="mt-auto pt-2">
       <p v-if="message && !notice.checkedUserIds.includes(userId)" class="mb-2 text-center text-sm font-bold text-red-500">{{ message }}</p>
       <button
         type="button"

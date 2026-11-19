@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { NOTICE_IMAGE_LIMIT, noticeImagePaths } from './noticeImage'
+import { noticeTranslationMap } from './noticeLanguages'
 import { removeNoticeImages, signNoticeImageUrls, uploadNoticeImage } from './noticeImage.service'
 
 export async function fetchNoticeWorkers() {
@@ -18,7 +19,7 @@ export async function fetchNoticeWorkers() {
 export async function fetchNotices() {
   const { data, error } = await supabase
     .from('worker_notices')
-    .select('id,body,image_path,image_paths,created_at')
+    .select('id,title,body,image_path,image_paths,requires_check,translations,created_at')
     .order('created_at', { ascending: false })
 
   if (error) throw error
@@ -42,6 +43,7 @@ export async function fetchNotices() {
   return notices.map((notice) => ({
     ...notice,
     imageUrls: noticeImagePaths(notice).map((path) => imageUrls.get(path)).filter(Boolean),
+    translations: noticeTranslationMap(notice.translations),
     checkedUserIds: checkedByNotice.get(notice.id) ?? [],
   }))
 }
@@ -52,9 +54,10 @@ async function currentUserId() {
   return data.session.user.id
 }
 
-export async function createNotice(body, files = []) {
+export async function createNotice(title, body, files = [], requiresCheck = true, translations = {}) {
+  const heading = String(title ?? '').trim()
   const text = String(body ?? '').trim()
-  if (!text) throw new Error('내용이 없습니다.')
+  if (!heading || !text) throw new Error('내용이 없습니다.')
   const userId = await currentUserId()
   const imagePaths = []
   try {
@@ -62,8 +65,11 @@ export async function createNotice(body, files = []) {
       imagePaths.push(await uploadNoticeImage(userId, file))
     }
     const { error } = await supabase.from('worker_notices').insert({
+      title: heading,
       body: text,
       created_by: userId,
+      requires_check: requiresCheck !== false,
+      translations: noticeTranslationMap(translations),
       image_paths: imagePaths.length ? imagePaths : null,
     })
     if (error) throw error

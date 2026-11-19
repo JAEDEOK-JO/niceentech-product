@@ -1,4 +1,7 @@
-import type { Employee } from '../types/attendance'
+type HomeLeaveDates = {
+  homeLeaveStart: string | null
+  homeLeaveEnd: string | null
+}
 
 const normalizeDate = (value: string | null | undefined) => String(value ?? '').slice(0, 10)
 
@@ -9,7 +12,7 @@ const formatMonthDay = (value: string | null | undefined) => {
   return `${Number(matched[1])}월${Number(matched[2])}일`
 }
 
-export function isEmployeeOnHomeLeave(employee: Employee, workDate: string): boolean {
+export function isEmployeeOnHomeLeave(employee: HomeLeaveDates, workDate: string): boolean {
   const target = normalizeDate(workDate)
   const start = normalizeDate(employee.homeLeaveStart)
   const end = normalizeDate(employee.homeLeaveEnd)
@@ -19,7 +22,7 @@ export function isEmployeeOnHomeLeave(employee: Employee, workDate: string): boo
   return target >= start
 }
 
-export function formatHomeLeaveLabel(employee: Employee): string {
+export function formatHomeLeaveLabel(employee: HomeLeaveDates): string {
   const start = formatMonthDay(employee.homeLeaveStart)
   const end = formatMonthDay(employee.homeLeaveEnd)
   if (start && end) return `귀국휴가(${start}~${end})`

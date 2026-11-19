@@ -4,48 +4,27 @@ import {
   fetchAnnualQuota,
   fetchEmployeeAttendanceRequests,
   fetchEmployeeHomeLeaveRequests,
-  fetchEmployees,
 } from '@/features/attendance/services/attendance.service'
 import {
   createEmptyForm,
   type AttendanceAnnualQuota,
   type AttendanceFormState,
   type AttendanceRequest,
-  type Employee,
 } from '@/features/attendance/types/attendance'
+import type { AttendancePerson } from '@/features/worker-management/people/attendancePerson'
 import { validateHomeLeaveForm } from '@/features/attendance/utils/homeLeavePolicy'
 
-function matchEmployee(employees: Employee[], name: string, department: string) {
-  const targetName = name.trim()
-  const targetDepartment = department.trim()
-  if (!targetName) return null
-  const sameName = employees.filter((employee) => employee.name.trim() === targetName)
-  const sameDepartment = sameName.find(
-    (employee) =>
-      employee.department.trim() === targetDepartment ||
-      employee.assignedDepartment.trim() === targetDepartment,
-  )
-  if (sameDepartment) return sameDepartment
-  return sameName.length === 1 ? sameName[0] : null
-}
-
-function profileEmployee(name: string, department: string, remainingDays: number): Employee {
+function profilePerson(id: string, name: string, department: string, remainingDays: number): AttendancePerson {
   return {
-    id: 0,
-    employeeCode: '',
+    id,
     name,
     department,
-    assignedDepartment: '',
+    assignedDepartment: department,
     remainingAnnualLeaveCount: remainingDays,
-    hourlyWage: 0,
-    isFullTime: false,
-    nationality: '',
-    role: '',
+    isFullTime: true,
     hireDate: null,
     homeLeaveStart: null,
     homeLeaveEnd: null,
-    password: 0,
-    createdAt: '',
   }
 }
 
@@ -54,7 +33,7 @@ export function useWorkerAttendance(source: {
   name: Ref<string>
   department: Ref<string>
 }) {
-  const employee = ref<Employee | null>(null)
+  const employee = ref<AttendancePerson | null>(null)
   const quota = ref<AttendanceAnnualQuota | null>(null)
   const requests = ref<AttendanceRequest[]>([])
   const loading = ref(false)
@@ -70,7 +49,7 @@ export function useWorkerAttendance(source: {
     if (employee.value) return employee.value
     const name = source.name.value.trim()
     if (!name) return null
-    return profileEmployee(name, source.department.value.trim(), quota.value?.remainingDays ?? 0)
+    return profilePerson(source.userId.value, name, source.department.value.trim(), quota.value?.remainingDays ?? 0)
   })
 
   function showToast(message: string, type: 'success' | 'error' = 'success') {
@@ -94,14 +73,13 @@ export function useWorkerAttendance(source: {
     loadFailed.value = false
     try {
       const userId = source.userId.value
-      const [employees, annual] = await Promise.all([
-        fetchEmployees(),
-        userId ? fetchAnnualQuota(userId, new Date().getFullYear()).catch(() => null) : Promise.resolve(null),
-      ])
+      const annual = userId
+        ? await fetchAnnualQuota(userId, new Date().getFullYear()).catch(() => null)
+        : null
       quota.value = annual
-      employee.value = matchEmployee(employees, name, department)
-      const requestName = employee.value?.name || name
-      const requestDepartment = employee.value?.department || department
+      employee.value = profilePerson(userId, name, department, annual?.remainingDays ?? 0)
+      const requestName = name
+      const requestDepartment = department
       requests.value = requestName && requestDepartment
         ? await fetchEmployeeAttendanceRequests(requestName, requestDepartment)
         : []

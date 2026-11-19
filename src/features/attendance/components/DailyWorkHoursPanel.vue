@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
-import { WORK_END_TIME_OPTIONS, type AttendanceRequest, type DailyWorkHour, type Employee } from '../types/attendance'
+import { WORK_END_TIME_OPTIONS, type AttendanceRequest, type DailyWorkHour } from '../types/attendance'
+import type { AttendancePerson } from '@/features/worker-management/people/attendancePerson'
 import {
   DAILY_WORK_DEPARTMENT_ORDER,
   getDailyWorkDepartmentRank,
@@ -10,7 +11,7 @@ import { getDailyWorkAbsence } from '../utils/dailyWorkAbsence'
 import DailyWorkHoursDetailDialog from './DailyWorkHoursDetailDialog.vue'
 
 const props = defineProps<{
-  employees: Employee[]
+  employees: AttendancePerson[]
   requests: AttendanceRequest[]
   workHours: DailyWorkHour[]
   workDate: string
@@ -20,14 +21,14 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'openInput'): void
   (e: 'refresh'): void
-  (e: 'delete', payload: { workDate: string; employeeId: number }): void
-  (e: 'deleteAll', payload: { workDate: string; employeeIds: number[] }): void
-  (e: 'save', records: { workDate: string; employeeId: number; endTime: string }[]): void
+  (e: 'delete', payload: { workDate: string; employeeId: string }): void
+  (e: 'deleteAll', payload: { workDate: string; employeeIds: string[] }): void
+  (e: 'save', records: { workDate: string; employeeId: string; endTime: string }[]): void
   (e: 'selectDate', workDate: string): void
 }>()
 
 interface WorkHourRow {
-  employeeId: number
+  employeeId: string
   name: string
   assignedDepartment: string
   workDate: string
@@ -259,15 +260,15 @@ const selectedDetailGroup = computed<BadgeGroup | null>(() => {
   }
 })
 
-function handleDelete(payload: { workDate: string; employeeId: number }) {
+function handleDelete(payload: { workDate: string; employeeId: string }) {
   emit('delete', payload)
 }
 
-function handleDeleteAll(payload: { workDate: string; employeeIds: number[] }) {
+function handleDeleteAll(payload: { workDate: string; employeeIds: string[] }) {
   emit('deleteAll', payload)
 }
 
-function handleSave(records: { workDate: string; employeeId: number; endTime: string }[]) {
+function handleSave(records: { workDate: string; employeeId: string; endTime: string }[]) {
   emit('save', records)
 }
 

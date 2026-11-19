@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import AttendanceForm from '@/features/attendance/components/AttendanceForm.vue'
-import type { AttendanceFormState, Employee } from '@/features/attendance/types/attendance'
+import type { AttendanceFormState } from '@/features/attendance/types/attendance'
+import type { AttendancePerson } from '@/features/worker-management/people/attendancePerson'
+import { useWorkerBackClose } from '@/features/worker/pwa/useWorkerBackClose'
 
 defineProps<{
   form: AttendanceFormState
-  employee: Employee
+  employee: AttendancePerson
   loading: boolean
   userId: string
 }>()
@@ -14,6 +16,8 @@ const emit = defineEmits<{
   (e: 'submit'): void
   (e: 'cancel'): void
 }>()
+
+useWorkerBackClose(() => emit('cancel'))
 </script>
 
 <template>

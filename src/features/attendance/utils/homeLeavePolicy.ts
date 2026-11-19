@@ -2,8 +2,8 @@ import {
   HOME_LEAVE_REASON,
   HOME_LEAVE_REASON_WEDDING,
   type AttendanceRequest,
-  type Employee,
 } from '../types/attendance'
+import type { AttendancePerson } from '@/features/worker-management/people/attendancePerson'
 import { isHomeLeaveType, LEAVE_TYPE_HOME } from './attendanceLeaveType'
 
 export const HOME_LEAVE_DURATION_1M = '1개월' as const
@@ -101,7 +101,7 @@ export function isCountableHomeLeaveRequest(
 }
 
 export function getLastHomeLeaveStartDate(params: {
-  employee: Employee | null
+  employee: AttendancePerson | null
   requests: AttendanceRequest[]
   excludeRequestId?: number | null
 }): string | null {
@@ -157,7 +157,7 @@ export interface HomeLeaveEligibility {
 }
 
 export function resolveHomeLeaveEligibility(params: {
-  employee: Employee | null
+  employee: AttendancePerson | null
   requests: AttendanceRequest[]
   startDate: string
   excludeRequestId?: number | null
@@ -182,7 +182,7 @@ export function validateHomeLeaveForm(params: {
   reason: string
   startDate: string
   endDate: string
-  employee: Employee | null
+  employee: AttendancePerson | null
   requests: AttendanceRequest[]
   excludeRequestId?: number | null
 }): string | null {
