@@ -3,7 +3,15 @@ import { onUnmounted, ref } from 'vue'
 import NoticeImage from './NoticeImage.vue'
 import NoticeTranslationFields from './NoticeTranslationFields.vue'
 import { noticeImageFiles } from './noticeImage'
+import { NOTICE_PIN_LIMIT } from './noticePin'
 import { createNotice } from './notice.service'
+
+const props = defineProps({
+  pinnedCount: {
+    type: Number,
+    default: 0,
+  },
+})
 
 const emit = defineEmits(['close', 'saved'])
 
@@ -11,6 +19,7 @@ const title = ref('')
 const body = ref('')
 const translations = ref({})
 const requiresCheck = ref(true)
+const pinned = ref(false)
 const imageFiles = ref([])
 const imagePreviews = ref([])
 const saving = ref(false)
@@ -35,15 +44,16 @@ async function submit() {
   saving.value = true
   message.value = ''
   try {
-    await createNotice(title.value, body.value, imageFiles.value, requiresCheck.value, translations.value)
+    await createNotice(title.value, body.value, imageFiles.value, requiresCheck.value, translations.value, pinned.value)
     clearImages()
     title.value = ''
     body.value = ''
     translations.value = {}
     requiresCheck.value = true
+    pinned.value = false
     emit('saved')
-  } catch {
-    message.value = '등록에 실패했습니다.'
+  } catch (error) {
+    message.value = error?.message === '고정은 5개까지입니다.' ? error.message : '등록에 실패했습니다.'
   } finally {
     saving.value = false
   }
@@ -113,6 +123,15 @@ onUnmounted(clearImages)
           <label class="flex items-center gap-2 text-sm font-extrabold text-slate-800">
             <input v-model="requiresCheck" type="checkbox" class="h-4 w-4 accent-slate-900" :disabled="saving" />
             확인 받기
+          </label>
+          <label class="flex items-center gap-2 text-sm font-extrabold text-slate-800">
+            <input
+              v-model="pinned"
+              type="checkbox"
+              class="h-4 w-4 accent-slate-900"
+              :disabled="saving || props.pinnedCount >= NOTICE_PIN_LIMIT"
+            />
+            고정
           </label>
           <p v-if="message" class="text-sm font-bold text-red-500">{{ message }}</p>
         </div>

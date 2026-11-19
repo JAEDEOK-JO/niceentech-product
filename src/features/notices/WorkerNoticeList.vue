@@ -2,6 +2,7 @@
 import { noticeWhen } from './noticeFormat'
 import { noticeRequiresCheck } from './noticeCheck'
 import { noticeTitle } from './noticeLanguages'
+import { isNoticePinned } from './noticePin'
 
 defineProps({
   notices: {
@@ -37,12 +38,16 @@ function needsCheck(notice, userId) {
     <article
       v-for="notice in notices"
       :key="notice.id"
-      class="rounded-2xl border border-slate-200 bg-white p-4"
+      class="rounded-2xl border bg-white p-4"
+      :class="isNoticePinned(notice) ? 'border-slate-900' : 'border-slate-200'"
       @click="emit('open', notice)"
     >
       <div class="flex items-center justify-between gap-3">
         <p class="text-xs font-bold text-slate-400">{{ noticeWhen(notice.created_at) }}</p>
-        <p v-if="needsCheck(notice, userId)" class="text-xs font-extrabold text-red-500">확인하세요</p>
+        <div class="flex items-center gap-2">
+          <p v-if="isNoticePinned(notice)" class="text-xs font-extrabold text-slate-900">고정</p>
+          <p v-if="needsCheck(notice, userId)" class="text-xs font-extrabold text-red-500">확인하세요</p>
+        </div>
       </div>
       <p class="mt-2 break-words text-sm font-extrabold leading-6 text-slate-900">
         {{ noticeTitle(notice) }}

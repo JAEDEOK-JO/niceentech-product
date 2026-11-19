@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import { NOTICE_IMAGE_LIMIT, noticeImagePaths } from './noticeImage'
 import { noticeTranslationMap } from './noticeLanguages'
+import { sortNotices } from './noticePin'
 import { removeNoticeImages, signNoticeImageUrls, uploadNoticeImage } from './noticeImage.service'
 
 export async function fetchNoticeWorkers() {
@@ -19,7 +20,7 @@ export async function fetchNoticeWorkers() {
 export async function fetchNotices() {
   const { data, error } = await supabase
     .from('worker_notices')
-    .select('id,title,body,image_path,image_paths,requires_check,translations,created_at')
+    .select('id,title,body,image_path,image_paths,requires_check,translations,pinned,pinned_at,created_at')
     .order('created_at', { ascending: false })
 
   if (error) throw error
@@ -40,12 +41,13 @@ export async function fetchNotices() {
   }
 
   const imageUrls = await signNoticeImageUrls(notices.flatMap((notice) => noticeImagePaths(notice)))
-  return notices.map((notice) => ({
+  return sortNotices(notices.map((notice) => ({
     ...notice,
+    pinned: notice.pinned === true,
     imageUrls: noticeImagePaths(notice).map((path) => imageUrls.get(path)).filter(Boolean),
     translations: noticeTranslationMap(notice.translations),
     checkedUserIds: checkedByNotice.get(notice.id) ?? [],
-  }))
+  })))
 }
 
 async function currentUserId() {
@@ -54,7 +56,7 @@ async function currentUserId() {
   return data.session.user.id
 }
 
-export async function createNotice(title, body, files = [], requiresCheck = true, translations = {}) {
+export async function createNotice(title, body, files = [], requiresCheck = true, translations = {}, pinned = false) {
   const heading = String(title ?? '').trim()
   const text = String(body ?? '').trim()
   if (!heading || !text) throw new Error('내용이 없습니다.')
@@ -69,12 +71,25 @@ export async function createNotice(title, body, files = [], requiresCheck = true
       body: text,
       created_by: userId,
       requires_check: requiresCheck !== false,
+      pinned: pinned === true,
       translations: noticeTranslationMap(translations),
       image_paths: imagePaths.length ? imagePaths : null,
     })
     if (error) throw error
   } catch (error) {
     await removeNoticeImages(imagePaths)
+    if (String(error?.message || '').includes('notice_pin_limit')) throw new Error('고정은 5개까지입니다.')
+    throw error
+  }
+}
+
+export async function setNoticePinned(notice, pinned) {
+  const { error } = await supabase
+    .from('worker_notices')
+    .update({ pinned: pinned === true })
+    .eq('id', notice.id)
+  if (error) {
+    if (String(error.message || '').includes('notice_pin_limit')) throw new Error('고정은 5개까지입니다.')
     throw error
   }
 }

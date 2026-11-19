@@ -1,11 +1,13 @@
 <script setup>
 import { onMounted, ref } from 'vue'
+import { useDialog } from '@/composables/useDialog'
 import NoticeCheckGrid from './NoticeCheckGrid.vue'
 import NoticeImage from './NoticeImage.vue'
 import NoticeRegisterDialog from './NoticeRegisterDialog.vue'
 import NoticeTranslationPicker from './NoticeTranslationPicker.vue'
 import { noticeBody, noticeTextDir, noticeTitle } from './noticeLanguages'
-import { deleteNotice, fetchNoticeWorkers, fetchNotices } from './notice.service'
+import { deleteNotice, fetchNoticeWorkers, fetchNotices, setNoticePinned } from './notice.service'
+import { NOTICE_PIN_LIMIT, isNoticePinned, noticePinCount } from './noticePin'
 import { noticeWhen } from './noticeFormat'
 import { noticeRequiresCheck } from './noticeCheck'
 import { noticeCheckCount } from './noticeOrder'
@@ -21,6 +23,7 @@ defineProps({
   },
 })
 
+const { confirm } = useDialog()
 const notices = ref([])
 const workers = ref([])
 const loading = ref(false)
@@ -31,6 +34,7 @@ const registerOpen = ref(false)
 const languageById = ref({})
 
 const selected = () => notices.value.find((notice) => notice.id === selectedId.value) ?? null
+const pinnedCount = () => noticePinCount(notices.value)
 
 async function load() {
   loading.value = true
@@ -53,8 +57,29 @@ async function onSaved() {
   await load()
 }
 
+async function pin(notice) {
+  if (saving.value) return
+  const next = !isNoticePinned(notice)
+  if (next && pinnedCount() >= NOTICE_PIN_LIMIT) {
+    message.value = '고정은 5개까지입니다.'
+    return
+  }
+  saving.value = true
+  message.value = ''
+  try {
+    await setNoticePinned(notice, next)
+    await load()
+  } catch (error) {
+    message.value = error?.message === '고정은 5개까지입니다.' ? error.message : '고정에 실패했습니다.'
+  } finally {
+    saving.value = false
+  }
+}
+
 async function remove(notice) {
-  if (saving.value || !window.confirm('삭제할까요?')) return
+  if (saving.value) return
+  const ok = await confirm('삭제할까요?', { confirmText: '삭제', cancelText: '취소' })
+  if (!ok) return
   saving.value = true
   message.value = ''
   try {
@@ -94,29 +119,43 @@ onMounted(load)
         등록
       </button>
     </Teleport>
-    <NoticeRegisterDialog v-if="registerOpen" @close="registerOpen = false" @saved="onSaved" />
+    <NoticeRegisterDialog v-if="registerOpen" :pinned-count="pinnedCount()" @close="registerOpen = false" @saved="onSaved" />
     <p v-if="message" class="text-sm font-bold text-red-500">{{ message }}</p>
     <p v-if="loading" class="text-sm font-bold text-slate-400">불러오는 중</p>
     <div v-else class="grid gap-3">
       <article
         v-for="notice in notices"
         :key="notice.id"
-        class="rounded-2xl border border-slate-200 p-4"
+        class="rounded-2xl border p-4"
+        :class="isNoticePinned(notice) ? 'border-slate-900' : 'border-slate-200'"
       >
         <button type="button" class="w-full text-left" @click="selectedId = selected()?.id === notice.id ? '' : notice.id">
-          <p class="text-xs font-bold text-slate-400">{{ noticeWhen(notice.created_at) }}</p>
+          <div class="flex items-center justify-between gap-3">
+            <p class="text-xs font-bold text-slate-400">{{ noticeWhen(notice.created_at) }}</p>
+            <p v-if="isNoticePinned(notice)" class="text-xs font-extrabold text-slate-900">고정</p>
+          </div>
           <p class="mt-2 break-words text-sm font-extrabold leading-6 text-slate-900">
             {{ noticeTitle(notice) }}
           </p>
         </button>
+        <div class="mt-3 flex gap-2">
         <button
           type="button"
-          class="mt-3 rounded-xl border border-rose-200 px-3 py-1.5 text-sm font-extrabold text-rose-600 disabled:opacity-40"
+          class="rounded-xl border border-slate-200 px-3 py-1.5 text-sm font-extrabold text-slate-700 disabled:opacity-40"
+          :disabled="saving"
+          @click="pin(notice)"
+        >
+          {{ isNoticePinned(notice) ? '해제' : '고정' }}
+        </button>
+        <button
+          type="button"
+          class="rounded-xl border border-rose-200 px-3 py-1.5 text-sm font-extrabold text-rose-600 disabled:opacity-40"
           :disabled="saving"
           @click="remove(notice)"
         >
           삭제
         </button>
+        </div>
         <div v-if="selected()?.id === notice.id" class="mt-4 grid gap-3">
           <p class="break-words text-sm font-bold leading-6 text-slate-900" :dir="noticeTextDir(languageById[notice.id])">
             {{ noticeBody(notice, languageById[notice.id]) }}
