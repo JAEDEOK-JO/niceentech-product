@@ -10,7 +10,6 @@ import { deleteNotice, fetchNoticeWorkers, fetchNotices, setNoticePinned } from 
 import { NOTICE_PIN_LIMIT, isNoticePinned, noticePinCount } from './noticePin'
 import { noticeWhen } from './noticeFormat'
 import { noticeRequiresCheck } from './noticeCheck'
-import { noticeCheckCount } from './noticeOrder'
 
 defineProps({
   showHeading: {
@@ -157,7 +156,7 @@ onMounted(load)
         </button>
         </div>
         <div v-if="selected()?.id === notice.id" class="mt-4 grid gap-3">
-          <p class="break-words text-sm font-bold leading-6 text-slate-900" :dir="noticeTextDir(languageById[notice.id])">
+          <p class="whitespace-pre-wrap break-words text-sm font-bold leading-6 text-slate-900" :dir="noticeTextDir(languageById[notice.id])">
             {{ noticeBody(notice, languageById[notice.id]) }}
           </p>
           <NoticeTranslationPicker
@@ -166,9 +165,6 @@ onMounted(load)
             @update:model-value="languageById[notice.id] = $event"
           />
           <NoticeImage v-if="notice.imageUrls?.length" :urls="notice.imageUrls" />
-          <p v-if="noticeRequiresCheck(notice)" class="text-xs font-extrabold text-slate-500">
-            확인한사람 {{ noticeCheckCount(workers, notice.checkedUserIds) }}
-          </p>
           <NoticeCheckGrid v-if="noticeRequiresCheck(notice)" :workers="workers" :checked-ids="notice.checkedUserIds" />
         </div>
       </article>

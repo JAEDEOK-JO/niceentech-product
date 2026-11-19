@@ -1,11 +1,11 @@
 export const NOTICE_LANGUAGES = [
-  { code: 'lo', label: '라오어', native: 'ລາວ' },
-  { code: 'my', label: '미얀마어', native: 'မြန်မာ' },
-  { code: 'th', label: '태국어', native: 'ไทย' },
-  { code: 'en', label: '영어', native: 'English' },
-  { code: 'ru', label: '러시아어', native: 'Русский' },
-  { code: 'vi', label: '베트남어', native: 'Tiếng Việt' },
-  { code: 'ur', label: '파키스탄어', native: 'اردو' },
+  { code: 'lo', label: '라오어', native: 'ລາວ', action: 'ແປ' },
+  { code: 'my', label: '미얀마어', native: 'မြန်မာ', action: 'ဘာသာပြန်' },
+  { code: 'th', label: '태국어', native: 'ไทย', action: 'แปล' },
+  { code: 'en', label: '영어', native: 'English', action: 'Translate' },
+  { code: 'ru', label: '러시아어', native: 'Русский', action: 'Перевести' },
+  { code: 'vi', label: '베트남어', native: 'Tiếng Việt', action: 'Dịch' },
+  { code: 'ur', label: '파키스탄어', native: 'اردو', action: 'ترجمہ' },
 ]
 
 const CODES = new Set(NOTICE_LANGUAGES.map((language) => language.code))
@@ -35,9 +35,13 @@ export function noticeTitle(notice) {
   return String(notice?.title || notice?.body || '')
 }
 
+export function noticeDisplayText(value) {
+  return String(value ?? '').replace(/\\r\\n|\\n|\\r/g, '\n')
+}
+
 export function noticeBody(notice, code) {
   const translated = CODES.has(code) ? noticeTranslationMap(notice?.translations)[code] : ''
-  return translated || String(notice?.body || '')
+  return noticeDisplayText(translated || notice?.body || '')
 }
 
 export function noticeTextDir(code) {

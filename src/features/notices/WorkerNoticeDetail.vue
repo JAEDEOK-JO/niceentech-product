@@ -38,29 +38,31 @@ useWorkerBackClose(() => emit('back'))
 </script>
 
 <template>
-  <div class="flex min-h-full flex-col gap-4 px-4 py-4">
-    <div class="flex items-center gap-3">
-      <button type="button" class="text-sm font-bold text-slate-500" @click="emit('back')">뒤로</button>
-      <h2 class="text-lg font-extrabold text-slate-900">공지사항</h2>
+  <div class="flex min-h-full flex-col">
+    <div class="flex flex-col gap-4 px-4 py-4">
+      <div class="flex items-center gap-3">
+        <button type="button" class="text-sm font-bold text-slate-500" @click="emit('back')">뒤로</button>
+        <h2 class="text-lg font-extrabold text-slate-900">공지사항</h2>
+      </div>
+      <article class="rounded-2xl border border-slate-200 bg-white p-4">
+        <p class="text-xs font-bold text-slate-400">{{ noticeWhen(notice.created_at) }}</p>
+        <h3 class="mt-2 break-words text-base font-extrabold leading-6 text-slate-900">
+          {{ noticeTitle(notice) }}
+        </h3>
+        <p class="mt-2 whitespace-pre-wrap break-words text-sm font-bold leading-6 text-slate-900" :dir="noticeTextDir(language)">
+          {{ noticeBody(notice, language) }}
+        </p>
+        <NoticeTranslationPicker
+          class="mt-3"
+          :translations="notice.translations"
+          :model-value="language"
+          @update:model-value="language = $event"
+        />
+        <NoticeImage v-if="notice.imageUrls?.length" class="mt-3" :urls="notice.imageUrls" large />
+      </article>
+      <NoticeCheckGrid v-if="noticeRequiresCheck(notice)" :workers="workers" :checked-ids="notice.checkedUserIds" />
     </div>
-    <article class="rounded-2xl border border-slate-200 bg-white p-4">
-      <p class="text-xs font-bold text-slate-400">{{ noticeWhen(notice.created_at) }}</p>
-      <h3 class="mt-2 break-words text-base font-extrabold leading-6 text-slate-900">
-        {{ noticeTitle(notice) }}
-      </h3>
-      <p class="mt-2 break-words text-sm font-bold leading-6 text-slate-900" :dir="noticeTextDir(language)">
-        {{ noticeBody(notice, language) }}
-      </p>
-      <NoticeTranslationPicker
-        class="mt-3"
-        :translations="notice.translations"
-        :model-value="language"
-        @update:model-value="language = $event"
-      />
-      <NoticeImage v-if="notice.imageUrls?.length" class="mt-3" :urls="notice.imageUrls" large />
-    </article>
-    <NoticeCheckGrid v-if="noticeRequiresCheck(notice)" :workers="workers" :checked-ids="notice.checkedUserIds" />
-    <div v-if="userId && noticeRequiresCheck(notice)" class="mt-auto pt-2">
+    <div v-if="userId && noticeRequiresCheck(notice)" class="sticky bottom-0 z-20 mt-auto border-t border-slate-200 bg-white px-4 py-3">
       <p v-if="message && !notice.checkedUserIds.includes(userId)" class="mb-2 text-center text-sm font-bold text-red-500">{{ message }}</p>
       <button
         type="button"

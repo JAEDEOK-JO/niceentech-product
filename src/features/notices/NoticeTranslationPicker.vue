@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue'
-import { noticeTranslationList } from './noticeLanguages'
+import { noticeTextDir, noticeTranslationList } from './noticeLanguages'
 
 const props = defineProps({
   translations: {
@@ -29,17 +29,18 @@ function pick(code) {
 
 <template>
   <div v-if="entries.length" class="mt-3" @click.stop>
-    <button type="button" class="text-xs font-extrabold text-blue-700" @click="toggle">번역보기</button>
+    <button type="button" class="text-base font-extrabold text-blue-700" @click="toggle">번역하기(Translate)</button>
     <div v-if="open" class="mt-2 flex flex-wrap gap-2">
       <button
         v-for="language in entries"
         :key="language.code"
         type="button"
-        class="rounded-lg px-2.5 py-1 text-xs font-extrabold"
+        class="rounded-lg px-3 py-1.5 text-base font-extrabold"
+        :dir="noticeTextDir(language.code)"
         :class="modelValue === language.code ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700'"
         @click="pick(language.code)"
       >
-        {{ language.native }}
+        {{ language.action }}
       </button>
     </div>
   </div>
