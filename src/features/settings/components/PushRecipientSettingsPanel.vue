@@ -2,12 +2,10 @@
 import { onMounted, ref } from 'vue'
 import {
   fetchPushRecipientRows,
-  setDrawingPushEnabled,
   type PushRecipientRow,
 } from '@/features/settings/services/pushRecipientSettings.service'
 
 const loading = ref(false)
-const savingUserId = ref('')
 const errorMessage = ref('')
 const rows = ref<PushRecipientRow[]>([])
 
@@ -21,25 +19,6 @@ async function loadRows() {
     rows.value = []
   } finally {
     loading.value = false
-  }
-}
-
-async function handleToggle(row: PushRecipientRow, event: Event) {
-  const next = Boolean((event.target as HTMLInputElement)?.checked)
-  if (savingUserId.value) return
-
-  const previous = row.drawingEnabled
-  row.drawingEnabled = next
-  savingUserId.value = row.userId
-  errorMessage.value = ''
-
-  try {
-    await setDrawingPushEnabled(row.userId, next)
-  } catch {
-    row.drawingEnabled = previous
-    errorMessage.value = '저장에 실패했습니다.'
-  } finally {
-    savingUserId.value = ''
   }
 }
 
@@ -64,7 +43,6 @@ onMounted(() => {
           <tr>
             <th class="px-4 py-3">이름</th>
             <th class="px-4 py-3">부서</th>
-            <th class="px-4 py-3">도면배포</th>
             <th class="px-4 py-3">기기</th>
           </tr>
         </thead>
@@ -76,20 +54,6 @@ onMounted(() => {
           >
             <td class="px-4 py-3 font-bold text-slate-900">{{ row.name }}</td>
             <td class="px-4 py-3 text-slate-600">{{ row.department || '-' }}</td>
-            <td class="px-4 py-3">
-              <label class="inline-flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  class="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-400"
-                  :checked="row.drawingEnabled"
-                  :disabled="savingUserId === row.userId"
-                  @change="handleToggle(row, $event)"
-                />
-                <span class="text-xs font-bold text-slate-600">
-                  {{ row.drawingEnabled ? 'ON' : 'OFF' }}
-                </span>
-              </label>
-            </td>
             <td class="px-4 py-3 text-xs font-bold" :class="row.hasToken ? 'text-emerald-600' : 'text-slate-400'">
               {{ row.hasToken ? '등록' : '-' }}
             </td>
