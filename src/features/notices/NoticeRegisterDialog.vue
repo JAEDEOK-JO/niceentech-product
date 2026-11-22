@@ -1,10 +1,11 @@
 <script setup>
 import { onUnmounted, ref } from 'vue'
 import NoticeImage from './NoticeImage.vue'
-import NoticeTranslationFields from './NoticeTranslationFields.vue'
+import NoticeLanguageList from './NoticeLanguageList.vue'
 import { noticeImageFiles } from './noticeImage'
 import { NOTICE_PIN_LIMIT } from './noticePin'
 import { createNotice } from './notice.service'
+import { translateNoticeBody } from './noticeTranslate'
 
 const props = defineProps({
   pinnedCount: {
@@ -17,7 +18,6 @@ const emit = defineEmits(['close', 'saved'])
 
 const title = ref('')
 const body = ref('')
-const translations = ref({})
 const requiresCheck = ref(true)
 const pinned = ref(false)
 const imageFiles = ref([])
@@ -44,16 +44,17 @@ async function submit() {
   saving.value = true
   message.value = ''
   try {
-    await createNotice(title.value, body.value, imageFiles.value, requiresCheck.value, translations.value, pinned.value)
+    const translations = await translateNoticeBody(body.value)
+    await createNotice(title.value, body.value, imageFiles.value, requiresCheck.value, translations, pinned.value)
     clearImages()
     title.value = ''
     body.value = ''
-    translations.value = {}
     requiresCheck.value = true
     pinned.value = false
     emit('saved')
   } catch (error) {
-    message.value = error?.message === '고정은 5개까지입니다.' ? error.message : '등록에 실패했습니다.'
+    const text = String(error?.message || '')
+    message.value = text === '고정은 5개까지입니다.' || text === '번역에 실패했습니다.' ? text : '등록에 실패했습니다.'
   } finally {
     saving.value = false
   }
@@ -119,7 +120,7 @@ onUnmounted(clearImages)
             </button>
           </div>
           <NoticeImage v-if="imagePreviews.length" :urls="imagePreviews" />
-          <NoticeTranslationFields v-model="translations" :disabled="saving" />
+          <NoticeLanguageList />
           <label class="flex items-center gap-2 text-sm font-extrabold text-slate-800">
             <input v-model="requiresCheck" type="checkbox" class="h-4 w-4 accent-slate-900" :disabled="saving" />
             확인 받기
@@ -142,7 +143,7 @@ onUnmounted(clearImages)
             :disabled="saving || !title.trim() || !body.trim()"
             @click="submit"
           >
-            {{ saving ? '등록 중' : '등록' }}
+            {{ saving ? '번역 중' : '등록' }}
           </button>
         </footer>
       </section>

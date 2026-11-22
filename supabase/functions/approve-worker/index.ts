@@ -23,13 +23,23 @@ const getRuntimeConfig = () => {
   return { config, missing }
 }
 
-async function readCallerId(token: string, url: string, anonKey: string) {
-  const authClient = createClient(url, anonKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  })
-  const { data, error } = await authClient.auth.getUser(token)
-  if (error || !data.user?.id) return ''
-  return data.user.id
+function readCallerId(token: string) {
+  const part = token.split('.')[1] ?? ''
+  if (!part) return ''
+  try {
+    const claims = JSON.parse(atob(part.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(part.length / 4) * 4, '='))) as {
+      sub?: unknown
+      role?: unknown
+      exp?: unknown
+    }
+    if (claims.role !== 'authenticated') return ''
+    const exp = Number(claims.exp)
+    if (!Number.isFinite(exp) || exp * 1000 <= Date.now()) return ''
+    const id = String(claims.sub ?? '')
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id) ? id : ''
+  } catch {
+    return ''
+  }
 }
 
 Deno.serve(async (req) => {
@@ -42,7 +52,7 @@ Deno.serve(async (req) => {
   const token = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '').trim()
   if (!token) return json({ error: 'forbidden' }, 403)
 
-  const callerId = await readCallerId(token, config.SUPABASE_URL, config.SUPABASE_ANON_KEY)
+  const callerId = readCallerId(token)
   if (!callerId) return json({ error: 'forbidden' }, 403)
 
   const supabase = createClient(config.SUPABASE_URL, config.SUPABASE_SERVICE_ROLE_KEY, {

@@ -12,3 +12,6 @@ verify_jwt = false
 
 [functions.approve-worker]
 verify_jwt = true
+
+[functions.translate-notice]
+verify_jwt = true

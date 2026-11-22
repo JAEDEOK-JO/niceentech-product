@@ -2,8 +2,6 @@
 import { computed, ref, watch } from 'vue'
 import { useAuth } from '@/composables/useAuth'
 import { useProfile } from '@/composables/useProfile'
-import { fetchEmployees } from '@/features/attendance/services/attendance.service'
-import AttendanceEmployeeMappingPanel from '@/features/attendance/components/AttendanceEmployeeMappingPanel.vue'
 import ChatbotNotesPanel from '@/features/settings/components/ChatbotNotesPanel.vue'
 import UserCapabilitySettingsPanel from '@/features/settings/components/UserCapabilitySettingsPanel.vue'
 import EmployeeAccountRegisterPanel from '@/features/settings/components/EmployeeAccountRegisterPanel.vue'
@@ -36,22 +34,12 @@ const isAdmin = computed(() => isAdminRole(profile.value?.role))
 const canWriteNotice = computed(() => canPostNotice(profile.value?.role))
 const activePanel = ref('app-info')
 
-const employees = ref([])
-const loadEmployees = async () => {
-  try {
-    employees.value = await fetchEmployees()
-  } catch {
-    employees.value = []
-  }
-}
 watch(
   isRootAdmin,
   (v) => {
-    if (v) {
-      loadEmployees()
-      return
+    if (!v && ['employee-register', 'employee-options', 'inventory-materials'].includes(activePanel.value)) {
+      activePanel.value = 'app-info'
     }
-    if (['employee-register', 'employee-options', 'inventory-materials'].includes(activePanel.value)) activePanel.value = 'app-info'
   },
   { immediate: true },
 )
@@ -252,22 +240,10 @@ const handleVirtualKeyboardToggle = async (event) => {
               </label>
             </div>
           </article>
-
-          <article v-if="isRootAdmin" class="rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4">
-            <div class="mb-4 flex flex-col gap-1">
-              <p class="text-xs font-bold uppercase tracking-[0.18em] text-red-500">ROOT ADMIN</p>
-              <h2 class="text-lg font-extrabold text-slate-900">직원 ID 매칭</h2>
-              <p class="text-sm text-slate-500">
-                근태 엑셀의 ID를 직원목록과 연결합니다. 최초 1회만 수행하세요.
-              </p>
-            </div>
-            <AttendanceEmployeeMappingPanel :employees="employees" @refresh-employees="loadEmployees" />
-          </article>
         </div>
 
         <EmployeeAccountRegisterPanel
           v-else-if="isRootAdmin && activePanel === 'employee-register'"
-          @registered="loadEmployees"
         />
 
         <EmployeeOptionSettingsPanel

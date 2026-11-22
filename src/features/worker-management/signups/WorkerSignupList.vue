@@ -2,7 +2,9 @@
 import { onMounted, ref } from 'vue'
 import { useDialog } from '@/composables/useDialog'
 import { WORKER_DEPARTMENTS } from '@/features/worker/workerDepartmentOptions'
+import WorkerClockMatch from './WorkerClockMatch.vue'
 import WorkerSignupRow from './WorkerSignupRow.vue'
+import { saveWorkerLeave } from './workerAnnualLeave'
 import { approveWorkerSignup, deleteWorkerSignup, fetchWorkerSignups, updateWorkerSignup } from './workerSignup.service'
 
 const { confirm } = useDialog()
@@ -51,15 +53,26 @@ async function handleSave(payload) {
   savingId.value = payload.id
   message.value = ''
   const result = await updateWorkerSignup(payload.id, payload)
-  savingId.value = ''
   if (!result.ok) {
+    savingId.value = ''
     message.value = result.message
+    return
+  }
+  const leave = await saveWorkerLeave(
+    { ...payload, assigned_department: payload.assignedDepartment },
+    payload.remainingAnnualLeave,
+  )
+  savingId.value = ''
+  if (!leave.ok) {
+    message.value = leave.message
     return
   }
   const item = items.value.find((row) => row.id === payload.id)
   if (!item) return
   item.name = result.item.name
   item.assigned_department = result.item.assigned_department
+  item.employee_code = result.item.employee_code
+  item.remainingAnnualLeave = leave.remainingAnnualLeave
 }
 
 async function handleRemove(item) {
@@ -84,6 +97,7 @@ onMounted(load)
   <section>
     <p v-if="loading" class="py-14 text-center text-sm text-slate-400">불러오는 중...</p>
     <template v-else>
+      <WorkerClockMatch :workers="items" @saved="load" />
       <p v-if="message" class="mb-3 text-center text-sm font-bold text-red-500">{{ message }}</p>
       <p v-if="items.length === 0" class="rounded-xl border border-dashed border-slate-200 bg-white py-14 text-center text-sm text-slate-400">없음</p>
       <div v-else class="overflow-x-auto rounded-xl border border-slate-200 bg-white">
@@ -92,6 +106,8 @@ onMounted(load)
             <tr class="bg-slate-50 text-center text-xs font-bold text-slate-500">
               <th class="border border-slate-200 px-4 py-3">이름</th>
               <th class="border border-slate-200 px-4 py-3">담당</th>
+              <th class="border border-slate-200 px-4 py-3">사번</th>
+              <th class="border border-slate-200 px-4 py-3">연차</th>
               <th class="border border-slate-200 px-4 py-3">아이디</th>
               <th class="border border-slate-200 px-4 py-3">가입일</th>
               <th class="border border-slate-200 px-4 py-3">상태</th>

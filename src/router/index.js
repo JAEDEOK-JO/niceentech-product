@@ -33,7 +33,6 @@ import AdminOperationsDashboardPage from '@/pages/AdminOperationsDashboardPage.v
 import AdminProductionDashboardPage from '@/pages/AdminProductionDashboardPage.vue'
 import MessengerPage from '@/pages/MessengerPage.vue'
 import AttendancePage from '@/pages/AttendancePage.vue'
-import AttendanceGuestPage from '@/pages/AttendanceGuestPage.vue'
 import ChatbotPage from '@/pages/ChatbotPage.vue'
 import AttendanceRequestHistoryPage from '@/pages/AttendanceRequestHistoryPage.vue'
 import CncPage from '@/pages/CncPage.vue'
@@ -42,7 +41,7 @@ import WorkerAppPage from '@/pages/WorkerAppPage.vue'
 import RewardPage from '@/pages/RewardPage.vue'
 import { isAdminRole, isDesignDepartment, isRootAdmin } from '@/utils/adminAccess'
 import { canViewWorkerRewards } from '@/features/worker-management/rewardAccess'
-import { isPublicAttendanceRoute, redirectForSessionRole } from '@/router/roleAccess'
+import { redirectForSessionRole } from '@/router/roleAccess'
 
 
 const routes = [
@@ -167,11 +166,6 @@ const routes = [
     name: 'reward',
     component: RewardPage,
     meta: { requiresAuth: true, requiresRewardAccess: true },
-  },
-  {
-    path: '/attendance/guest/:token(.*)',
-    name: 'attendance-guest',
-    component: AttendanceGuestPage,
   },
   {
     path: '/attendance/history',
@@ -335,8 +329,6 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to) => {
-  if (isPublicAttendanceRoute(to)) return true
-
   const { data } = await supabase.auth.getSession()
   const isLoggedIn = !!data.session
   const userId = data.session?.user?.id ?? null

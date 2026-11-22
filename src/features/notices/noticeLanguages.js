@@ -6,6 +6,8 @@ export const NOTICE_LANGUAGES = [
   { code: 'ru', label: '러시아어', native: 'Русский', action: 'Перевести' },
   { code: 'vi', label: '베트남어', native: 'Tiếng Việt', action: 'Dịch' },
   { code: 'ur', label: '파키스탄어', native: 'اردو', action: 'ترجمہ' },
+  { code: 'bn', label: '방글라데시어', native: 'বাংলা', action: 'অনুবাদ' },
+  { code: 'ne', label: '네팔어', native: 'नेपाली', action: 'अनुवाद' },
 ]
 
 const CODES = new Set(NOTICE_LANGUAGES.map((language) => language.code))

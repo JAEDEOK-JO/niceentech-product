@@ -13,7 +13,6 @@ import type { EmployeeFormData } from '../services/attendance.service'
 import AttendanceFiltersComp from './AttendanceFilters.vue'
 import AttendanceForm from './AttendanceForm.vue'
 import AttendanceEmployeeList from './AttendanceEmployeeList.vue'
-import AttendanceAnalysisPanel from './AttendanceAnalysisPanel.vue'
 import AttendanceSummaryBoard from './AttendanceSummaryBoard.vue'
 import AttendanceDetailModal from './AttendanceDetailModal.vue'
 import AttendanceRequestSignatureDialog from './AttendanceRequestSignatureDialog.vue'
@@ -32,7 +31,7 @@ import { isDeptHeadPending, isFinalApprovalPending, isGyeongyuPending } from '..
 import type { AttendanceStatusChangeValue } from '../utils/attendanceRequestStatus'
 import { formatLeaveDaysCountLabel, isHalfDayLeaveType, LEAVE_TYPE_ABSENCE, LEAVE_TYPE_HOME, LEAVE_TYPE_OUTING } from '../utils/attendanceLeaveType'
 
-type AdminTab = 'requests' | 'employees' | 'summary' | 'analysis' | 'approval' | 'daepyo' | 'gyeongyu' | 'workhours' | 'signups' | 'notices'
+type AdminTab = 'requests' | 'employees' | 'summary' | 'approval' | 'daepyo' | 'gyeongyu' | 'workhours' | 'signups' | 'notices'
 type UserTab = 'download' | 'workhours'
 
 const props = defineProps<{
@@ -175,7 +174,6 @@ const adminTabTitle: Record<AdminTab, string> = {
   daepyo: '최종승인 대기',
   summary: '근태요약',
   employees: '직원 목록',
-  analysis: '근태 분석',
   workhours: '작업시간',
   signups: '뉴 직원목록',
   notices: '공지사항',
@@ -320,13 +318,6 @@ watch(
           @click="activeTab = 'employees'"
         >직원 목록</button>
         <button
-          v-if="!scopedDepartments"
-          type="button"
-          class="rounded-lg px-3.5 py-2 text-sm font-bold transition-colors"
-          :class="tabBtnClass('analysis')"
-          @click="activeTab = 'analysis'"
-        >근태 분석</button>
-        <button
           type="button"
           class="rounded-lg px-3.5 py-2 text-sm font-bold transition-colors"
           :class="tabBtnClass('workhours')"
@@ -452,11 +443,6 @@ watch(
       />
 
       <!-- ═══ 근태 분석 탭 (관리자) ═══ -->
-      <AttendanceAnalysisPanel
-        v-if="isAdmin && !scopedDepartments && activeTab === 'analysis'"
-        :employees="employees"
-      />
-
       <AttendanceSummaryBoard
         v-if="isAdmin && !scopedDepartments && activeTab === 'summary'"
         :requests="summaryRequests"
