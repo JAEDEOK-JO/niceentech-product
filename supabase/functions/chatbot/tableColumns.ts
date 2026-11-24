@@ -8,7 +8,6 @@ export const tableColumns: Record<string, string> = {
   chat_room_reads: "room_id, user_id, last_read_at, created_at, updated_at",
   chat_rooms: "id, title, description, cover_url, owner_id, owner_name, member_count, created_at",
   chat_scheduled_messages: "id, room_id, source_message_id, payload, file_type, run_at, status, created_by, created_at, processed_at, last_error",
-  cnc_items: "id, created_at, kind, quantity, is_completed, created_by, company, place, area, drawing_no, product_list_id, completed_at, length",
   company_fitting_types: "id, company_id, fitting_type_id, is_active, created_at, updated_at, size_value, sort_order",
   company_list: "id, created_at, company, place, full_name, initial, director_name, director_phone, site_address, manager_id, company_type, start_date, end_date, business_registration_number, registration_month, total_head_count, site_completed, order_confirmed, total_screw_count, total_supipe_count, progressed_head_count, approved_materials",
   company_pipe_types: "id, company_id, pipe_type_id, is_active, created_at, updated_at, size_value, sort_order",

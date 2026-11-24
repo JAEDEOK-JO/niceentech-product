@@ -1,8 +1,7 @@
 (function () {
   var path = location.pathname
   var href = '/manifest.webmanifest'
-  if (path === '/cnc-only') href = '/manifest-cnc-only.webmanifest'
-  else if (path === '/worker' || path.indexOf('/worker/') === 0) href = '/manifest-worker.webmanifest'
+  if (path === '/worker' || path.indexOf('/worker/') === 0) href = '/manifest-worker.webmanifest'
 
   window.__workerInstallEvent = null
   window.__workerInstallWantsNative = false

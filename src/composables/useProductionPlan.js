@@ -11,7 +11,6 @@ import {
   normalizeProductionWorkType,
   preserveWorkerDoneStatus,
 } from '@/utils/productionStatus'
-import { fetchCncProductListIdSet } from '@/features/cnc/services/cnc.service'
 import { deletePlanOutboundTransactions } from '@/features/inventory/services/deletePlanOutbound'
 import {
   DEFAULT_PLAN_SORT_DIR,
@@ -250,7 +249,6 @@ export function useProductionPlan(session) {
 
   const selectedTuesday = ref(baseTuesday())
   const planRows = ref([])
-  const cncProductListIds = ref(new Set())
   const planLoading = ref(false)
   const planError = ref('')
   const searchText = ref('')
@@ -309,28 +307,6 @@ export function useProductionPlan(session) {
 
     selectedTuesday.value = next
     return { ok: true }
-  }
-
-  const refreshCncProductListIds = async () => {
-    try {
-      cncProductListIds.value = await fetchCncProductListIdSet()
-    } catch {
-      cncProductListIds.value = new Set()
-    }
-  }
-
-  const markCncRegistered = (productListId) => {
-    const id = Number(productListId ?? 0)
-    if (!id) return
-    cncProductListIds.value = new Set([...cncProductListIds.value, id])
-  }
-
-  const unmarkCncRegistered = (productListId) => {
-    const id = Number(productListId ?? 0)
-    if (!id) return
-    const next = new Set(cncProductListIds.value)
-    next.delete(id)
-    cncProductListIds.value = next
   }
 
   const fetchPlanRows = async ({ silent = false } = {}) => {
@@ -398,7 +374,6 @@ export function useProductionPlan(session) {
       ...(usedMakerFallback ? { maker: null } : {}),
       ...(usedNasaMarkFallback ? { nasa_mark: false } : {}),
     }))
-    await refreshCncProductListIds()
   }
 
   const groupedRows = computed(() => {
@@ -419,7 +394,6 @@ export function useProductionPlan(session) {
       const indexedRows = sortedRows.map((row, index) => ({
         ...row,
         no: index + 1,
-        has_cnc: cncProductListIds.value.has(Number(row.id)),
       }))
 
       return {
@@ -1088,8 +1062,6 @@ export function useProductionPlan(session) {
     updatePlanRowFields,
     deletePlanRow,
     isDistributedRow,
-    markCncRegistered,
-    unmarkCncRegistered,
     LONG_PRESS_REQUIRED_MS,
   }
 }

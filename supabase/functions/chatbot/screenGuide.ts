@@ -10,7 +10,6 @@ const labels: Record<string, string> = {
   chat_room_reads: '메신저 읽음',
   chat_rooms: '메신저 방',
   chat_scheduled_messages: '메신저 예약 메시지',
-  cnc_items: 'CNC',
   company_fitting_types: '회사 부속 규격',
   company_list: '회사리스트',
   company_pipe_types: '회사 파이프 규격',
@@ -84,7 +83,7 @@ function tableList(tables: string[]) {
 
 export function screenRules() {
   return `화면
-생산계획표, 검수리스트, 용접일정, 출하일정, 출하명세서, 입출고내역, 회사리스트, 근태관리, 메신저, 보고서, 외주, CNC 를 조회할 수 있다.
+생산계획표, 검수리스트, 용접일정, 출하일정, 출하명세서, 입출고내역, 회사리스트, 근태관리, 메신저, 보고서, 외주 를 조회할 수 있다.
 뭘 조회할 수 있는지 물으면 sql 은 빈 문자열이고 reply 에 이 화면 이름을 넣는다.
 직원 비밀번호, 푸시 토큰, 푸시 설정, 챗봇 대화는 조회할 수 없다. 그 질문이면 sql 은 빈 문자열이고 reply 는 조회할 수 없습니다.
 

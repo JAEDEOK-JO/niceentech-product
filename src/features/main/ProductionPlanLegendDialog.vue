@@ -14,7 +14,6 @@ const badges = [
   { label: '나사', className: 'border-orange-200 bg-orange-100 text-orange-800' },
   { label: '민뚜라', className: 'border-cyan-300 bg-cyan-200 text-cyan-950' },
   { label: '진민택', className: 'border-fuchsia-300 bg-fuchsia-200 text-fuchsia-950' },
-  { label: 'CNC', className: 'border-violet-300 bg-violet-200 text-violet-950' },
 ]
 </script>
 

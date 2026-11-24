@@ -6,7 +6,7 @@ import AppDialog from '@/components/ui/AppDialog.vue'
 import VirtualKeyboardPanel from '@/features/virtual-keyboard/components/VirtualKeyboardPanel.vue'
 import { bootstrapVirtualKeyboardSetting } from '@/features/virtual-keyboard/composables/useVirtualKeyboardSetting'
 import { supabase } from '@/lib/supabase'
-import { useCncOnlyPwa } from '@/composables/useCncOnlyPwa'
+import { useAppManifest } from '@/composables/useAppManifest'
 import { useAuth } from '@/composables/useAuth'
 import { useFcmPush } from '@/features/push/composables/useFcmPush'
 import {
@@ -19,7 +19,7 @@ import packageJson from '../package.json'
 const route = useRoute()
 const { session } = useAuth()
 useFcmPush(session)
-useCncOnlyPwa()
+useAppManifest()
 const showGlobalAppBar = computed(() => route.meta.requiresAuth === true && route.meta.standalone !== true)
 
 const currentVersion = packageJson.version

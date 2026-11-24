@@ -2,10 +2,8 @@ import { watch } from 'vue'
 import { useRoute } from 'vue-router'
 
 const DEFAULT_MANIFEST = '/manifest.webmanifest'
-const CNC_MANIFEST = '/manifest-cnc-only.webmanifest'
 const WORKER_MANIFEST = '/manifest-worker.webmanifest'
 const DEFAULT_TITLE = 'NICEENTECH'
-const CNC_TITLE = 'CNC'
 const WORKER_TITLE = '나이스엔테크(작업자)'
 
 const setLinkHref = (rel, href) => {
@@ -29,16 +27,15 @@ const setMetaContent = (name, content) => {
 }
 
 const applyInstalledApp = (path) => {
-  const isCnc = path === '/cnc-only'
   const isWorker = path === '/worker' || path.startsWith('/worker/')
-  const manifest = isCnc ? CNC_MANIFEST : isWorker ? WORKER_MANIFEST : DEFAULT_MANIFEST
-  const title = isCnc ? CNC_TITLE : isWorker ? WORKER_TITLE : DEFAULT_TITLE
+  const manifest = isWorker ? WORKER_MANIFEST : DEFAULT_MANIFEST
+  const title = isWorker ? WORKER_TITLE : DEFAULT_TITLE
   setLinkHref('manifest', manifest)
   document.title = title
   setMetaContent('apple-mobile-web-app-title', title)
 }
 
-export function useCncOnlyPwa() {
+export function useAppManifest() {
   const route = useRoute()
 
   watch(

@@ -12,7 +12,6 @@ import { WELDING_INSPECTORS, getWeldingInspectorClass } from '@/utils/production
 import MakerDialog from '@/features/main/maker/MakerDialog.vue'
 import { serializeMaker } from '@/features/main/maker/makerOptions'
 import { WELDING_SCHEDULE_PERMISSION_ERROR } from '@/features/welding-schedule/utils/weldingSchedulePermission'
-import CncPlanRegisterDialog from '@/features/cnc/components/CncPlanRegisterDialog.vue'
 import ProductionCalculationDialog from '@/features/main/calculation/ProductionCalculationDialog.vue'
 import ProductionPlanLegendDialog from '@/features/main/ProductionPlanLegendDialog.vue'
 import { vVirtualKeyboard } from '@/features/virtual-keyboard/directives/vVirtualKeyboard'
@@ -50,7 +49,6 @@ const emit = defineEmits([
   'reset-week',
   'go-register',
   'go-stats',
-  'go-cnc',
   'search-change',
   'select-tuesday',
   'edit-row',
@@ -70,8 +68,6 @@ const emit = defineEmits([
   'nasa-long-press',
   'welding-start',
   'update-maker',
-  'register-cnc',
-  'cancel-cnc',
   'toggle-plan-sort',
   'update-calculation',
 ])
@@ -105,9 +101,6 @@ const selectedRowId = ref(null)
 const isTestDateDialogOpen = ref(false)
 const pendingTestDateIso = ref('')
 const activeTestDateRow = ref(null)
-const isCncRegisterDialogOpen = ref(false)
-const cncRegisterSaving = ref(false)
-const cncCancelSaving = ref(false)
 const isWeldingScheduleInspectorDialogOpen = ref(false)
 const isWeldingScheduleDateDialogOpen = ref(false)
 const activeWeldingScheduleRow = ref(null)
@@ -718,69 +711,6 @@ const closeTestDateDialog = () => {
   pendingTestDateIso.value = ''
 }
 
-const openCncRegisterDialog = () => {
-  if (!activeTestDateRow.value) return
-  isCncRegisterDialogOpen.value = true
-}
-
-const handleCncButtonClick = () => {
-  if (!activeTestDateRow.value || cncCancelSaving.value) return
-  if (activeTestDateRow.value.has_cnc) {
-    handleCncCancel()
-    return
-  }
-  openCncRegisterDialog()
-}
-
-const handleCncCancel = () => {
-  if (!activeTestDateRow.value || cncCancelSaving.value) return
-  cncCancelSaving.value = true
-  emit('cancel-cnc', {
-    row: activeTestDateRow.value,
-    onResult: (result) => {
-      cncCancelSaving.value = false
-      if (!result?.ok) {
-        showSnackbar('CNC 취소에 실패했습니다.')
-        return
-      }
-      activeTestDateRow.value = {
-        ...activeTestDateRow.value,
-        has_cnc: false,
-      }
-      showSnackbar('CNC 등록이 취소되었습니다.')
-    },
-  })
-}
-
-const closeCncRegisterDialog = () => {
-  if (cncRegisterSaving.value) return
-  isCncRegisterDialogOpen.value = false
-}
-
-const handleCncRegisterSubmit = ({ kind, quantity, length }) => {
-  if (!activeTestDateRow.value) return
-  cncRegisterSaving.value = true
-  emit('register-cnc', {
-    row: activeTestDateRow.value,
-    kind,
-    quantity,
-    length,
-    onResult: (result) => {
-      cncRegisterSaving.value = false
-      if (result?.ok) {
-        isCncRegisterDialogOpen.value = false
-        activeTestDateRow.value = {
-          ...activeTestDateRow.value,
-          has_cnc: true,
-        }
-        showSnackbar('CNC 등록되었습니다.')
-        return
-      }
-      showSnackbar('CNC 등록에 실패했습니다.')
-    },
-  })
-}
-
 const openWeldingScheduleDateDialog = () => {
   if (!activeWeldingScheduleRow.value) return
   const baseIso = String(activeWeldingScheduleRow.value?.welding_schedule_date ?? '').trim() || formatIsoDate(new Date())
@@ -1046,9 +976,6 @@ const selectDrawingFile = (file) => {
                 <Printer class="mr-1 h-4 w-4" />
                 인쇄
               </Button>
-              <Button class="h-8 px-3 text-xs md:text-sm" variant="outline" @click="emit('go-cnc')">
-                CNC
-              </Button>
               <button
                 type="button"
                 class="hidden h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 md:flex"
@@ -1278,19 +1205,6 @@ const selectDrawingFile = (file) => {
             이동
           </button>
           <button
-            type="button"
-            class="rounded-md px-5 py-2 text-sm font-bold shadow-sm transition disabled:opacity-60"
-            :class="
-              activeTestDateRow.has_cnc
-                ? 'bg-rose-100 text-rose-700 hover:bg-rose-200'
-                : 'bg-violet-600 text-white hover:bg-violet-700'
-            "
-            :disabled="cncCancelSaving"
-            @click="handleCncButtonClick"
-          >
-            {{ cncCancelSaving ? '처리 중...' : activeTestDateRow.has_cnc ? 'CNC취소' : 'CNC' }}
-          </button>
-          <button
             v-if="canManageWeldingSchedule"
             type="button"
             class="rounded-md px-5 py-2 text-sm font-bold shadow-sm transition"
@@ -1306,17 +1220,6 @@ const selectDrawingFile = (file) => {
         </div>
       </div>
     </div>
-
-    <CncPlanRegisterDialog
-      :open="isCncRegisterDialogOpen && Boolean(activeTestDateRow)"
-      :saving="cncRegisterSaving"
-      :company="String(activeTestDateRow?.company ?? '')"
-      :place="String(activeTestDateRow?.place ?? '')"
-      :area="String(activeTestDateRow?.area ?? '')"
-      :drawing-no="String(activeTestDateRow?.initial ?? '')"
-      @close="closeCncRegisterDialog"
-      @submit="handleCncRegisterSubmit"
-    />
 
     <div
       v-if="isWeldingScheduleInspectorDialogOpen && activeWeldingScheduleRow"

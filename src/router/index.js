@@ -35,8 +35,6 @@ import MessengerPage from '@/pages/MessengerPage.vue'
 import AttendancePage from '@/pages/AttendancePage.vue'
 import ChatbotPage from '@/pages/ChatbotPage.vue'
 import AttendanceRequestHistoryPage from '@/pages/AttendanceRequestHistoryPage.vue'
-import CncPage from '@/pages/CncPage.vue'
-import CncStandalonePage from '@/pages/CncStandalonePage.vue'
 import WorkerAppPage from '@/pages/WorkerAppPage.vue'
 import RewardPage from '@/pages/RewardPage.vue'
 import { isAdminRole, isDesignDepartment, isRootAdmin } from '@/utils/adminAccess'
@@ -174,22 +172,10 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
-    path: '/cnc-only',
-    name: 'cnc-only',
-    component: CncStandalonePage,
-    meta: { standalone: true },
-  },
-  {
     path: '/worker',
     name: 'worker',
     component: WorkerAppPage,
     meta: { standalone: true },
-  },
-  {
-    path: '/cnc',
-    name: 'cnc',
-    component: CncPage,
-    meta: { requiresAuth: true },
   },
   {
     path: '/mypage',
