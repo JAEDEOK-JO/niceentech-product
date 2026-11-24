@@ -15,9 +15,7 @@ const props = defineProps({
 
 const viewerIndex = ref(-1)
 
-function open(index, event) {
-  if (!props.large) return
-  event.stopPropagation()
+function open(index) {
   viewerIndex.value = index
 }
 </script>
@@ -30,24 +28,25 @@ function open(index, event) {
         :key="`${index}-${url}`"
         type="button"
         class="block w-full cursor-zoom-in overflow-hidden rounded-xl border-0 bg-transparent p-0"
-        @click="open(index, $event)"
+        @click.stop="open(index)"
       >
         <img :src="url" alt="" draggable="false" class="w-full bg-slate-50 object-contain" />
       </button>
     </template>
     <template v-else>
-      <img
+      <button
         v-for="(url, index) in urls"
         :key="`${index}-${url}`"
-        :src="url"
-        alt=""
-        draggable="false"
-        class="h-16 w-16 rounded-lg bg-slate-100 object-cover"
-      />
+        type="button"
+        class="h-16 w-16 cursor-zoom-in overflow-hidden rounded-lg border-0 bg-slate-100 p-0"
+        @click.stop="open(index)"
+      >
+        <img :src="url" alt="" draggable="false" class="h-full w-full object-cover" />
+      </button>
     </template>
   </div>
   <NoticeImageViewer
-    v-if="large && viewerIndex >= 0"
+    v-if="viewerIndex >= 0"
     :urls="urls"
     :start="viewerIndex"
     @close="viewerIndex = -1"
