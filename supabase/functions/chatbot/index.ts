@@ -46,6 +46,8 @@ Deno.serve(async (req) => {
   const supabase = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   })
+  const { data: caller } = await supabase.from('profiles').select('activate').eq('id', userId).maybeSingle()
+  if (caller?.activate !== true) return jsonResponse({ ok: false, message: '답변 실패' }, 403)
   const stop = new AbortController()
   const abort = () => stop.abort()
   req.signal.addEventListener('abort', abort)

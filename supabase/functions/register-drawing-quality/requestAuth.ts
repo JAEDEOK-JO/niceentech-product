@@ -14,9 +14,16 @@ export async function isWebhook(supabase: SupabaseClient, req: Request) {
   return data.value === header
 }
 
-export async function isSignedInUser(supabase: SupabaseClient, req: Request) {
+export async function isActiveMember(supabase: SupabaseClient, req: Request) {
   const token = String(req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '').trim()
   if (!token) return false
   const { data, error } = await supabase.auth.getUser(token)
-  return !error && Boolean(data.user)
+  if (error || !data.user) return false
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('activate')
+    .eq('id', data.user.id)
+    .maybeSingle()
+  return profile?.activate === true
 }

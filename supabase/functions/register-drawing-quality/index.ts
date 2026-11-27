@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js'
 import { advanceRun } from './advanceRun.ts'
-import { isSignedInUser, isWebhook } from './requestAuth.ts'
+import { isActiveMember, isWebhook } from './requestAuth.ts'
 import { listDueRunIds } from './runStore.ts'
 import { CHECK_DELAY_MS, startDrawingRun, startEvaluationRun } from './startRun.ts'
 
@@ -59,7 +59,7 @@ Deno.serve(async (req) => {
       return jsonResponse({ ok: true, runId })
     }
 
-    if (!webhook && !(await isSignedInUser(supabase, req))) {
+    if (!webhook && !(await isActiveMember(supabase, req))) {
       return jsonResponse({ ok: false, message: '검수리스트 등록 실패' }, 401)
     }
 
