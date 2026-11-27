@@ -4,6 +4,8 @@ import { supabase } from '@/lib/supabase'
 import Button from '@/components/ui/button/Button.vue'
 import ReportPrintSettingsDialog from './ReportPrintSettingsDialog.vue'
 import { printManagementReport } from './reportPrint'
+import ReportWeekNav from './ReportWeekNav.vue'
+import { useReportWeek } from './reportWeek'
 import { useDialog } from '@/composables/useDialog'
 import { useHalfYearReportExport } from '@/features/production-half-year/useHalfYearReportExport'
 
@@ -26,7 +28,8 @@ const emit = defineEmits(['go-back'])
 const props = defineProps({
   showBackButton: { type: Boolean, default: true },
 })
-const currentPage = ref(1)
+const reportWeek = useReportWeek('production')
+const currentPage = reportWeek.page
 const loading = ref(false)
 const errorMessage = ref('')
 const rows = ref([])
@@ -40,7 +43,7 @@ const editingRepairId = ref(null)
 const isPrinting = ref(false)
 const isPrintSettingsOpen = ref(false)
 
-const now = new Date()
+const now = reportWeek.anchorDate
 const reportYear = now.getFullYear()
 const previousYear = reportYear - 1
 const twoYearsAgoYear = reportYear - 2
@@ -48,7 +51,6 @@ const reportMonth = now.getMonth()
 const reportYearLabel = `${reportYear}년`
 const previousYearLabel = `${previousYear}년`
 const twoYearsAgoYearLabel = `${twoYearsAgoYear}년`
-const currentYearProgressLabel = `${reportYear}년 현재까지`
 const reportMonthLabel = `${reportMonth + 1}월`
 const getMonthDateByOffset = (offset) => new Date(reportYear, reportMonth + offset, 1)
 const getMonthLabelByOffset = (offset) => `${getMonthDateByOffset(offset).getMonth() + 1}월`
@@ -122,8 +124,13 @@ const formatShortMonthDay = (value) => {
 }
 const currentWeekTuesday = getUpcomingTuesday(now)
 const currentMonthProgressCutoff = startOfDay(currentWeekTuesday)
-const currentMonthProgressLabel = `${reportMonthLabel} 현재까지`
-const weeklyAveragePeriodLabel = `2022년 9월 ~ ${reportYear}년 ${reportMonth + 1}월 현재까지`
+const asOfLabel = reportWeek.isPastWeek
+  ? `${currentWeekTuesday.getMonth() + 1}월 ${currentWeekTuesday.getDate()}일까지`
+  : '현재까지'
+const weekLabel = `${currentWeekTuesday.getMonth() + 1}/${currentWeekTuesday.getDate()} 검수`
+const currentYearProgressLabel = `${reportYear}년 ${asOfLabel}`
+const currentMonthProgressLabel = reportWeek.isPastWeek ? asOfLabel : `${reportMonthLabel} 현재까지`
+const weeklyAveragePeriodLabel = `2022년 9월 ~ ${reportYear}년 ${reportMonth + 1}월${reportWeek.isPastWeek ? '' : ' 현재까지'}`
 const weeklyAverageEnd = new Date(reportYear, reportMonth + 1, 0)
 
 const createDefaultRepairForm = (row = null) =>
@@ -197,6 +204,13 @@ const isTwoYearsAgoRow = (row) => {
   return date.getFullYear() === twoYearsAgoYear
 }
 
+// 지난 주를 볼 때는 그 주 검수일까지의 자료만 쓴다.
+const isWithinSelectedWeek = (row) => {
+  if (!reportWeek.isPastWeek) return true
+  const date = getMonthlyReferenceDate(row)
+  return date ? startOfDay(date).getTime() <= currentWeekTuesday.getTime() : false
+}
+
 const fetchRows = async () => {
   const batchSize = 1000
   let from = 0
@@ -223,7 +237,7 @@ const fetchRows = async () => {
     from += batchSize
   }
 
-  rows.value = allRows
+  rows.value = allRows.filter(isWithinSelectedWeek)
 }
 
 const fetchRepairHistory = async () => {
@@ -231,7 +245,7 @@ const fetchRepairHistory = async () => {
     .from(PRODUCTION_REPAIR_HISTORY_TABLE)
     .select('id,repaired_at,equipment,detail,cost,is_warranty,created_at')
     .gte('repaired_at', formatIsoDate(reportMonthStart))
-    .lte('repaired_at', formatIsoDate(reportMonthEnd))
+    .lte('repaired_at', formatIsoDate(reportWeek.periodEnd < reportMonthEnd && reportWeek.isPastWeek ? reportWeek.periodEnd : reportMonthEnd))
     .order('repaired_at', { ascending: false })
     .order('id', { ascending: false })
 
@@ -305,7 +319,7 @@ const fetchQualityRows = async () => {
     from += batchSize
   }
 
-  qualityRows.value = allRows
+  qualityRows.value = allRows.filter(isWithinSelectedWeek)
 }
 
 const fetchReportData = async () => {
@@ -633,13 +647,21 @@ onMounted(async () => {
 <template>
   <section class="report-root min-h-screen bg-slate-100">
     <header class="report-header sticky top-0 z-10 border-b border-slate-200 bg-white/95 backdrop-blur">
-      <div class="mx-auto flex max-w-7xl items-start justify-between gap-4 px-4 py-4 md:px-6">
+      <div class="mx-auto flex max-w-7xl flex-wrap items-start justify-between gap-4 px-4 py-4 md:px-6">
         <div class="min-w-0">
           <p class="text-[11px] font-bold tracking-[0.12em] text-slate-500">생산부 보고자료</p>
           <h1 class="mt-1 text-lg font-extrabold text-slate-900 md:text-xl">생산부 대표 보고</h1>
           <p class="mt-2 text-[13px] text-slate-600">{{ reportYearLabel }} 누적과 {{ reportMonthLabel }} 생산 현황입니다.</p>
         </div>
-        <div class="flex shrink-0 gap-2">
+        <div class="flex flex-wrap items-center justify-end gap-2">
+          <ReportWeekNav
+            :label="weekLabel"
+            :is-this-week="!reportWeek.isPastWeek"
+            :can-go-next="reportWeek.isPastWeek"
+            @previous="reportWeek.showPreviousWeek"
+            @current="reportWeek.showThisWeek"
+            @next="reportWeek.showNextWeek"
+          />
           <Button class="shrink-0" variant="outline" @click="openPrintSettings">인쇄</Button>
           <Button v-if="props.showBackButton" class="shrink-0" variant="outline" @click="emit('go-back')">가이드로 돌아가기</Button>
         </div>
@@ -709,7 +731,7 @@ onMounted(async () => {
           <section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
             <div class="production-print-grid-top grid items-stretch gap-4 xl:grid-cols-2">
               <article class="h-full rounded-2xl border border-rose-200 bg-rose-50 p-4">
-                <p class="text-[15px] font-extrabold text-rose-900">이번주 생산량</p>
+                <p class="text-[15px] font-extrabold text-rose-900">{{ reportWeek.isPastWeek ? '해당 주 생산량' : '이번주 생산량' }}</p>
                 <p class="mt-1 text-[13px] font-semibold text-rose-700">
                   {{ formatTestDate(currentWeekTuesday) }} 검수 기준 (완료는 무용접까지 완료했을때 카운트)
                 </p>
@@ -766,7 +788,7 @@ onMounted(async () => {
                 <p class="text-[15px] font-extrabold text-slate-900">
                   {{ twoYearsAgoYearLabel }} / {{ previousYearLabel }} / {{ currentYearProgressLabel }} 비교
                 </p>
-                <p class="mt-1 text-[13px] font-semibold text-slate-500">올해는 이번 주 화요일 기준 누적만 반영합니다.</p>
+                <p class="mt-1 text-[13px] font-semibold text-slate-500">올해는 {{ reportWeek.isPastWeek ? '해당 주' : '이번 주' }} 화요일 기준 누적만 반영합니다.</p>
                 <div class="mt-4">
                   <table class="min-w-full table-fixed border-collapse text-sm">
                     <thead class="border-b border-slate-200 text-[12px] font-bold text-slate-600">
@@ -812,7 +834,7 @@ onMounted(async () => {
                   <div>
                     <p class="text-[15px] font-extrabold text-slate-900">미생산 반납 비율 (증지수량)</p>
                     <p class="mt-1 text-[14px] text-slate-500">
-                      2023년 01월 이후 현재까지 {{ QUALITY_THRESHOLD.toLocaleString('ko-KR') }}개 초과
+                      2023년 01월 이후 {{ asOfLabel }} {{ QUALITY_THRESHOLD.toLocaleString('ko-KR') }}개 초과
                       <span class="font-extrabold text-rose-600">{{ qualityReturnOverallSummary.qualifiedCount }}건</span>
                     </p>
                     <p class="mt-1 text-[14px] font-semibold text-slate-700">

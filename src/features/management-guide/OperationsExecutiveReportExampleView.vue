@@ -5,6 +5,8 @@ import Button from '@/components/ui/button/Button.vue'
 import ReportPrintSettingsDialog from './ReportPrintSettingsDialog.vue'
 import { printManagementReport } from './reportPrint'
 import { DEFAULT_WELDING_REPORT_MANAGERS, WELDING_INSPECTORS } from '@/utils/productionStatus'
+import ReportWeekNav from './ReportWeekNav.vue'
+import { useReportWeek } from './reportWeek'
 
 const COMPANY_LIST_TABLE = 'company_list'
 const METRIC_DEFINITIONS_TABLE = 'department_metric_definitions'
@@ -24,7 +26,10 @@ const props = defineProps({
   showBackButton: { type: Boolean, default: true },
 })
 
-const now = new Date()
+const reportWeek = useReportWeek('operations')
+const now = reportWeek.periodEnd
+const weekLabel = `${reportWeek.monday.getMonth() + 1}/${reportWeek.monday.getDate()} 주`
+const asOfLabel = reportWeek.isPastWeek ? `${now.getMonth() + 1}/${now.getDate()}까지` : '현재까지'
 const formatDateInput = (date) =>
   `${String(date.getFullYear()).padStart(4, '0')}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 const reportYear = now.getFullYear()
@@ -33,6 +38,9 @@ const reportMonthLabel = `${reportMonth}월`
 const reportMonthValue = `${reportYear}-${String(reportMonth).padStart(2, '0')}-01`
 const reportMonthEndValue = `${reportYear}-${String(reportMonth).padStart(2, '0')}-${String(new Date(reportYear, reportMonth, 0).getDate()).padStart(2, '0')}`
 const reportTodayValue = formatDateInput(now)
+// 주간 입고·사용은 일요일에 시작하는 구간이 지난 주에 섞이지 않도록 토요일까지 본다.
+const inventoryCutoffValue = formatDateInput(reportWeek.workEnd)
+const todayMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
 
 const MONTH_COUNT = 3
 const last3Months = Array.from({ length: MONTH_COUNT }, (_, i) => {
@@ -60,7 +68,7 @@ const weldingFetchStart = last3Months[0].start
 const weldingFetchEnd = last3Months[last3Months.length - 1].end
 const weldingIssuePeriodKeys = last3Months.map((m) => m.key)
 
-const currentPage = ref(1)
+const currentPage = reportWeek.page
 const loading = ref(false)
 const errorMessage = ref('')
 const isPrinting = ref(false)
@@ -202,7 +210,7 @@ const inventoryDraftWeeks = ref([])
 const selectedInventoryMonthValue = computed(() => formatMonthValue(selectedInventoryMonth.value))
 const selectedInventoryMonthEndValue = computed(() => formatMonthEndValue(selectedInventoryMonth.value))
 const selectedInventoryMonthLabel = computed(() => formatMonthTitle(selectedInventoryMonth.value))
-const isCurrentInventoryMonth = computed(() => selectedInventoryMonthValue.value === reportMonthValue)
+const isCurrentInventoryMonth = computed(() => selectedInventoryMonthValue.value === formatMonthValue(todayMonth))
 const selectedInventoryWeeks = computed(() => getInventoryWeeks(selectedInventoryMonth.value))
 
 const ensureOperationsMetricDefinitions = async () => {
@@ -364,12 +372,14 @@ const deleteWeldingIssue = async (id) => {
 }
 
 const fetchAllBalanceEntries = async () => {
-  const { data, error } = await supabase
+  let query = supabase
     .from(METRIC_ENTRIES_TABLE)
     .select('numeric_value')
     .eq('department_code', DEPARTMENT_CODE)
     .eq('metric_key', METRIC_KEYS.balance)
     .in('period_type', [INVENTORY_PERIOD_TYPE, LEGACY_INVENTORY_PERIOD_TYPE])
+  if (reportWeek.isPastWeek) query = query.lte('period_start_date', inventoryCutoffValue)
+  const { data, error } = await query
 
   if (error) throw new Error(error.message ?? '공무부 잔고 데이터를 불러오지 못했습니다.')
   return data ?? []
@@ -388,8 +398,9 @@ const sumInventoryRows = (rows) =>
   )
 
 const fetchInventoryTotalsForMonth = async (month) => {
+  const endValue = reportWeek.isPastWeek && month.isCurrentMonth ? inventoryCutoffValue : month.monthEndValue
   const [weeklyRows, legacyRows] = await Promise.all([
-    fetchWeeklyInventoryEntriesByMonth(month.monthValue, month.monthEndValue),
+    fetchWeeklyInventoryEntriesByMonth(month.monthValue, endValue),
     fetchLegacyInventoryEntriesByMonth(month.monthValue),
   ])
   return weeklyRows.length > 0 ? sumInventoryRows(weeklyRows) : sumInventoryRows(legacyRows)
@@ -630,7 +641,7 @@ const moveInventoryDialogMonth = async (delta) => {
 }
 
 const resetInventoryDialogMonthToCurrent = async () => {
-  selectedInventoryMonth.value = new Date(reportYear, reportMonth - 1, 1)
+  selectedInventoryMonth.value = todayMonth
   await loadInventoryDialogMonth()
 }
 
@@ -704,12 +715,20 @@ onMounted(fetchReportData)
 <template>
   <section class="report-root min-h-screen bg-slate-100">
     <header class="report-header sticky top-0 z-10 border-b border-slate-200 bg-white/95 backdrop-blur">
-      <div class="mx-auto flex max-w-7xl items-start justify-between gap-4 px-4 py-4 md:px-6">
+      <div class="mx-auto flex max-w-7xl flex-wrap items-start justify-between gap-4 px-4 py-4 md:px-6">
         <div class="min-w-0">
           <p class="text-[11px] font-bold tracking-[0.12em] text-slate-500">공무부 보고자료</p>
           <h1 class="mt-1 text-lg font-extrabold text-slate-900 md:text-xl">공무부 대표 보고</h1>
         </div>
-        <div class="flex shrink-0 gap-2">
+        <div class="flex flex-wrap items-center justify-end gap-2">
+          <ReportWeekNav
+            :label="weekLabel"
+            :is-this-week="!reportWeek.isPastWeek"
+            :can-go-next="reportWeek.isPastWeek"
+            @previous="reportWeek.showPreviousWeek"
+            @current="reportWeek.showThisWeek"
+            @next="reportWeek.showNextWeek"
+          />
           <Button class="shrink-0" variant="outline" @click="openPrintSettings">인쇄</Button>
           <Button v-if="props.showBackButton" class="shrink-0" variant="outline" @click="emit('go-back')">가이드로 돌아가기</Button>
         </div>
@@ -766,7 +785,7 @@ onMounted(fetchReportData)
                     :class="month.isCurrentMonth ? 'bg-blue-50 text-blue-700' : 'text-slate-500'"
                   >
                     <span>{{ month.label }}</span>
-                    <span v-if="month.isCurrentMonth" class="mt-0.5 block text-[10px] font-semibold leading-tight opacity-60">현재까지</span>
+                    <span v-if="month.isCurrentMonth" class="mt-0.5 block text-[10px] font-semibold leading-tight opacity-60">{{ asOfLabel }}</span>
                   </th>
                   <th class="border border-slate-200 bg-orange-50 px-4 py-2.5 text-center text-xs font-bold text-orange-800">잔고</th>
                 </tr>
@@ -819,7 +838,7 @@ onMounted(fetchReportData)
                     :key="month.key"
                     class="border border-slate-200 px-4 py-2.5 text-center text-xs font-bold"
                     :class="month.key === reportPeriodMonth ? 'bg-blue-50 text-blue-700' : 'text-slate-500'"
-                  >{{ month.label }}<span v-if="month.key === reportPeriodMonth" class="ml-1 text-[9px] opacity-60">현재까지</span></th>
+                  >{{ month.label }}<span v-if="month.key === reportPeriodMonth" class="ml-1 text-[9px] opacity-60">{{ asOfLabel }}</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -975,7 +994,7 @@ onMounted(fetchReportData)
             <div v-for="manager in weldingComparisonManagers" :key="`ws-${manager}`">
               <p class="mb-2 text-[12px] font-bold text-slate-700">{{ manager }} 작업 현황</p>
               <div v-if="weldingMetrics[manager].inspectionRows.length === 0" class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">
-                이번 달 데이터 없음
+                {{ reportWeek.isPastWeek ? reportMonthLabel : '이번 달' }} 데이터 없음
               </div>
               <div v-else class="overflow-x-auto rounded-xl border border-slate-200">
                 <table class="w-full table-fixed border-collapse text-xs">

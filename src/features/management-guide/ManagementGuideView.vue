@@ -10,6 +10,7 @@ import { departments } from '@/features/management-guide/managementGuideData'
 import OperationsExecutiveReportExampleView from '@/features/management-guide/OperationsExecutiveReportExampleView.vue'
 import ProductionExecutiveReportExampleView from '@/features/management-guide/ProductionExecutiveReportExampleView.vue'
 import SalesExecutiveReportExampleView from '@/features/management-guide/SalesExecutiveReportExampleView.vue'
+import { getReportWeekState } from '@/features/management-guide/reportWeek'
 import TotalExecutiveReportView from '@/features/management-guide/total-report/TotalExecutiveReportView.vue'
 
 const emit = defineEmits(['go-home'])
@@ -79,6 +80,11 @@ const currentView = computed(() => {
   if (activeTab.value === 'total') return TotalExecutiveReportView
   return ProductionExecutiveReportExampleView
 })
+
+// 주를 바꾸면 화면을 다시 만들어 그 주 기준으로 불러온다.
+const currentViewKey = computed(
+  () => `${activeTab.value}:${getReportWeekState(activeTab.value).weeksAgo.value}`,
+)
 </script>
 
 <template>
@@ -115,7 +121,7 @@ const currentView = computed(() => {
           class="management-report-panel mt-5 overflow-hidden rounded-3xl border"
           :class="getTone(currentDepartment.tone).panel"
         >
-          <component v-if="!isBatchPrinting" :is="currentView" :show-back-button="false" />
+          <component v-if="!isBatchPrinting" :is="currentView" :key="currentViewKey" :show-back-button="false" />
           <BatchPrintStack v-else />
         </div>
       </section>

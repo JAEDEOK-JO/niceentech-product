@@ -5,6 +5,8 @@ import Button from '@/components/ui/button/Button.vue'
 import ReportPrintSettingsDialog from './ReportPrintSettingsDialog.vue'
 import { printManagementReport } from './reportPrint'
 import { getDistributionWeekRange, getUpcomingThursday } from './designReportDistributionWeek'
+import ReportWeekNav from './ReportWeekNav.vue'
+import { useReportWeek } from './reportWeek'
 
 const PRODUCT_LIST_TABLE = 'product_list'
 
@@ -12,7 +14,8 @@ const emit = defineEmits(['go-back'])
 const props = defineProps({
   showBackButton: { type: Boolean, default: true },
 })
-const currentPage = ref(1)
+const reportWeek = useReportWeek('design')
+const currentPage = reportWeek.page
 const loading = ref(false)
 const errorMessage = ref('')
 const rows = ref([])
@@ -146,8 +149,9 @@ const getWeekdayIndex = (date) => {
 const formatMonthDayWeekday = (date) =>
   `${date.getMonth() + 1}/${date.getDate()}(${WEEKDAY_LABELS[getWeekdayIndex(date)]})`
 
-const thisWeekTuesday = computed(() => getUpcomingTuesday(new Date()))
-const thisWeekThursday = computed(() => getUpcomingThursday(new Date()))
+const thisWeekTuesday = computed(() => getUpcomingTuesday(reportWeek.anchorDate))
+const thisWeekThursday = computed(() => getUpcomingThursday(reportWeek.anchorDate))
+const weekLabel = computed(() => `${thisWeekTuesday.value.getMonth() + 1}/${thisWeekTuesday.value.getDate()} 검수`)
 const distributionWeekRange = computed(() => getDistributionWeekRange(thisWeekThursday.value))
 const monthRange = computed(() => {
   const base = thisWeekTuesday.value
@@ -399,12 +403,20 @@ onMounted(async () => {
 <template>
   <section class="report-root min-h-screen bg-slate-100">
     <header class="report-header sticky top-0 z-10 border-b border-slate-200 bg-white/95 backdrop-blur">
-      <div class="mx-auto flex max-w-7xl items-start justify-between gap-4 px-4 py-4 md:px-6">
+      <div class="mx-auto flex max-w-7xl flex-wrap items-start justify-between gap-4 px-4 py-4 md:px-6">
         <div class="min-w-0">
           <p class="text-[11px] font-bold tracking-[0.12em] text-slate-500">설계부 보고자료</p>
           <h1 class="mt-1 text-lg font-extrabold text-slate-900 md:text-xl">설계부 목요일 회의 보고</h1>
         </div>
-        <div class="flex shrink-0 gap-2">
+        <div class="flex flex-wrap items-center justify-end gap-2">
+          <ReportWeekNav
+            :label="weekLabel"
+            :is-this-week="!reportWeek.isPastWeek"
+            :can-go-next="reportWeek.isPastWeek"
+            @previous="reportWeek.showPreviousWeek"
+            @current="reportWeek.showThisWeek"
+            @next="reportWeek.showNextWeek"
+          />
           <Button class="shrink-0" variant="outline" @click="openPrintSettings">인쇄</Button>
           <Button v-if="props.showBackButton" class="shrink-0" variant="outline" @click="emit('go-back')">가이드로 돌아가기</Button>
         </div>
@@ -620,7 +632,7 @@ onMounted(async () => {
             <div class="flex items-center justify-between gap-3">
               <div>
                 <p class="text-[13px] font-extrabold text-slate-900">목요일 12시 이후 배포 목록</p>
-                <p class="mt-1 text-[12px] text-slate-500">금주 기준</p>
+                <p class="mt-1 text-[12px] text-slate-500">{{ reportWeek.isPastWeek ? `${weekLabel} 기준` : '금주 기준' }}</p>
               </div>
               <span class="rounded-full bg-violet-100 px-3 py-1 text-[11px] font-bold text-violet-700">{{ lateDistributionRows.length }}건</span>
             </div>

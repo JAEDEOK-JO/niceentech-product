@@ -8,6 +8,8 @@ import { normalizeCompanyType } from '@/constants/companyTypes'
 import { useDialog } from '@/composables/useDialog'
 import ReportPrintSettingsDialog from './ReportPrintSettingsDialog.vue'
 import { printManagementReport } from './reportPrint'
+import ReportWeekNav from './ReportWeekNav.vue'
+import { getReportWeekState } from './reportWeek'
 import {
   buildBuildingTypeHeadRatioItems,
   calcNonApartmentHeadRatio,
@@ -84,6 +86,9 @@ const reportMonthLabel = `${reportMonth + 1}월`
 const reportMonthValue = `${reportYear}-${String(reportMonth + 1).padStart(2, '0')}-01`
 const reportYearStartValue = `${reportYear}-01-01`
 const selectedSalesReportMonth = ref(new Date(reportYear, reportMonth, 1))
+// 매출의 주는 월 안의 1~5주차다. 오늘이 속한 주차까지만 고를 수 있다.
+const todayWeekIndex = Math.min(WEEK_COUNT, Math.ceil(now.getDate() / 7))
+const savedSalesWeek = getReportWeekState('sales').salesWeek
 
 const toNumber = (value) => {
   const number = Number(value)
@@ -205,6 +210,7 @@ const fetchReportData = async () => {
   yearlySalesRows.value = yearlyResult.data ?? []
   asRows.value = asResult.data ?? []
   weeklySalesInputs.value = buildWeeklyInputs(weeklySalesRows.value)
+  if (savedSalesWeek.value) await showSalesWeek(savedSalesWeek.value.month, savedSalesWeek.value.weekIndex)
   loading.value = false
 }
 
@@ -430,7 +436,7 @@ const salesProgressWidth = computed(() => Math.min(100, Math.max(0, salesProgres
 const defaultSalesWeekIndex = computed(() =>
   [...weeklySalesRows.value]
     .sort((a, b) => toNumber(b?.week_index) - toNumber(a?.week_index))
-    .find((row) => toNumber(row?.sales_amount) > 0)?.week_index ?? Math.min(WEEK_COUNT, Math.ceil(now.getDate() / 7)),
+    .find((row) => toNumber(row?.week_index) <= todayWeekIndex && toNumber(row?.sales_amount) > 0)?.week_index ?? todayWeekIndex,
 )
 const selectedSalesReportMonthValue = computed(() => formatMonthValue(selectedSalesReportMonth.value))
 const selectedSalesReportMonthLabel = computed(() => `${selectedSalesReportMonth.value.getMonth() + 1}월`)
@@ -442,6 +448,12 @@ const currentSalesWeekRow = computed(() =>
   currentSalesWeekRows.value.find((row) => toNumber(row?.week_index) === currentSalesWeekIndex.value) ?? null,
 )
 const currentSalesWeekLabel = computed(() => `${selectedSalesReportMonthLabel.value} ${currentSalesWeekIndex.value}주차`)
+const isThisSalesWeek = computed(
+  () => selectedSalesReportMonthValue.value === reportMonthValue && currentSalesWeekIndex.value === todayWeekIndex,
+)
+const canGoNextSalesWeek = computed(
+  () => selectedSalesReportMonthValue.value < reportMonthValue || currentSalesWeekIndex.value < todayWeekIndex,
+)
 const confirmedCounts = computed(() => sumOrderPieceCounts(confirmedRows.value, toNumber))
 const expectedCounts = computed(() => sumOrderPieceCounts(expectedRows.value, toNumber))
 const expectedAllCounts = computed(() => sumOrderPieceCounts(expectedAllRows.value, toNumber))
@@ -532,19 +544,11 @@ const currentSalesWeekBreakdown = computed(() => {
   const supipe = toNumber(row?.sales_amount_supipe)
   return { head, screw, supipe, total: head + screw + supipe }
 })
-const moveSalesReportWeek = async (delta) => {
-  const nextMonth = new Date(selectedSalesReportMonth.value)
-  let nextWeekIndex = currentSalesWeekIndex.value + delta
-
-  if (nextWeekIndex < 1) {
-    nextMonth.setMonth(nextMonth.getMonth() - 1)
-    nextWeekIndex = WEEK_COUNT
-  } else if (nextWeekIndex > WEEK_COUNT) {
-    nextMonth.setMonth(nextMonth.getMonth() + 1)
-    nextWeekIndex = 1
-  }
-
+const showSalesWeek = async (nextMonth, nextWeekIndex) => {
   const nextMonthValue = formatMonthValue(nextMonth)
+  if (nextMonthValue > reportMonthValue) return
+  if (nextMonthValue === reportMonthValue && nextWeekIndex > todayWeekIndex) return
+
   const monthChanged = nextMonthValue !== selectedSalesReportMonthValue.value
 
   if (monthChanged) {
@@ -566,7 +570,25 @@ const moveSalesReportWeek = async (delta) => {
 
   selectedSalesReportMonth.value = nextMonth
   selectedSalesWeekIndex.value = nextWeekIndex
+  savedSalesWeek.value = { month: nextMonth, weekIndex: nextWeekIndex }
 }
+
+const moveSalesReportWeek = async (delta) => {
+  const nextMonth = new Date(selectedSalesReportMonth.value)
+  let nextWeekIndex = currentSalesWeekIndex.value + delta
+
+  if (nextWeekIndex < 1) {
+    nextMonth.setMonth(nextMonth.getMonth() - 1)
+    nextWeekIndex = WEEK_COUNT
+  } else if (nextWeekIndex > WEEK_COUNT) {
+    nextMonth.setMonth(nextMonth.getMonth() + 1)
+    nextWeekIndex = 1
+  }
+
+  await showSalesWeek(nextMonth, nextWeekIndex)
+}
+
+const showThisSalesWeek = () => showSalesWeek(new Date(reportYear, reportMonth, 1), todayWeekIndex)
 
 const openSalesDialog = () => {
   weeklySalesError.value = ''
@@ -663,16 +685,22 @@ onBeforeUnmount(revokeAsPreviewUrls)
 <template>
   <section class="report-root min-h-screen bg-slate-100">
     <header class="report-header sticky top-0 z-10 border-b border-slate-200 bg-white/95 backdrop-blur">
-      <div class="mx-auto flex max-w-7xl items-start justify-between gap-4 px-4 py-4 md:px-6">
+      <div class="mx-auto flex max-w-7xl flex-wrap items-start justify-between gap-4 px-4 py-4 md:px-6">
         <div class="min-w-0">
           <p class="text-[11px] font-bold tracking-[0.12em] text-slate-500">영업부 보고자료</p>
           <h1 class="mt-1 text-lg font-extrabold text-slate-900 md:text-xl">영업부 대표 보고</h1>
           <p class="mt-2 text-[13px] text-slate-600">매출, 수주, AS 현황을 정리한 화면입니다.</p>
         </div>
-        <div class="flex shrink-0 flex-wrap items-center justify-end gap-2">
-          <Button class="h-9 shrink-0 px-3 text-xs" variant="outline" :disabled="loadingSalesReportWeek" @click="moveSalesReportWeek(-1)">지난주</Button>
-          <span class="min-w-[64px] text-center text-xs font-bold text-slate-600">{{ currentSalesWeekLabel }}</span>
-          <Button class="h-9 shrink-0 px-3 text-xs" variant="outline" :disabled="loadingSalesReportWeek" @click="moveSalesReportWeek(1)">다음주</Button>
+        <div class="flex flex-wrap items-center justify-end gap-2">
+          <ReportWeekNav
+            :label="currentSalesWeekLabel"
+            :is-this-week="isThisSalesWeek"
+            :can-go-next="canGoNextSalesWeek"
+            :disabled="loadingSalesReportWeek"
+            @previous="moveSalesReportWeek(-1)"
+            @current="showThisSalesWeek"
+            @next="moveSalesReportWeek(1)"
+          />
           <Button class="shrink-0" variant="outline" @click="openPrintSettings">인쇄</Button>
           <Button v-if="props.showBackButton" class="shrink-0" variant="outline" @click="emit('go-back')">가이드로 돌아가기</Button>
         </div>
